@@ -18,6 +18,7 @@ packages = ["src/joy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = ["-m", "not macos_integration"]
 markers = [
     "macos_integration: tests requiring live macOS apps (iTerm2, Notion, etc.)",
 ]
