@@ -111,63 +111,61 @@
 
 ## Traceability
 
-*Populated during roadmap creation.*
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CORE-01 | — | Pending |
-| CORE-02 | — | Pending |
-| CORE-03 | — | Pending |
-| CORE-04 | — | Pending |
-| CORE-05 | — | Pending |
-| CORE-06 | — | Pending |
-| CORE-07 | — | Pending |
-| PROJ-01 | — | Pending |
-| PROJ-02 | — | Pending |
-| PROJ-03 | — | Pending |
-| PROJ-04 | — | Pending |
-| PROJ-05 | — | Pending |
-| PROJ-06 | — | Pending |
-| OBJ-01 | — | Pending |
-| OBJ-02 | — | Pending |
-| OBJ-03 | — | Pending |
-| OBJ-04 | — | Pending |
-| OBJ-05 | — | Pending |
-| OBJ-06 | — | Pending |
-| OBJ-07 | — | Pending |
-| PRESET-01 | — | Pending |
-| PRESET-02 | — | Pending |
-| PRESET-03 | — | Pending |
-| PRESET-04 | — | Pending |
-| PRESET-05 | — | Pending |
-| PRESET-06 | — | Pending |
-| PRESET-07 | — | Pending |
-| PRESET-08 | — | Pending |
-| PRESET-09 | — | Pending |
-| ACT-01 | — | Pending |
-| ACT-02 | — | Pending |
-| ACT-03 | — | Pending |
-| ACT-04 | — | Pending |
-| MGMT-01 | — | Pending |
-| MGMT-02 | — | Pending |
-| MGMT-03 | — | Pending |
-| MGMT-04 | — | Pending |
-| SETT-01 | — | Pending |
-| SETT-02 | — | Pending |
-| SETT-03 | — | Pending |
-| SETT-04 | — | Pending |
-| SETT-05 | — | Pending |
-| SETT-06 | — | Pending |
-| DIST-01 | — | Pending |
-| DIST-02 | — | Pending |
-| DIST-03 | — | Pending |
-| DIST-04 | — | Pending |
+| CORE-01 | Phase 2 | Pending |
+| CORE-02 | Phase 2 | Pending |
+| CORE-03 | Phase 2 | Pending |
+| CORE-04 | Phase 2 | Pending |
+| CORE-05 | Phase 3 | Pending |
+| CORE-06 | Phase 2 | Pending |
+| CORE-07 | Phase 2 | Pending |
+| PROJ-01 | Phase 2 | Pending |
+| PROJ-02 | Phase 2 | Pending |
+| PROJ-03 | Phase 2 | Pending |
+| PROJ-04 | Phase 4 | Pending |
+| PROJ-05 | Phase 4 | Pending |
+| PROJ-06 | Phase 5 | Pending |
+| OBJ-01 | Phase 1 | Pending |
+| OBJ-02 | Phase 1 | Pending |
+| OBJ-03 | Phase 1 | Pending |
+| OBJ-04 | Phase 1 | Pending |
+| OBJ-05 | Phase 1 | Pending |
+| OBJ-06 | Phase 1 | Pending |
+| OBJ-07 | Phase 1 | Pending |
+| PRESET-01 | Phase 1 | Pending |
+| PRESET-02 | Phase 1 | Pending |
+| PRESET-03 | Phase 1 | Pending |
+| PRESET-04 | Phase 1 | Pending |
+| PRESET-05 | Phase 1 | Pending |
+| PRESET-06 | Phase 1 | Pending |
+| PRESET-07 | Phase 1 | Pending |
+| PRESET-08 | Phase 1 | Pending |
+| PRESET-09 | Phase 1 | Pending |
+| ACT-01 | Phase 3 | Pending |
+| ACT-02 | Phase 3 | Pending |
+| ACT-03 | Phase 3 | Pending |
+| ACT-04 | Phase 3 | Pending |
+| MGMT-01 | Phase 4 | Pending |
+| MGMT-02 | Phase 4 | Pending |
+| MGMT-03 | Phase 4 | Pending |
+| MGMT-04 | Phase 5 | Pending |
+| SETT-01 | Phase 5 | Pending |
+| SETT-02 | Phase 5 | Pending |
+| SETT-03 | Phase 5 | Pending |
+| SETT-04 | Phase 5 | Pending |
+| SETT-05 | Phase 5 | Pending |
+| SETT-06 | Phase 5 | Pending |
+| DIST-01 | Phase 5 | Pending |
+| DIST-02 | Phase 1 | Pending |
+| DIST-03 | Phase 5 | Pending |
+| DIST-04 | Phase 5 | Pending |
 
 **Coverage:**
 - v1 requirements: 48 total
-- Mapped to phases: 0 (roadmap pending)
-- Unmapped: 48 ⚠️
+- Mapped to phases: 48
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-10*
-*Last updated: 2026-04-10 after initial definition*
+*Last updated: 2026-04-10 after roadmap creation*
