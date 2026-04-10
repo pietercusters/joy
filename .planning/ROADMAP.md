@@ -47,8 +47,12 @@ Plans:
   3. First project is auto-selected on startup so the detail pane is never empty
   4. Footer displays context-sensitive keyboard hints that update when focus changes between panes
   5. Pressing Escape always navigates back with no focus traps; app starts in under 350ms to first paint
-**Plans**: TBD
-**UI hint**: yes
+**Plans:** 3 plans
+
+Plans:
+- [ ] 02-01-PLAN.md -- App shell, two-pane layout, ProjectList widget, async data loading, Enter/Escape focus management
+- [ ] 02-02-PLAN.md -- Detail pane with ObjectRow icons, grouped-by-preset rendering, j/k cursor navigation
+- [ ] 02-03-PLAN.md -- Context-sensitive footer, Header pane label, Textual pilot tests, visual checkpoint
 
 ### Phase 3: Activation
 **Goal**: Users can open any object with `o`, open all "open by default" objects with `O`, and toggle the default set with space -- delivering the core value of instant artifact access
@@ -97,7 +101,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | ✓ Complete | 2026-04-10 |
-| 2. TUI Shell | 0/? | Not started | - |
+| 2. TUI Shell | 0/3 | In progress | - |
 | 3. Activation | 0/? | Not started | - |
 | 4. CRUD | 0/? | Not started | - |
 | 5. Settings, Search & Distribution | 0/? | Not started | - |
