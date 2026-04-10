@@ -12,7 +12,7 @@ joy delivers a keyboard-driven Python TUI for managing coding project artifacts.
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation** - Data model, TOML persistence, and all object-type operations (no UI)
+- [x] **Phase 1: Foundation** - Data model, TOML persistence, and all object-type operations (no UI)
 - [ ] **Phase 2: TUI Shell** - Two-pane layout, navigation, project/object display (read-only, no mutations)
 - [ ] **Phase 3: Activation** - Wire o/O/space operations into the TUI to deliver the core value proposition
 - [ ] **Phase 4: CRUD** - Add, edit, delete objects and projects via modal forms
@@ -33,9 +33,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans:** 3 plans
 
 Plans:
-- [ ] 01-01-PLAN.md -- Package scaffold, data models (ObjectType, PresetKind, PRESET_MAP, dataclasses), test infrastructure
-- [ ] 01-02-PLAN.md -- TOML persistence layer (store.py: atomic read/write, keyed schema, config)
-- [ ] 01-03-PLAN.md -- Subprocess operations (all 7 object types with decorator registry, iTerm2 AppleScript)
+- [x] 01-01-PLAN.md -- Package scaffold, data models (ObjectType, PresetKind, PRESET_MAP, dataclasses), test infrastructure
+- [x] 01-02-PLAN.md -- TOML persistence layer (store.py: atomic read/write, keyed schema, config)
+- [x] 01-03-PLAN.md -- Subprocess operations (all 7 object types with decorator registry, iTerm2 AppleScript)
 
 ### Phase 2: TUI Shell
 **Goal**: Users see a two-pane Textual app with project list on the left and object detail on the right, can navigate with keyboard, and see icons, key hints, and focus indicators -- but cannot mutate anything yet
@@ -96,7 +96,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/3 | Planning complete | - |
+| 1. Foundation | 3/3 | ✓ Complete | 2026-04-10 |
 | 2. TUI Shell | 0/? | Not started | - |
 | 3. Activation | 0/? | Not started | - |
 | 4. CRUD | 0/? | Not started | - |
