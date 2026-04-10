@@ -92,8 +92,18 @@ class ProjectDetail(Widget, can_focus=True):
         yield VerticalScroll(id="detail-scroll")
 
     def set_project(self, project: Project) -> None:
-        """Update the displayed project: rebuild grouped object rows and reset cursor."""
+        """Update the displayed project: rebuild grouped object rows and reset cursor.
+
+        Defers DOM manipulation via call_after_refresh to ensure VerticalScroll is
+        fully attached before mounting children into it.
+        """
         self._project = project
+        self.call_after_refresh(self._render_project)
+
+    def _render_project(self) -> None:
+        """Rebuild the grouped object rows for the current project."""
+        if self._project is None:
+            return
         scroll = self.query_one("#detail-scroll", VerticalScroll)
 
         # Clear existing content
@@ -101,7 +111,7 @@ class ProjectDetail(Widget, can_focus=True):
 
         # Group objects by preset kind in defined display order
         grouped: dict[PresetKind, list[ObjectItem]] = {}
-        for item in project.objects:
+        for item in self._project.objects:
             grouped.setdefault(item.kind, []).append(item)
 
         # Mount groups in order, only for kinds that have objects
@@ -111,9 +121,7 @@ class ProjectDetail(Widget, can_focus=True):
             items = grouped.get(kind, [])
             if not items:
                 continue
-            # Mount group header
             scroll.mount(GroupHeader(GROUP_LABELS[kind]))
-            # Mount one ObjectRow per item
             for item in items:
                 row = ObjectRow(item, index=row_index)
                 scroll.mount(row)
