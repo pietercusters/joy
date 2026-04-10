@@ -49,12 +49,13 @@ class ProjectList(Widget, can_focus=False):
 
     def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
         """When highlight changes, notify parent with project data."""
+        index = event.list_view.index  # ListView.Highlighted has no index attr in Textual 8.x
         if (
             event.item is not None
-            and event.index is not None
-            and event.index < len(self._projects)
+            and index is not None
+            and index < len(self._projects)
         ):
-            self.post_message(self.ProjectHighlighted(self._projects[event.index]))
+            self.post_message(self.ProjectHighlighted(self._projects[index]))
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         """When Enter is pressed, post selection message (D-04)."""
