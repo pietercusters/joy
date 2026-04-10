@@ -30,7 +30,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. The preset-to-type mapping is complete: all nine preset kinds (mr, branch, ticket, thread, file, note, worktree, agents, url) resolve to the correct operation
   4. Data files are written atomically (temp file + os.replace) so interrupted writes cannot corrupt ~/.joy/projects.toml
   5. All operations and persistence have passing unit tests
-**Plans**: TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 01-01-PLAN.md -- Package scaffold, data models (ObjectType, PresetKind, PRESET_MAP, dataclasses), test infrastructure
+- [ ] 01-02-PLAN.md -- TOML persistence layer (store.py: atomic read/write, keyed schema, config)
+- [ ] 01-03-PLAN.md -- Subprocess operations (all 7 object types with decorator registry, iTerm2 AppleScript)
 
 ### Phase 2: TUI Shell
 **Goal**: Users see a two-pane Textual app with project list on the left and object detail on the right, can navigate with keyboard, and see icons, key hints, and focus indicators -- but cannot mutate anything yet
@@ -91,7 +96,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/? | Not started | - |
+| 1. Foundation | 0/3 | Planning complete | - |
 | 2. TUI Shell | 0/? | Not started | - |
 | 3. Activation | 0/? | Not started | - |
 | 4. CRUD | 0/? | Not started | - |
