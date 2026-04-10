@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import tempfile
 import tomllib
+import warnings
 from datetime import date
 from pathlib import Path
 
@@ -44,18 +45,37 @@ def _toml_to_projects(data: dict) -> list[Project]:
     """Convert parsed TOML dict to project list."""
     projects = []
     for name, proj_data in data.get("projects", {}).items():
-        objects = [
-            ObjectItem(
-                kind=PresetKind(obj["kind"]),
-                value=obj["value"],
-                label=obj.get("label", ""),
-                open_by_default=obj.get("open_by_default", False),
+        objects = []
+        for obj in proj_data.get("objects", []):
+            try:
+                kind = PresetKind(obj["kind"])
+            except ValueError:
+                warnings.warn(
+                    f"Unknown object kind {obj['kind']!r} in project {name!r} — skipping object",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                continue
+            objects.append(
+                ObjectItem(
+                    kind=kind,
+                    value=obj["value"],
+                    label=obj.get("label", ""),
+                    open_by_default=obj.get("open_by_default", False),
+                )
             )
-            for obj in proj_data.get("objects", [])
-        ]
         created_raw = proj_data.get("created")
         if isinstance(created_raw, date):
             created = created_raw
+        elif isinstance(created_raw, str):
+            try:
+                created = date.fromisoformat(created_raw)
+            except ValueError:
+                warnings.warn(
+                    f"Cannot parse created date {created_raw!r} for project {name!r}, using today",
+                    UserWarning,
+                )
+                created = date.today()
         else:
             created = date.today()
         projects.append(Project(name=name, objects=objects, created=created))
