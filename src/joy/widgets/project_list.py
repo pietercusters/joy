@@ -2,11 +2,21 @@
 from __future__ import annotations
 
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import Label, ListItem, ListView
 
 from joy.models import Project
+
+
+class JoyListView(ListView):
+    """ListView subclass that adds vim-style j/k navigation."""
+
+    BINDINGS = [
+        Binding("j", "cursor_down", "Down", show=False),
+        Binding("k", "cursor_up", "Up", show=False),
+    ]
 
 
 class ProjectList(Widget, can_focus=False):
@@ -31,19 +41,19 @@ class ProjectList(Widget, can_focus=False):
         self._projects: list[Project] = []
 
     def compose(self) -> ComposeResult:
-        yield ListView(id="project-listview")
+        yield JoyListView(id="project-listview")
 
     def set_projects(self, projects: list[Project]) -> None:
         """Populate the list. Called from JoyApp._set_projects."""
         self._projects = projects
-        listview = self.query_one("#project-listview", ListView)
+        listview = self.query_one("#project-listview", JoyListView)
         listview.clear()
         for project in projects:
             listview.append(ListItem(Label(project.name)))
 
     def select_first(self) -> None:
         """Auto-select the first project (PROJ-02)."""
-        listview = self.query_one("#project-listview", ListView)
+        listview = self.query_one("#project-listview", JoyListView)
         if self._projects:
             listview.index = 0
 

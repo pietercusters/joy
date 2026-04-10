@@ -50,11 +50,9 @@ class JoyApp(App):
         if projects:
             self.query_one(ProjectList).select_first()
 
-    def watch_focused(self, focused) -> None:
+    def on_descendant_focus(self, event) -> None:
         """Update sub_title based on which pane has focus (D-08)."""
-        if focused is None:
-            return
-        node = focused
+        node = event.widget
         while node is not None:
             if hasattr(node, "id"):
                 if node.id == "project-detail":
