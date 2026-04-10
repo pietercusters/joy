@@ -4,7 +4,7 @@ from __future__ import annotations
 from textual import work
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal
-from textual.widgets import Footer
+from textual.widgets import Footer, Header
 
 from joy.models import Project
 from joy.widgets.project_detail import ProjectDetail
@@ -15,6 +15,7 @@ class JoyApp(App):
     """Keyboard-driven TUI for managing coding project artifacts."""
 
     TITLE = "joy"
+    SUB_TITLE = "Projects"
 
     CSS = """
     #project-list { width: 1fr; }
@@ -24,6 +25,7 @@ class JoyApp(App):
     BINDINGS = [("q", "quit", "Quit")]
 
     def compose(self) -> ComposeResult:
+        yield Header()
         yield Horizontal(
             ProjectList(id="project-list"),
             ProjectDetail(id="project-detail"),
@@ -47,6 +49,21 @@ class JoyApp(App):
         self.query_one(ProjectList).set_projects(projects)
         if projects:
             self.query_one(ProjectList).select_first()
+
+    def watch_focused(self, focused) -> None:
+        """Update sub_title based on which pane has focus (D-08)."""
+        if focused is None:
+            return
+        node = focused
+        while node is not None:
+            if hasattr(node, "id"):
+                if node.id == "project-detail":
+                    self.sub_title = "Detail"
+                    return
+                if node.id in ("project-list", "project-listview"):
+                    self.sub_title = "Projects"
+                    return
+            node = node.parent
 
     def on_project_list_project_highlighted(
         self, message: ProjectList.ProjectHighlighted
