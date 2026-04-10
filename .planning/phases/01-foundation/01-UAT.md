@@ -1,5 +1,5 @@
 ---
-status: complete
+status: diagnosed
 phase: 01-foundation
 source: 01-01-SUMMARY.md, 01-02-SUMMARY.md, 01-03-SUMMARY.md
 started: 2026-04-10T18:35:00Z
@@ -70,21 +70,25 @@ blocked: 0
 
 ## Gaps
 
-- truth: "All 60 tests pass, 0 failures when running uv run pytest tests/ -q"
-  status: failed
+- truth: "All tests pass without opening real system windows (iTerm2, etc.)"
+  status: fixed
   reason: "User reported: All pass, but there's one test that actually opens a iterm2 window. That should not happen."
   severity: major
   test: 2
-  root_cause: ""
-  artifacts: []
+  root_cause: "test_open_iterm_live in tests/test_operations.py:181 was missing @pytest.mark.macos_integration decorator. Already fixed in commit 4623c6b which added the marker and pyproject.toml addopts exclusion."
+  artifacts:
+    - path: "tests/test_operations.py"
+      issue: "test_open_iterm_live was missing macos_integration marker (now fixed)"
+    - path: "pyproject.toml"
+      issue: "addopts now excludes macos_integration tests by default"
   missing: []
   debug_session: ""
 - truth: "TOML persistence round-trip works: save_projects/load_projects round-trips correctly"
-  status: failed
+  status: not_a_bug
   reason: "User reported: ModuleNotFoundError: No module named 'tomli_w'"
   severity: major
   test: 4
-  root_cause: ""
+  root_cause: "User ran plain `python` instead of `uv run python`. tomli_w is correctly declared as a dependency in pyproject.toml and is available in the uv venv (v1.2.0). No code change needed — use `uv run python` to access project dependencies."
   artifacts: []
   missing: []
   debug_session: ""
