@@ -25,6 +25,7 @@ name = "joy"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "textual" },
     { name = "tomli-w" },
 ]
 
@@ -34,10 +35,63 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "tomli-w", specifier = ">=1.0" }]
+requires-dist = [
+    { name = "textual", specifier = ">=8.2" },
+    { name = "tomli-w", specifier = ">=1.0" },
+]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=9.0.3" }]
+
+[[package]]
+name = "linkify-it-py"
+version = "2.1.0"
+source = { registry = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/simple/" }
+dependencies = [
+    { name = "uc-micro-py" },
+]
+sdist = { url = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/linkify-it-py/linkify_it_py-2.1.0.tar.gz", hash = "sha256:43360231720999c10e9328dc3691160e27a718e280673d444c38d7d3aaa3b98b" }
+wheels = [
+    { url = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/linkify-it-py/linkify_it_py-2.1.0-py3-none-any.whl", hash = "sha256:0d252c1594ecba2ecedc444053db5d3a9b7ec1b0dd929c8f1d74dce89f86c05e" },
+]
+
+[[package]]
+name = "markdown-it-py"
+version = "4.0.0"
+source = { registry = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/simple/" }
+dependencies = [
+    { name = "mdurl" },
+]
+sdist = { url = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/markdown-it-py/markdown_it_py-4.0.0.tar.gz", hash = "sha256:cb0a2b4aa34f932c007117b194e945bd74e0ec24133ceb5bac59009cda1cb9f3" }
+wheels = [
+    { url = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/markdown-it-py/markdown_it_py-4.0.0-py3-none-any.whl", hash = "sha256:87327c59b172c5011896038353a81343b6754500a08cd7a4973bb48c6d578147" },
+]
+
+[package.optional-dependencies]
+linkify = [
+    { name = "linkify-it-py" },
+]
+
+[[package]]
+name = "mdit-py-plugins"
+version = "0.5.0"
+source = { registry = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/simple/" }
+dependencies = [
+    { name = "markdown-it-py" },
+]
+sdist = { url = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/mdit-py-plugins/mdit_py_plugins-0.5.0.tar.gz", hash = "sha256:f4918cb50119f50446560513a8e311d574ff6aaed72606ddae6d35716fe809c6" }
+wheels = [
+    { url = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/mdit-py-plugins/mdit_py_plugins-0.5.0-py3-none-any.whl", hash = "sha256:07a08422fc1936a5d26d146759e9155ea466e842f5ab2f7d2266dd084c8dab1f" },
+]
+
+[[package]]
+name = "mdurl"
+version = "0.1.2"
+source = { registry = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/simple/" }
+sdist = { url = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/mdurl/mdurl-0.1.2.tar.gz", hash = "sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba" }
+wheels = [
+    { url = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/mdurl/mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8" },
+]
 
 [[package]]
 name = "packaging"
@@ -46,6 +100,15 @@ source = { registry = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts
 sdist = { url = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/packaging/packaging-26.0.tar.gz", hash = "sha256:00243ae351a257117b6a241061796684b084ed1c516a08c48a3f7e147a9d80b4" }
 wheels = [
     { url = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/packaging/packaging-26.0-py3-none-any.whl", hash = "sha256:b36f1fef9334a5588b4166f8bcd26a14e521f2b55e6b9de3aaa80d3ff7a37529" },
+]
+
+[[package]]
+name = "platformdirs"
+version = "4.9.6"
+source = { registry = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/simple/" }
+sdist = { url = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/platformdirs/platformdirs-4.9.6.tar.gz", hash = "sha256:3bfa75b0ad0db84096ae777218481852c0ebc6c727b3168c1b9e0118e458cf0a" }
+wheels = [
+    { url = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/platformdirs/platformdirs-4.9.6-py3-none-any.whl", hash = "sha256:e61adb1d5e5cb3441b4b7710bea7e4c12250ca49439228cc1021c00dcfac0917" },
 ]
 
 [[package]]
@@ -83,10 +146,58 @@ wheels = [
 ]
 
 [[package]]
+name = "rich"
+version = "14.3.3"
+source = { registry = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/simple/" }
+dependencies = [
+    { name = "markdown-it-py" },
+    { name = "pygments" },
+]
+sdist = { url = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/rich/rich-14.3.3.tar.gz", hash = "sha256:b8daa0b9e4eef54dd8cf7c86c03713f53241884e814f4e2f5fb342fe520f639b" }
+wheels = [
+    { url = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/rich/rich-14.3.3-py3-none-any.whl", hash = "sha256:793431c1f8619afa7d3b52b2cdec859562b950ea0d4b6b505397612db8d5362d" },
+]
+
+[[package]]
+name = "textual"
+version = "8.2.3"
+source = { registry = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/simple/" }
+dependencies = [
+    { name = "markdown-it-py", extra = ["linkify"] },
+    { name = "mdit-py-plugins" },
+    { name = "platformdirs" },
+    { name = "pygments" },
+    { name = "rich" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/textual/textual-8.2.3.tar.gz", hash = "sha256:beea7b86b03b03558a2224f0cc35252e60ef8b0c4353b117b2f40972902d976a" }
+wheels = [
+    { url = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/textual/textual-8.2.3-py3-none-any.whl", hash = "sha256:5008ac581bebf1f6fa0520404261844a231e5715fdbddd10ca73916a3af48ca2" },
+]
+
+[[package]]
 name = "tomli-w"
 version = "1.2.0"
 source = { registry = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/simple/" }
 sdist = { url = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/tomli-w/tomli_w-1.2.0.tar.gz", hash = "sha256:2dd14fac5a47c27be9cd4c976af5a12d87fb1f0b4512f81d69cce3b35ae25021" }
 wheels = [
     { url = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/tomli-w/tomli_w-1.2.0-py3-none-any.whl", hash = "sha256:188306098d013b691fcadc011abd66727d3c414c571bb01b1a174ba8c983cf90" },
+]
+
+[[package]]
+name = "typing-extensions"
+version = "4.15.0"
+source = { registry = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/simple/" }
+sdist = { url = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/typing-extensions/typing_extensions-4.15.0.tar.gz", hash = "sha256:0cea48d173cc12fa28ecabc3b837ea3cf6f38c6d1136f85cbaaf598984861466" }
+wheels = [
+    { url = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/typing-extensions/typing_extensions-4.15.0-py3-none-any.whl", hash = "sha256:f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548" },
+]
+
+[[package]]
+name = "uc-micro-py"
+version = "2.0.0"
+source = { registry = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/simple/" }
+sdist = { url = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/uc-micro-py/uc_micro_py-2.0.0.tar.gz", hash = "sha256:c53691e495c8db60e16ffc4861a35469b0ba0821fe409a8a7a0a71864d33a811" }
+wheels = [
+    { url = "https://europe-west1-python.pkg.dev/prj-dex-prd-artifacts-hub/dexter-python-main/uc-micro-py/uc_micro_py-2.0.0-py3-none-any.whl", hash = "sha256:3603a3859af53e5a39bc7677713c78ea6589ff188d70f4fee165db88e22b242c" },
 ]
