@@ -8,6 +8,7 @@ version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
     "tomli-w>=1.0",
+    "textual>=8.2",
 ]
 
 [project.scripts]
