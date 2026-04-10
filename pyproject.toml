@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "joy"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "tomli-w>=1.0",
+]
+
+[project.scripts]
+joy = "joy.app:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/joy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "macos_integration: tests requiring live macOS apps (iTerm2, Notion, etc.)",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
