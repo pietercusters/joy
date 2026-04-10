@@ -1,0 +1,173 @@
+# Requirements: joy
+
+**Defined:** 2026-04-10
+**Core Value:** Every artifact for the active project, openable instantly from one keyboard-driven interface.
+
+## v1 Requirements
+
+### Core TUI
+
+- [ ] **CORE-01**: App shows a two-pane layout — project list (left) + project detail (right)
+- [ ] **CORE-02**: User can navigate with j/k or arrow keys throughout
+- [ ] **CORE-03**: Footer shows context-sensitive keyboard hints that update when focus changes
+- [ ] **CORE-04**: Pressing Escape always navigates back; no focus traps
+- [ ] **CORE-05**: Status bar shows immediate feedback after every action ("Copied to clipboard", "Opened in browser")
+- [ ] **CORE-06**: App starts in under 350ms to first paint
+- [ ] **CORE-07**: Each object type displays a Nerd Font icon for fast visual scanning
+
+### Projects
+
+- [ ] **PROJ-01**: Project list is visible on the left pane with clear selection highlighting
+- [ ] **PROJ-02**: First project is auto-selected on startup
+- [ ] **PROJ-03**: Navigating the project list immediately updates the detail pane
+- [ ] **PROJ-04**: User can create a new project (enter name; add objects via pre-defined form)
+- [ ] **PROJ-05**: User can delete a project after confirming
+- [ ] **PROJ-06**: User can filter the project list by typing `/` followed by a substring (real-time)
+
+### Object Types
+
+- [ ] **OBJ-01**: `string` type — activating copies the value to clipboard (e.g., branch name)
+- [ ] **OBJ-02**: `url` type — activating opens the URL in the default browser
+- [ ] **OBJ-03**: `url` type with Notion or Slack URL — activating opens in the respective desktop app
+- [ ] **OBJ-04**: `obsidian` type — activating opens the file in the configured Obsidian vault via `obsidian://` URI
+- [ ] **OBJ-05**: `file` type — activating opens the file in the configured editor
+- [ ] **OBJ-06**: `git worktree` type — activating opens the path in the configured IDE
+- [ ] **OBJ-07**: `special string` type — activating creates (if absent) or focuses the named iTerm2 window via AppleScript
+
+### Pre-defined Objects
+
+- [ ] **PRESET-01**: `mr` — url type, multiple allowed, opens in browser
+- [ ] **PRESET-02**: `branch` — string type, multiple allowed, copies to clipboard
+- [ ] **PRESET-03**: `ticket` — url type, multiple allowed, opens in Notion desktop
+- [ ] **PRESET-04**: `thread` — url type, multiple allowed, opens in Slack desktop
+- [ ] **PRESET-05**: `file` — file type, multiple allowed, opens in configured editor
+- [ ] **PRESET-06**: `note` — obsidian type, multiple allowed, opens in Obsidian
+- [ ] **PRESET-07**: `worktree` — git worktree type, one per project, opens in configured IDE
+- [ ] **PRESET-08**: `agents` — special string type, one per project, creates/opens named iTerm2 window
+- [ ] **PRESET-09**: `url` — url type, multiple allowed, opens in browser
+
+### Activation
+
+- [ ] **ACT-01**: Pressing `o` on a selected object performs its type-specific operation
+- [ ] **ACT-02**: Pressing `O` activates all objects marked as "open by default", in display order
+- [ ] **ACT-03**: Pressing `space` toggles whether the selected object is in the "open by default" set
+- [ ] **ACT-04**: Each object displays a visual indicator (filled/empty) showing its "open by default" status
+
+### Object Management
+
+- [ ] **MGMT-01**: Pressing `a` opens an add-object form (choose preset or generic type, enter value)
+- [ ] **MGMT-02**: Pressing `e` opens an edit form for the selected object
+- [ ] **MGMT-03**: Pressing `d` removes the selected object after confirming
+- [ ] **MGMT-04**: Pressing `J`/`K` moves the selected object down/up (controls `O` activation order)
+
+### Settings
+
+- [ ] **SETT-01**: Global setting for preferred IDE (used for git worktree type)
+- [ ] **SETT-02**: Global setting for Obsidian vault path (used for obsidian type)
+- [ ] **SETT-03**: Global setting for preferred editor (used for file type)
+- [ ] **SETT-04**: Global setting for terminal tool (used for agents type; e.g., iTerm2)
+- [ ] **SETT-05**: Global default: which object types are pre-marked "open by default" when creating a new project
+- [ ] **SETT-06**: Dedicated settings screen accessible from the main screen
+
+### Distribution
+
+- [ ] **DIST-01**: App is installable globally via `uv tool install git+<repo>`
+- [ ] **DIST-02**: All user data and config live in `~/.joy/` (config.toml + projects.toml)
+- [ ] **DIST-03**: README covers installation, first-run setup, and key usage
+- [ ] **DIST-04**: `joy --version` outputs the installed version
+
+## v2 Requirements
+
+### Convenience
+
+- **CONV-01**: Quick-add from clipboard — detect URL or branch name in clipboard and pre-fill add form
+- **CONV-02**: Configurable keybinding overrides
+
+### Platform
+
+- **PLAT-01**: Linux support (once iTerm2 and macOS-specific integrations are abstracted)
+
+### Extensibility
+
+- **EXT-01**: External plugin/extension API for custom object types
+
+### Collaboration
+
+- **COLLAB-01**: Multi-vault Obsidian support (select vault per object)
+
+## Out of Scope
+
+| Feature | Reason |
+|---------|--------|
+| Mouse interaction | Keyboard-driven identity; two paradigms dilute UX |
+| Undo/redo | Confirmation dialogs suffice for joy's simple mutations |
+| Animations / transitions | Anti-pattern in terminals per TUI design research |
+| Cloud sync | User can git-track `~/.joy/`; adds network + auth complexity |
+| Cross-platform (v1) | macOS-only for now; uses iTerm2, app URL schemes, AppleScript |
+| Plugin API (v1) | Single-user tool; add types by editing code |
+| Multi-vault Obsidian (v1) | Single configured vault is sufficient for v1 |
+| Configurable keybindings (v1) | Ship opinionated defaults; configurability is premature complexity |
+| Inline editing | Known TUI anti-pattern; use modal overlays |
+
+## Traceability
+
+*Populated during roadmap creation.*
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| CORE-01 | — | Pending |
+| CORE-02 | — | Pending |
+| CORE-03 | — | Pending |
+| CORE-04 | — | Pending |
+| CORE-05 | — | Pending |
+| CORE-06 | — | Pending |
+| CORE-07 | — | Pending |
+| PROJ-01 | — | Pending |
+| PROJ-02 | — | Pending |
+| PROJ-03 | — | Pending |
+| PROJ-04 | — | Pending |
+| PROJ-05 | — | Pending |
+| PROJ-06 | — | Pending |
+| OBJ-01 | — | Pending |
+| OBJ-02 | — | Pending |
+| OBJ-03 | — | Pending |
+| OBJ-04 | — | Pending |
+| OBJ-05 | — | Pending |
+| OBJ-06 | — | Pending |
+| OBJ-07 | — | Pending |
+| PRESET-01 | — | Pending |
+| PRESET-02 | — | Pending |
+| PRESET-03 | — | Pending |
+| PRESET-04 | — | Pending |
+| PRESET-05 | — | Pending |
+| PRESET-06 | — | Pending |
+| PRESET-07 | — | Pending |
+| PRESET-08 | — | Pending |
+| PRESET-09 | — | Pending |
+| ACT-01 | — | Pending |
+| ACT-02 | — | Pending |
+| ACT-03 | — | Pending |
+| ACT-04 | — | Pending |
+| MGMT-01 | — | Pending |
+| MGMT-02 | — | Pending |
+| MGMT-03 | — | Pending |
+| MGMT-04 | — | Pending |
+| SETT-01 | — | Pending |
+| SETT-02 | — | Pending |
+| SETT-03 | — | Pending |
+| SETT-04 | — | Pending |
+| SETT-05 | — | Pending |
+| SETT-06 | — | Pending |
+| DIST-01 | — | Pending |
+| DIST-02 | — | Pending |
+| DIST-03 | — | Pending |
+| DIST-04 | — | Pending |
+
+**Coverage:**
+- v1 requirements: 48 total
+- Mapped to phases: 0 (roadmap pending)
+- Unmapped: 48 ⚠️
+
+---
+*Requirements defined: 2026-04-10*
+*Last updated: 2026-04-10 after initial definition*
