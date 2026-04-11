@@ -16,7 +16,7 @@ class PresetPickerModal(ModalScreen[PresetKind | None]):
     """Modal to select a preset kind via type-to-filter.
 
     Displays all 9 PresetKind values in GROUP_ORDER.
-    Filters in real-time as user types. j/k navigate the list.
+    Filters in real-time as user types. Up/down arrows navigate the list while typing.
     Returns selected PresetKind on Enter, None on Escape.
     """
 
@@ -63,7 +63,7 @@ class PresetPickerModal(ModalScreen[PresetKind | None]):
                 ],
                 id="preset-list",
             )
-            yield Static("j/k to navigate, Enter to select, Escape to cancel", classes="modal-hint")
+            yield Static("↑/↓ to navigate, Enter to select, Escape to cancel", classes="modal-hint")
 
     def on_mount(self) -> None:
         self.query_one("#filter-input", Input).focus()
@@ -77,15 +77,20 @@ class PresetPickerModal(ModalScreen[PresetKind | None]):
             listview.append(ListItem(Label(f"{PRESET_ICONS[kind]}  {kind.value}")))
 
     def on_key(self, event: Key) -> None:
-        """Intercept j/k to navigate the ListView while the filter Input has focus."""
+        """Intercept up/down to navigate the ListView while the filter Input has focus.
+
+        The Input widget captures all key events, so arrow keys would normally be
+        consumed for cursor movement within the input. We intercept them here and
+        forward them to the ListView so the user can navigate the list while typing.
+        """
         filter_input = self.query_one("#filter-input", Input)
         listview = self.query_one("#preset-list", ListView)
         if filter_input.has_focus:
-            if event.key == "j":
+            if event.key == "down":
                 event.prevent_default()
                 event.stop()
                 listview.action_cursor_down()
-            elif event.key == "k":
+            elif event.key == "up":
                 event.prevent_default()
                 event.stop()
                 listview.action_cursor_up()
