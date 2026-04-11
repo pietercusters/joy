@@ -28,22 +28,26 @@ class SettingsModal(ModalScreen[Config | None]):
         max-height: 80vh;
         background: $surface;
         border: thick $background 80%;
-        padding: 1 2;
+        padding: 0 2 1 2;
         overflow: auto;
     }
     SettingsModal .modal-title {
         text-style: bold;
+        margin-top: 1;
     }
     SettingsModal .field-label {
         color: $text-muted;
-        margin-top: 1;
     }
     SettingsModal .modal-hint {
         color: $text-muted;
     }
     SettingsModal SelectionList {
         height: auto;
-        max-height: 12;
+        max-height: 9;
+    }
+    SettingsModal Button {
+        width: auto;
+        margin-top: 1;
     }
     """
 
@@ -72,7 +76,7 @@ class SettingsModal(ModalScreen[Config | None]):
             )
             yield Button("Save Settings", variant="primary", id="btn-save")
             yield Static(
-                "Tab to navigate, Enter / Save Settings to save, Escape to cancel",
+                "Tab to navigate · Save Settings to save · Escape to cancel",
                 classes="modal-hint",
             )
 

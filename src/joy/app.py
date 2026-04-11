@@ -45,6 +45,7 @@ class JoyApp(App):
         yield Footer()
 
     def on_mount(self) -> None:
+        self.sub_title = _get_version()
         self._load_data()
 
     @work(thread=True)
@@ -198,15 +199,19 @@ class JoyApp(App):
             self.app.notify(f"Failed to open: {err}", severity="error", markup=False)
 
 
+def _get_version() -> str:
+    """Return installed package version, or 'unknown' if not installed."""
+    import importlib.metadata  # noqa: PLC0415
+    try:
+        return importlib.metadata.version("joy")
+    except importlib.metadata.PackageNotFoundError:
+        return "unknown"
+
+
 def main() -> None:
     """Main entry point for the joy CLI."""
-    if len(sys.argv) > 1 and sys.argv[1] == "--version":
-        import importlib.metadata  # noqa: PLC0415 -- lazy import per CP-2 pattern
-        try:
-            version = importlib.metadata.version("joy")
-        except importlib.metadata.PackageNotFoundError:
-            version = "unknown"
-        print(f"joy {version}")
+    if "--version" in sys.argv:
+        print(f"joy {_get_version()}")
         return
     app = JoyApp()
     app.run()

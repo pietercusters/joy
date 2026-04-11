@@ -31,6 +31,7 @@ class JoyListView(ListView):
         if self._filter_active:
             return  # already in filter mode -- no-op (prevent duplicate mount)
         parent = self.app.query_one("#project-list", ProjectList)
+        parent._is_filtered = False  # clear any Enter-kept filter state
         filter_input = Input(placeholder="Filter projects...", id="filter-input")
         parent.mount(filter_input, before=self)
         self._filter_active = True
@@ -102,6 +103,7 @@ class ProjectList(Widget, can_focus=False):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self._projects: list[Project] = []
+        self._is_filtered: bool = False
 
     def compose(self) -> ComposeResult:
         yield JoyListView(id="project-listview")
@@ -138,11 +140,12 @@ class ProjectList(Widget, can_focus=False):
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Enter in filter input: dismiss filter, keep current subset (D-08)."""
         self._exit_filter_mode(restore=False)
+        self._is_filtered = True  # list is still filtered; Escape will restore
 
     def on_key(self, event) -> None:
         """Handle Escape to exit filter mode without conflicting with modals (Pitfall 1)."""
         listview = self.query_one("#project-listview", JoyListView)
-        if listview._filter_active and event.key == "escape":
+        if event.key == "escape" and (listview._filter_active or self._is_filtered):
             event.stop()
             self._exit_filter_mode(restore=True)
 
@@ -155,6 +158,7 @@ class ProjectList(Widget, can_focus=False):
         except Exception:
             pass
         listview._filter_active = False
+        self._is_filtered = False
         if restore:
             self.set_projects(list(self.app._projects))  # canonical list (D-09, Pitfall 3)
         listview.call_after_refresh(listview.focus)  # restore keyboard focus
