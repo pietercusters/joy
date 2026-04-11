@@ -1,6 +1,7 @@
 """ObjectRow widget: displays a single project object with icon, label, and value."""
 from __future__ import annotations
 
+from rich.text import Text
 from textual.widgets import Static
 
 from joy.models import ObjectItem, PresetKind
@@ -33,7 +34,6 @@ class ObjectRow(Static):
         width: 1fr;
         height: 1;
         padding: 0 1;
-        overflow: hidden;
     }
     """
 
@@ -44,9 +44,9 @@ class ObjectRow(Static):
         super().__init__(renderable, **kwargs)
 
     @staticmethod
-    def _render_text(item: ObjectItem) -> str:
-        """Build the display string: icon  label  value."""
+    def _render_text(item: ObjectItem) -> Text:
+        """Build the display text: icon  label  value, truncated with ellipsis."""
         icon = PRESET_ICONS.get(item.kind, " ")
         label = item.kind.value
         value = item.label if item.label else item.value
-        return f"{icon}  {label}  {value}"
+        return Text(f"{icon}  {label}  {value}", no_wrap=True, overflow="ellipsis")
