@@ -306,3 +306,146 @@ async def test_O_works_from_project_list(mock_store, mock_operations, mock_save)
         await app.workers.wait_for_complete()
         # project-alpha has 2 default objects
         assert mock_operations.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# PROJ-04: n key creates new project
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_n_creates_project(mock_store, mock_save):
+    """PROJ-04: Pressing n, typing name, Enter creates a new project."""
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        initial_count = len(app._projects)
+        await pilot.press("n")
+        await pilot.pause(0.1)
+        for ch in "new-proj":
+            await pilot.press(ch)
+        await pilot.press("enter")
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        # Escape from the add-object loop that auto-opens
+        await pilot.press("escape")
+        await pilot.pause(0.1)
+        assert len(app._projects) == initial_count + 1
+        assert app._projects[-1].name == "new-proj"
+
+
+@pytest.mark.asyncio
+async def test_n_escape_noop(mock_store, mock_save):
+    """PROJ-04: Pressing n then Escape creates no project."""
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        initial_count = len(app._projects)
+        await pilot.press("n")
+        await pilot.pause(0.1)
+        await pilot.press("escape")
+        await pilot.pause(0.1)
+        assert len(app._projects) == initial_count
+
+
+@pytest.mark.asyncio
+async def test_n_duplicate_name_error(mock_store, mock_save):
+    """PROJ-04: Duplicate project name shows error, no project created."""
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        initial_count = len(app._projects)
+        await pilot.press("n")
+        await pilot.pause(0.1)
+        for ch in "project-alpha":  # already exists in _sample_projects
+            await pilot.press(ch)
+        await pilot.press("enter")
+        await pilot.pause(0.1)
+        assert len(app._projects) == initial_count  # no new project
+
+
+@pytest.mark.asyncio
+async def test_n_persists(mock_store, mock_save):
+    """PROJ-04: Creating a project calls save_projects."""
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        await pilot.press("n")
+        await pilot.pause(0.1)
+        for ch in "persisted":
+            await pilot.press(ch)
+        await pilot.press("enter")
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        await pilot.press("escape")  # exit add-object loop
+        await pilot.pause(0.1)
+        assert mock_save.called
+
+
+# ---------------------------------------------------------------------------
+# MGMT-01: a key adds object to current project
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_adds_object(mock_store, mock_save):
+    """MGMT-01: Pressing a from detail pane, selecting preset, entering value adds object."""
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        # Focus detail pane (project-alpha)
+        await pilot.press("enter")
+        await pilot.pause(0.1)
+        detail = app.query_one("#project-detail")
+        project = detail._project
+        assert project is not None
+        initial_obj_count = len(project.objects)
+        # Press a to open add-object loop
+        await pilot.press("a")
+        await pilot.pause(0.1)
+        # Type "wo" to filter to worktree (single match)
+        await pilot.press("w")
+        await pilot.press("o")
+        await pilot.pause(0.1)
+        # Press Enter to select the single match (worktree)
+        await pilot.press("enter")
+        await pilot.pause(0.1)
+        # Now in ValueInputModal — type a value
+        for ch in "/tmp/new-worktree":
+            await pilot.press(ch)
+        await pilot.press("enter")
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        # Escape from the loop (preset picker opened again)
+        await pilot.press("escape")
+        await pilot.pause(0.1)
+        assert len(project.objects) == initial_obj_count + 1
+        assert project.objects[-1].kind.value == "worktree"
+        assert project.objects[-1].value == "/tmp/new-worktree"
+
+
+@pytest.mark.asyncio
+async def test_a_escape_noop(mock_store, mock_save):
+    """MGMT-01: Pressing a then Escape in preset picker adds no object."""
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        # Focus detail pane
+        await pilot.press("enter")
+        await pilot.pause(0.1)
+        detail = app.query_one("#project-detail")
+        project = detail._project
+        assert project is not None
+        initial_obj_count = len(project.objects)
+        # Press a then Escape immediately
+        await pilot.press("a")
+        await pilot.pause(0.1)
+        await pilot.press("escape")
+        await pilot.pause(0.1)
+        assert len(project.objects) == initial_obj_count
