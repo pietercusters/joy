@@ -6,7 +6,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal
 from textual.widgets import Footer, Header
 
-from joy.models import Project
+from joy.models import Config, Project
 from joy.widgets.project_detail import ProjectDetail
 from joy.widgets.project_list import ProjectList
 
@@ -24,6 +24,8 @@ class JoyApp(App):
 
     BINDINGS = [("q", "quit", "Quit")]
 
+    _config: Config = Config()
+
     def compose(self) -> ComposeResult:
         yield Header()
         yield Horizontal(
@@ -37,15 +39,18 @@ class JoyApp(App):
 
     @work(thread=True)
     def _load_data(self) -> None:
-        """Load projects from store in a background thread (CP-1, CP-2)."""
-        from joy.store import load_projects  # noqa: PLC0415 — lazy import per CP-2
+        """Load projects and config from store in a background thread (CP-1, CP-2)."""
+        from joy.store import load_config, load_projects  # noqa: PLC0415 — lazy import per CP-2
 
         projects = load_projects()
-        self.app.call_from_thread(self._set_projects, projects)
+        config = load_config()
+        self.app.call_from_thread(self._set_projects, projects, config)
 
-    def _set_projects(self, projects: list[Project]) -> None:
+    def _set_projects(self, projects: list[Project], config: Config | None = None) -> None:
         """Update the project list widget with loaded projects (called from thread)."""
         self._projects = projects
+        if config is not None:
+            self._config = config
         self.query_one(ProjectList).set_projects(projects)
         if projects:
             self.query_one(ProjectList).select_first()
