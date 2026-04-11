@@ -8,6 +8,15 @@ from textual.containers import VerticalScroll
 from textual.widget import Widget
 from textual.widgets import Static
 
+
+class _DetailScroll(VerticalScroll, can_focus=False):
+    """Non-focusable scroll container for the detail pane.
+
+    VerticalScroll is focusable by default. Making it non-focusable prevents it
+    from stealing focus from ProjectDetail after a DOM rebuild, which would cause
+    the e/d/o bindings on ProjectDetail to silently fail.
+    """
+
 from joy.models import ObjectItem, PresetKind, Project
 from joy.widgets.object_row import ObjectRow, _success_message, _truncate
 
@@ -95,7 +104,7 @@ class ProjectDetail(Widget, can_focus=True):
         self._rows: list[ObjectRow] = []
 
     def compose(self) -> ComposeResult:
-        yield VerticalScroll(id="detail-scroll")
+        yield _DetailScroll(id="detail-scroll")
 
     def set_project(self, project: Project) -> None:
         """Update the displayed project: rebuild grouped object rows and reset cursor.
@@ -126,7 +135,7 @@ class ProjectDetail(Widget, can_focus=True):
             return  # superseded by a newer set_project call
         if self._project is None:
             return
-        scroll = self.query_one("#detail-scroll", VerticalScroll)
+        scroll = self.query_one("#detail-scroll", _DetailScroll)
 
         # Clear existing content
         scroll.remove_children()

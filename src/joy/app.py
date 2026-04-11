@@ -85,8 +85,13 @@ class JoyApp(App):
         self, message: ProjectList.ProjectSelected
     ) -> None:
         """When Enter pressed on project, update detail and shift focus (D-04)."""
-        self.query_one(ProjectDetail).set_project(message.project)
-        self.query_one(ProjectDetail).focus()
+        detail = self.query_one(ProjectDetail)
+        detail.set_project(message.project)
+        # Focus AFTER the DOM rebuild: set_project defers via call_after_refresh,
+        # so focusing before that point lets the rebuild displace focus when
+        # children are removed and re-mounted. Scheduling after ensures focus
+        # lands on ProjectDetail once the DOM is stable.
+        detail.call_after_refresh(detail.focus)
 
     def action_open_all_defaults(self) -> None:
         """Open all open_by_default objects for the current project (ACT-02, D-10)."""
@@ -119,8 +124,12 @@ class JoyApp(App):
             self._save_projects_bg()
             project_list = self.query_one(ProjectList)
             project_list.set_projects(self._projects)
-            # Select the new project (last in list)
-            project_list.select_index(len(self._projects) - 1)
+            # Select the new project (last in list). Use call_after_refresh so
+            # the reactive chain from set_projects (clear + append) settles
+            # before we override the index — otherwise the ListView may reset
+            # to index 0 after our select_index call.
+            new_index = len(self._projects) - 1
+            project_list.call_after_refresh(lambda: project_list.select_index(new_index))
             self.query_one(ProjectDetail).set_project(project)
             self.notify(f"Created project: '{name}'", markup=False)
             # D-02, D-03: Start add-object loop
