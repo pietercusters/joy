@@ -30,7 +30,12 @@ def _sample_projects() -> list[Project]:
 
 @pytest.fixture
 def mock_store():
-    """Mock store.load_projects to return sample data without touching ~/.joy/."""
+    """Mock store.load_projects to return sample data without touching ~/.joy/.
+
+    Patched on joy.store (not joy.app) because app.py imports lazily:
+    `from joy.store import load_projects` runs inside _load_data on each call,
+    so the name is resolved from joy.store at call time — patch intercepts correctly.
+    """
     with patch("joy.store.load_projects", return_value=_sample_projects()) as mock:
         yield mock
 
@@ -50,7 +55,8 @@ async def test_first_project_auto_selected(mock_store):
     """PROJ-02: First project is auto-selected on startup."""
     app = JoyApp()
     async with app.run_test() as pilot:
-        await pilot.pause(0.2)  # Let worker thread complete
+        await pilot.pause()  # process all pending messages
+        await app.workers.wait_for_complete()
         # The detail pane should show the first project's data
         detail = app.query_one("#project-detail")
         assert detail._project is not None
