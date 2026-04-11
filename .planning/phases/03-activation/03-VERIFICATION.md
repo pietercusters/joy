@@ -1,22 +1,34 @@
 ---
 phase: 03-activation
 verified: 2026-04-11T10:00:00Z
-status: human_needed
+status: verified
 score: 5/5 must-haves verified
 overrides_applied: 0
 human_verification:
   - test: "Run `uv run joy` and verify dot indicator rendering"
     expected: "Objects with open_by_default=True show a bright filled dot (U+25CF) to the left of the Nerd Font icon; open_by_default=False shows a dim empty dot (U+25CB)"
     why_human: "Terminal rendering of Unicode characters and Rich styled Text spans cannot be verified programmatically; visual inspection required to confirm glyphs display correctly in the target terminal"
+    status: approved
+    approved_by: user
+    approved_at: "2026-04-11"
   - test: "Press space to toggle an object and relaunch the app"
     expected: "Dot indicator flips immediately on keypress (no cursor jump) and the toggled state persists after quitting and relaunching joy"
     why_human: "Cross-session persistence requires a real `~/.joy/projects.toml` write and a fresh app launch; the test suite mocks save_projects, so real file persistence must be manually confirmed"
+    status: approved
+    approved_by: user
+    approved_at: "2026-04-11"
   - test: "Press o on a branch-type object"
     expected: "Branch value is copied to clipboard (Cmd+V confirms), and a toast appears: 'Copied: {branch-name}'"
     why_human: "Clipboard write (pbcopy) cannot be asserted in the test suite; toast text must be visually verified"
+    status: approved
+    approved_by: user
+    approved_at: "2026-04-11"
   - test: "Press O from the project list (without pressing Enter first)"
     expected: "All open_by_default objects for the highlighted project activate sequentially, one toast per object, footer shows 'Open All' binding"
     why_human: "Real subprocess calls are mocked in tests; actual URL/app opening and footer rendering in a real terminal require human eyes"
+    status: approved
+    approved_by: user
+    approved_at: "2026-04-11"
 ---
 
 # Phase 3: Activation Verification Report
