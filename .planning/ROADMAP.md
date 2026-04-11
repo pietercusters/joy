@@ -50,9 +50,9 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md -- App shell, two-pane layout, ProjectList widget, async data loading, Enter/Escape focus management
-- [ ] 02-02-PLAN.md -- Detail pane with ObjectRow icons, grouped-by-preset rendering, j/k cursor navigation
-- [ ] 02-03-PLAN.md -- Context-sensitive footer, Header pane label, Textual pilot tests, visual checkpoint
+- [x] 02-01-PLAN.md -- App shell, two-pane layout, ProjectList widget, async data loading, Enter/Escape focus management
+- [x] 02-02-PLAN.md -- Detail pane with ObjectRow icons, grouped-by-preset rendering, j/k cursor navigation
+- [x] 02-03-PLAN.md -- Context-sensitive footer, Header pane label, Textual pilot tests, visual checkpoint
 
 ### Phase 3: Activation
 **Goal**: Users can open any object with `o`, open all "open by default" objects with `O`, and toggle the default set with space -- delivering the core value of instant artifact access
