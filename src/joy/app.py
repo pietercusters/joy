@@ -114,9 +114,9 @@ class JoyApp(App):
                     _success_message(item, self._config),
                     markup=False,
                 )
-            except Exception:
+            except Exception as exc:
                 display = _truncate(item.label if item.label else item.value)
-                errors.append(display)
+                errors.append(f"{display}: {exc}")
         # Show accumulated error toasts at the end (D-07)
         for err in errors:
             self.app.notify(f"Failed to open: {err}", severity="error", markup=False)
