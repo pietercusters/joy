@@ -96,12 +96,26 @@ class ProjectDetail(Widget, can_focus=True):
 
         Defers DOM manipulation via call_after_refresh to ensure VerticalScroll is
         fully attached before mounting children into it.
+
+        A generation counter guards against stale renders during rapid project
+        switching: if set_project is called again before the deferred callback fires,
+        the superseded render is a no-op.
         """
         self._project = project
-        self.call_after_refresh(self._render_project)
+        self._render_generation = getattr(self, "_render_generation", 0) + 1
+        gen = self._render_generation
+        self.call_after_refresh(lambda: self._render_project(gen))
 
-    def _render_project(self) -> None:
-        """Rebuild the grouped object rows for the current project."""
+    def _render_project(self, gen: int = 0) -> None:
+        """Rebuild the grouped object rows for the current project.
+
+        Args:
+            gen: The render generation this callback was issued for. If it no longer
+                 matches the current generation, this render has been superseded and
+                 is skipped.
+        """
+        if gen != getattr(self, "_render_generation", 0):
+            return  # superseded by a newer set_project call
         if self._project is None:
             return
         scroll = self.query_one("#detail-scroll", VerticalScroll)
