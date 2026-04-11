@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Phase 4 context gathered (discuss mode)
-last_updated: "2026-04-11T08:46:43.521Z"
-last_activity: 2026-04-11 -- Phase 03 activation complete
+status: executing
+stopped_at: Phase 4 UI-SPEC approved
+last_updated: "2026-04-11T10:21:04.811Z"
+last_activity: 2026-04-11 -- Phase 04 execution started
 progress:
   total_phases: 5
-  completed_phases: 3
-  total_plans: 9
-  completed_plans: 9
+  completed_phases: 4
+  total_plans: 12
+  completed_plans: 12
   percent: 100
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-10)
 
 **Core value:** Every artifact for the active project, openable instantly from one keyboard-driven interface.
-**Current focus:** Phase 03 — activation
+**Current focus:** Phase 04 — crud
 
 ## Current Position
 
-Phase: 03 (activation) — COMPLETE ✓
-Plan: 3 of 3
-Status: Phase 03 complete — ready for Phase 04
-Last activity: 2026-04-11 -- Phase 03 activation complete
+Phase: 04 (crud) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 04
+Last activity: 2026-04-11 -- Phase 04 execution started
 
 Progress: ████████████░░░░░░░░ 60%
 
@@ -72,8 +72,14 @@ None yet.
 - iTerm2 AppleScript reliability needs hands-on validation during Phase 1/3
 - Startup time budget (350ms) must be measured from first Textual prototype in Phase 2
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260411-ivh | Fix three UAT bugs: project list selection after delete, detail pane focus dimming, Slack thread URL navigation | 2026-04-11 | 9f5e006 | [260411-ivh-fix-three-uat-bugs-project-list-selectio](./quick/260411-ivh-fix-three-uat-bugs-project-list-selectio/) |
+
 ## Session Continuity
 
-Last session: 2026-04-11T08:46:43.517Z
-Stopped at: Phase 4 context gathered (discuss mode)
-Resume file: .planning/phases/04-crud/04-CONTEXT.md
+Last session: 2026-04-11T08:53:28.226Z
+Stopped at: Phase 4 UI-SPEC approved
+Resume file: .planning/phases/04-crud/04-UI-SPEC.md
