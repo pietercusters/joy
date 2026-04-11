@@ -82,8 +82,13 @@ Plans:
   3. User can edit a selected object by pressing `e`, modifying its value in a form, and seeing the change reflected immediately
   4. User can delete a selected object by pressing `d` with a confirmation prompt
   5. User can delete a project by pressing the delete key with a confirmation prompt; deletion removes it from the list and selects an adjacent project
-**Plans**: TBD
+**Plans:** 3 plans
 **UI hint**: yes
+
+Plans:
+- [ ] 04-01-PLAN.md -- Modal screen components (NameInputModal, PresetPickerModal, ValueInputModal, ConfirmationModal) + unit tests
+- [ ] 04-02-PLAN.md -- Create project (n) and add object (a) flows wired into app.py and project_detail.py
+- [ ] 04-03-PLAN.md -- Edit object (e), delete object (d), delete project (D/delete) + visual checkpoint
 
 ### Phase 5: Settings, Search & Distribution
 **Goal**: Users can configure global preferences via a settings screen, filter projects by name, reorder objects to control activation sequence, and install joy globally via uv
@@ -108,5 +113,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 1. Foundation | 3/3 | ✓ Complete | 2026-04-10 |
 | 2. TUI Shell | 0/3 | In progress | - |
 | 3. Activation | 0/3 | Not started | - |
-| 4. CRUD | 0/? | Not started | - |
+| 4. CRUD | 0/3 | Not started | - |
 | 5. Settings, Search & Distribution | 0/? | Not started | - |
