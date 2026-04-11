@@ -86,9 +86,9 @@ Plans:
 **UI hint**: yes
 
 Plans:
-- [ ] 04-01-PLAN.md -- Modal screen components (NameInputModal, PresetPickerModal, ValueInputModal, ConfirmationModal) + unit tests
-- [ ] 04-02-PLAN.md -- Create project (n) and add object (a) flows wired into app.py and project_detail.py
-- [ ] 04-03-PLAN.md -- Edit object (e), delete object (d), delete project (D/delete) + visual checkpoint
+- [x] 04-01-PLAN.md -- Modal screen components (NameInputModal, PresetPickerModal, ValueInputModal, ConfirmationModal) + unit tests
+- [x] 04-02-PLAN.md -- Create project (n) and add object (a) flows wired into app.py and project_detail.py
+- [x] 04-03-PLAN.md -- Edit object (e), delete object (d), delete project (D/delete) + visual checkpoint
 
 ### Phase 5: Settings, Search & Distribution
 **Goal**: Users can configure global preferences via a settings screen, filter projects by name, reorder objects to control activation sequence, and install joy globally via uv
