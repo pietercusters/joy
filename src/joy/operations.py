@@ -44,7 +44,7 @@ def _open_url(item: ObjectItem, config: Config) -> None:
         notion_uri = url.replace("https://", "notion://", 1)
         subprocess.run(["open", notion_uri], check=True)
     elif "slack.com" in hostname:
-        subprocess.run(["open", "-a", "Slack", url], check=True)
+        subprocess.run(["open", url], check=True)
     else:
         subprocess.run(["open", url], check=True)
 
