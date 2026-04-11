@@ -439,22 +439,25 @@ def _save_config_bg(self) -> None:
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Filter mode Escape vs. focus restoration after filter exit**
    - What we know: Escape in filter mode should exit filter and restore full list (D-08); after removal of the Input, focus must return to JoyListView
    - What's unclear: Whether `filter_input.remove()` is awaitable in sync context or needs `call_after_refresh`
    - Recommendation: Use `self.call_after_refresh(self.focus)` on the JoyListView after removing the filter Input — same pattern used in `action_delete_project` for focus restoration
+   - RESOLVED: Plan 05-02 Task 1 step 8 implements `listview.call_after_refresh(listview.focus)` after filter exit
 
 2. **SettingsModal height on small terminals**
    - What we know: Modal has 5 fields + SelectionList (9 items) + Button + hint — total ~18-20 rows minimum
    - What's unclear: Whether `max-height: 80vh` on the inner Vertical is sufficient or if we need `VerticalScroll`
    - Recommendation: Use `max-height: 80vh` with `overflow: auto` on the inner container. The SelectionList itself is internally scrollable (max-height: 12). No VerticalScroll wrapper needed.
+   - RESOLVED: Plan 05-01 Task 1 uses `max-height: 80vh; overflow: auto` CSS on the inner Vertical container
 
 3. **`/` binding visible in Footer**
    - What we know: Footer shows bindings for the focused widget; `/` bound on JoyListView will show when list pane is focused
    - What's unclear: Whether showing "Filter" in the footer is desired alongside the other list bindings
    - Recommendation: `show=True` on the `/` binding — filter is a notable feature worth advertising
+   - RESOLVED: Plan 05-02 Task 1 step 2 sets `show=True` on the JoyListView `/` binding
 
 ---
 
