@@ -41,18 +41,14 @@ class JoyListView(ListView):
             except ValueError:
                 return  # already removed
             self.app._save_projects_bg()
-            # Refresh project list
             parent.set_projects(projects)
             if projects:
-                # Select adjacent: next if available, else previous (D-13)
+                # Select adjacent: next if available, else previous (D-13).
+                # clear()+append() in set_projects are synchronous DOM mutations,
+                # so focus and index can be restored immediately after.
                 new_index = min(index, len(projects) - 1)
-                listview = self  # self is JoyListView; capture for closure
-
-                def _restore_focus() -> None:
-                    parent.select_index(new_index)
-                    listview.focus()
-
-                parent.call_after_refresh(_restore_focus)
+                self.focus()           # restore keyboard focus lost when clear() ran
+                self.index = new_index  # restore visual highlight on adjacent item
             else:
                 # No projects left — clear detail pane
                 from joy.widgets.project_detail import ProjectDetail  # noqa: PLC0415
