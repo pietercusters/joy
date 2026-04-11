@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from textual import work
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.widgets import Footer, Header
 
@@ -25,7 +26,7 @@ class JoyApp(App):
 
     BINDINGS = [
         ("q", "quit", "Quit"),
-        ("O", "open_all_defaults", "Open All"),
+        Binding("shift+o,O", "open_all_defaults", "Open All", priority=True),
     ]
 
     _config: Config = Config()
