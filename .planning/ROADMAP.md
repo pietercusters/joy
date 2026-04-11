@@ -64,8 +64,13 @@ Plans:
   3. Pressing `space` toggles an object's "open by default" status and the change persists across app restarts
   4. Each object displays a visible indicator (filled/empty) showing its "open by default" status
   5. Status bar shows immediate feedback after every activation ("Copied to clipboard", "Opened in browser")
-**Plans**: TBD
+**Plans:** 3 plans
 **UI hint**: yes
+
+Plans:
+- [ ] 03-01-PLAN.md -- ObjectRow dot indicator, Config caching, toast message helpers
+- [ ] 03-02-PLAN.md -- Single open (o) and toggle (space) bindings on ProjectDetail
+- [ ] 03-03-PLAN.md -- Bulk open (O) global binding on JoyApp, visual checkpoint
 
 ### Phase 4: CRUD
 **Goal**: Users can create new projects, add/edit/delete objects, and delete projects -- all through modal forms with keyboard navigation and confirmation dialogs
@@ -102,6 +107,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | ✓ Complete | 2026-04-10 |
 | 2. TUI Shell | 0/3 | In progress | - |
-| 3. Activation | 0/? | Not started | - |
+| 3. Activation | 0/3 | Not started | - |
 | 4. CRUD | 0/? | Not started | - |
 | 5. Settings, Search & Distribution | 0/? | Not started | - |
