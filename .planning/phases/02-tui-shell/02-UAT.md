@@ -1,5 +1,5 @@
 ---
-status: complete
+status: diagnosed
 phase: 02-tui-shell
 source: 02-01-SUMMARY.md, 02-02-SUMMARY.md, 02-03-SUMMARY.md
 started: 2026-04-11T07:00:00Z
@@ -82,7 +82,11 @@ blocked: 0
   reason: "User reported: List pane only shows q."
   severity: major
   test: 12
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "JoyListView.BINDINGS only had j/k (show=False); Textual Footer only shows bindings from the focused widget's own BINDINGS. Built-in ListView up/down/enter are not shown by default. Fix: added explicit up/down/enter bindings with show=True to JoyListView.BINDINGS."
+  artifacts:
+    - path: "src/joy/widgets/project_list.py"
+      issue: "JoyListView.BINDINGS missing explicit up/down/enter with show=True"
+  missing:
+    - "Add Binding('up', 'cursor_up', 'Up'), Binding('down', 'cursor_down', 'Down'), Binding('enter', 'select_cursor', 'Open') to JoyListView"
   debug_session: ""
+  fixed_in: "2dfb10f"
