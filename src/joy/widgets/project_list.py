@@ -14,6 +14,9 @@ class JoyListView(ListView):
     """ListView subclass that adds vim-style j/k navigation."""
 
     BINDINGS = [
+        Binding("up", "cursor_up", "Up"),
+        Binding("down", "cursor_down", "Down"),
+        Binding("enter", "select_cursor", "Open"),
         Binding("j", "cursor_down", "Down", show=False),
         Binding("k", "cursor_up", "Up", show=False),
     ]
