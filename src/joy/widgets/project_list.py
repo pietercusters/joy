@@ -5,7 +5,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.message import Message
 from textual.widget import Widget
-from textual.widgets import Label, ListItem, ListView
+from textual.widgets import Input, Label, ListItem, ListView
 
 from joy.models import Project
 
@@ -21,7 +21,20 @@ class JoyListView(ListView):
         Binding("k", "cursor_up", "Up", show=False),
         Binding("D", "delete_project", "Delete", show=True),
         Binding("delete", "delete_project", "Delete", show=False),
+        Binding("/", "filter", "Filter", show=True),
     ]
+
+    _filter_active: bool = False
+
+    def action_filter(self) -> None:
+        """Enter filter mode: mount Input above the list (D-06)."""
+        if self._filter_active:
+            return  # already in filter mode -- no-op (prevent duplicate mount)
+        parent = self.app.query_one("#project-list", ProjectList)
+        filter_input = Input(placeholder="Filter projects...", id="filter-input")
+        parent.mount(filter_input, before=self)
+        self._filter_active = True
+        filter_input.focus()
 
     def action_delete_project(self) -> None:
         """Delete the highlighted project after confirmation (PROJ-05, D-12, D-13)."""
@@ -112,6 +125,39 @@ class ProjectList(Widget, can_focus=False):
         listview = self.query_one("#project-listview", JoyListView)
         if 0 <= index < len(self._projects):
             listview.index = index
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        """Filter project list in real-time as user types (D-07)."""
+        query = event.value.lower()
+        if query:
+            filtered = [p for p in self.app._projects if query in p.name.lower()]
+        else:
+            filtered = list(self.app._projects)  # empty string = full list (D-08)
+        self.set_projects(filtered)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Enter in filter input: dismiss filter, keep current subset (D-08)."""
+        self._exit_filter_mode(restore=False)
+
+    def on_key(self, event) -> None:
+        """Handle Escape to exit filter mode without conflicting with modals (Pitfall 1)."""
+        listview = self.query_one("#project-listview", JoyListView)
+        if listview._filter_active and event.key == "escape":
+            event.stop()
+            self._exit_filter_mode(restore=True)
+
+    def _exit_filter_mode(self, *, restore: bool = True) -> None:
+        """Remove filter Input and optionally restore full project list (D-08, D-09)."""
+        listview = self.query_one("#project-listview", JoyListView)
+        try:
+            filter_input = self.query_one("#filter-input", Input)
+            filter_input.remove()
+        except Exception:
+            pass
+        listview._filter_active = False
+        if restore:
+            self.set_projects(list(self.app._projects))  # canonical list (D-09, Pitfall 3)
+        listview.call_after_refresh(listview.focus)  # restore keyboard focus
 
     def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
         """When highlight changes, notify parent with project data."""
