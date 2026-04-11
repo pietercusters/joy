@@ -1,6 +1,8 @@
 """Entry point for the joy CLI."""
 from __future__ import annotations
 
+import sys
+
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -198,6 +200,14 @@ class JoyApp(App):
 
 def main() -> None:
     """Main entry point for the joy CLI."""
+    if len(sys.argv) > 1 and sys.argv[1] == "--version":
+        import importlib.metadata  # noqa: PLC0415 -- lazy import per CP-2 pattern
+        try:
+            version = importlib.metadata.version("joy")
+        except importlib.metadata.PackageNotFoundError:
+            version = "unknown"
+        print(f"joy {version}")
+        return
     app = JoyApp()
     app.run()
 
