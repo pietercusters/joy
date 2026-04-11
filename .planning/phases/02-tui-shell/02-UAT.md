@@ -1,5 +1,5 @@
 ---
-status: diagnosed
+status: complete
 phase: 02-tui-shell
 source: 02-01-SUMMARY.md, 02-02-SUMMARY.md, 02-03-SUMMARY.md
 started: 2026-04-11T07:00:00Z
@@ -58,9 +58,8 @@ result: pass
 
 ### 12. Context-Sensitive Footer Bindings
 expected: Footer binding hints change based on which pane is focused. List pane: shows up/down/enter/q hints. Detail pane: shows j/k/escape/q hints (or equivalent).
-result: issue
-reported: "List pane only shows q."
-severity: major
+result: pass
+note: "Fixed in 2dfb10f — added explicit up/down/enter bindings to JoyListView."
 
 ### 13. Pilot Tests Pass
 expected: Running `uv run pytest tests/test_tui.py -x -v` completes with all tests green. No failures, no warnings about deprecated asyncio mode.
@@ -69,8 +68,8 @@ result: pass
 ## Summary
 
 total: 13
-passed: 12
-issues: 1
+passed: 13
+issues: 0
 pending: 0
 skipped: 0
 blocked: 0
