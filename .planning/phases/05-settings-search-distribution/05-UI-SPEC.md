@@ -56,8 +56,8 @@ Textual renders in the terminal's monospace font. No font-size or font-weight ch
 | Body | normal | Settings field values, filter input text, project names |
 | Label | normal + `$text-muted` color | Settings field labels ("IDE", "Editor", "Obsidian Vault Path", "Terminal", "Default Open Kinds") |
 | Modal title | bold + `$text` color | "Settings" title at top of SettingsModal |
-| Hint text | normal + `$text-muted` color | "Tab to navigate, Enter/Save to save, Escape to cancel" in SettingsModal; filter input placeholder text |
-| Button label | normal | "Save" button text in SettingsModal |
+| Hint text | normal + `$text-muted` color | "Tab to navigate, Enter / Save Settings to save, Escape to cancel" in SettingsModal; filter input placeholder text |
+| Button label | normal | "Save Settings" button text in SettingsModal |
 | Toast message | normal (Textual notify default) | "Settings saved" feedback |
 | Version output | normal (stdout print) | `joy 0.1.0` on `--version` flag |
 
@@ -73,7 +73,7 @@ Textual uses a built-in theme system with CSS variables. The app uses Textual's 
 |------|-------|-------|
 | Dominant (60%) | `$surface` (Textual default dark bg) | App background, pane backgrounds, modal overlay dimmed background, SettingsModal background |
 | Secondary (30%) | `$panel` / `$surface` | SettingsModal container background, input field backgrounds, filter input background |
-| Accent (10%) | `$accent` | Highlighted row background (existing), focused input border in SettingsModal fields, focused filter input border, Save button `variant="primary"` |
+| Accent (10%) | `$accent` | Highlighted row background (existing), focused input border in SettingsModal fields, focused filter input border, Save Settings button `variant="primary"` |
 | Text | `$text` (white/light in dark theme) | Modal title text, input text, button labels, filter input text |
 | Muted | `$text-muted` | Field labels in SettingsModal, placeholder text in filter input, hint text in modals |
 | Error | `severity="error"` on `app.notify()` | Failed save toasts, edge case errors |
@@ -82,7 +82,7 @@ Textual uses a built-in theme system with CSS variables. The app uses Textual's 
 - Highlighted row background (existing Phase 2 behavior)
 - Focused input field border in SettingsModal
 - Focused filter input border
-- Save button primary variant styling
+- Save Settings button primary variant styling
 - Selected items in SelectionList (default_open_kinds checklist)
 
 **No destructive color in this phase:** Phase 5 has no destructive actions. No `$error` border needed on any modal.
@@ -97,7 +97,7 @@ Textual uses a built-in theme system with CSS variables. The app uses Textual's 
 
 **Trigger:** `s` key (global, bound on `JoyApp` with `priority=True`)
 **Purpose:** View and edit the 5 global Config fields
-**Dismiss behavior:** Escape cancels without saving (returns `None`); Save button persists changes (returns updated `Config`)
+**Dismiss behavior:** Escape cancels without saving (returns `None`); Save Settings button persists changes (returns updated `Config`)
 
 | Property | Value |
 |----------|-------|
@@ -153,8 +153,8 @@ Fields are rendered vertically in this order, each as a label (`Static` with `$t
 9. `Input(value=config.terminal, id="field-terminal")`
 10. `Static("Default Open Kinds", classes="field-label")`
 11. `SelectionList(...)` with `id="field-kinds"`
-12. `Button("Save", variant="primary", id="btn-save")`
-13. `Static("Tab to navigate, Enter/Save to save, Escape to cancel", classes="modal-hint")`
+12. `Button("Save Settings", variant="primary", id="btn-save")`
+13. `Static("Tab to navigate, Enter / Save Settings to save, Escape to cancel", classes="modal-hint")`
 
 **Total rows:** Approximately 18-20 rows. On terminals shorter than 24 rows, the `max-height: 80vh` + `overflow: auto` on the inner Vertical ensures scrollability.
 
@@ -175,7 +175,7 @@ Fields are rendered vertically in this order, each as a label (`Static` with `$t
 | `Tab` | Advance focus to next focusable widget (Input -> Input -> ... -> SelectionList -> Button) |
 | `Shift+Tab` | Return focus to previous focusable widget |
 | `Escape` | Dismiss modal, return `None` (no save) |
-| `Enter` on Save button | Collect all field values, dismiss modal, return updated `Config` |
+| `Enter` on Save Settings button | Collect all field values, dismiss modal, return updated `Config` |
 | `Space` inside SelectionList | Toggle the focused selection item |
 
 Tab navigation is automatic via Textual's built-in `Screen.BINDINGS` (`tab -> app.focus_next`, `shift+tab -> app.focus_previous`). No manual implementation needed.
@@ -252,7 +252,7 @@ Tab navigation is automatic via Textual's built-in `Screen.BINDINGS` (`tab -> ap
 4. User navigates between fields with Tab/Shift+Tab
 5. User edits Input values by typing; toggles SelectionList items with Space
 6. **On Escape:** modal dismissed with `None`; no changes saved; return to previous state
-7. **On Save button press:** modal collects all field values into a new `Config` object, dismisses with the `Config`
+7. **On Save Settings button press:** modal collects all field values into a new `Config` object, dismisses with the `Config`
 8. Callback: `self._config = config`, call `_save_config_bg()` (persists via `save_config()` in `@work(thread=True)`), show toast `"Settings saved"`
 
 **Source:** 05-CONTEXT.md D-01 through D-05; 05-RESEARCH.md Pattern 1, Pattern 4.
@@ -303,7 +303,7 @@ Tab navigation is automatic via Textual's built-in `Screen.BINDINGS` (`tab -> ap
 | Condition | Behavior |
 |-----------|----------|
 | Filter matches no projects | Project list shows empty; Input remains active for user to modify query or press Escape |
-| Settings modal with empty config fields | Fields show empty string; user can fill in values; Save works with empty strings (Config defaults handle this) |
+| Settings modal with empty config fields | Fields show empty string; user can fill in values; Save Settings works with empty strings (Config defaults handle this) |
 | No projects exist when `/` pressed | Filter Input mounts but list is empty; clearing filter still shows empty list |
 
 ### Placeholder Text
@@ -320,7 +320,7 @@ Tab navigation is automatic via Textual's built-in `Screen.BINDINGS` (`tab -> ap
 
 | Modal | Title | Hint Line |
 |-------|-------|-----------|
-| SettingsModal | `Settings` | `Tab to navigate, Enter/Save to save, Escape to cancel` |
+| SettingsModal | `Settings` | `Tab to navigate, Enter / Save Settings to save, Escape to cancel` |
 
 ### Version Output Format
 
@@ -330,7 +330,7 @@ Tab navigation is automatic via Textual's built-in `Screen.BINDINGS` (`tab -> ap
 
 ### Destructive Actions
 
-None in Phase 5. The settings modal saves on explicit Save button press; Escape cancels without saving. No confirmation dialog needed.
+None in Phase 5. The settings modal saves on explicit Save Settings button press; Escape cancels without saving. No confirmation dialog needed.
 
 **Source:** 05-CONTEXT.md D-04.
 
@@ -372,7 +372,7 @@ When the filter Input is focused, the footer shows Input-level bindings. Textual
 
 | Component | File | Purpose |
 |-----------|------|---------|
-| `SettingsModal` | `src/joy/screens/settings.py` | ModalScreen overlay with 4 Input fields + 1 SelectionList + Save button for editing global Config |
+| `SettingsModal` | `src/joy/screens/settings.py` | ModalScreen overlay with 4 Input fields + 1 SelectionList + Save Settings button for editing global Config |
 
 ### Modified Components
 
