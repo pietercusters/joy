@@ -68,6 +68,7 @@ class ProjectDetail(Widget, can_focus=True):
         Binding("j", "cursor_down", "Down"),
         Binding("o", "open_object", "Open"),
         Binding("space", "toggle_default", "Toggle"),
+        Binding("a", "add_object", "Add"),
     ]
 
     DEFAULT_CSS = """
@@ -208,6 +209,12 @@ class ProjectDetail(Widget, can_focus=True):
             self._rows[self._cursor].refresh_indicator()
         # Persist in background
         self._save_toggle()
+
+    def action_add_object(self) -> None:
+        """Open add-object flow for current project (MGMT-01, D-05, D-07)."""
+        if self._project is None:
+            return
+        self.app._start_add_object_loop(self._project)
 
     @work(thread=True, exit_on_error=False)
     def _save_toggle(self) -> None:

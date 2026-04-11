@@ -7,10 +7,11 @@ from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.widgets import Footer, Header
 
-from joy.models import Config, ObjectItem, Project
+from joy.models import Config, ObjectItem, PresetKind, Project
+from joy.screens import NameInputModal, PresetPickerModal, ValueInputModal
 from joy.widgets.object_row import _success_message, _truncate
 from joy.widgets.project_detail import GROUP_ORDER, ProjectDetail
-from joy.widgets.project_list import ProjectList
+from joy.widgets.project_list import JoyListView, ProjectList
 
 
 class JoyApp(App):
@@ -27,6 +28,7 @@ class JoyApp(App):
     BINDINGS = [
         ("q", "quit", "Quit"),
         Binding("shift+o,O", "open_all_defaults", "Open All", priority=True),
+        Binding("n", "new_project", "New", priority=True),
     ]
 
     _config: Config = Config()
@@ -101,6 +103,52 @@ class JoyApp(App):
         if not defaults:
             return  # silent no-op: no defaults (D-11)
         self._open_defaults(defaults)
+
+    def action_new_project(self) -> None:
+        """Start project creation flow: name modal then add-object loop (D-01, D-02)."""
+        def on_name(name: str | None) -> None:
+            if name is None:
+                return
+            # D-04: Check duplicate name
+            if any(p.name == name for p in self._projects):
+                self.notify(f"Project '{name}' already exists", severity="error", markup=False)
+                return
+            # Create project, add to list, persist, refresh
+            project = Project(name=name)
+            self._projects.append(project)
+            self._save_projects_bg()
+            project_list = self.query_one(ProjectList)
+            project_list.set_projects(self._projects)
+            # Select the new project (last in list)
+            project_list.select_index(len(self._projects) - 1)
+            self.query_one(ProjectDetail).set_project(project)
+            self.notify(f"Created project: '{name}'", markup=False)
+            # D-02, D-03: Start add-object loop
+            self._start_add_object_loop(project)
+        self.push_screen(NameInputModal(), on_name)
+
+    def _start_add_object_loop(self, project: Project) -> None:
+        """Loop: preset picker -> value input -> repeat until Escape (D-03)."""
+        def on_preset(preset: PresetKind | None) -> None:
+            if preset is None:
+                return  # Escape exits loop
+            def on_value(value: str | None) -> None:
+                if value is not None:
+                    obj = ObjectItem(kind=preset, value=value)
+                    project.objects.append(obj)
+                    self._save_projects_bg()
+                    self.query_one(ProjectDetail).set_project(project)
+                    self.notify(f"Added: {preset.value} '{_truncate(value)}'", markup=False)
+                # Loop: push preset picker again regardless of value result (D-03)
+                self._start_add_object_loop(project)
+            self.push_screen(ValueInputModal(preset), on_value)
+        self.push_screen(PresetPickerModal(), on_preset)
+
+    @work(thread=True, exit_on_error=False)
+    def _save_projects_bg(self) -> None:
+        """Persist projects to TOML in background thread (D-16)."""
+        from joy.store import save_projects  # noqa: PLC0415
+        save_projects(self._projects)
 
     @work(thread=True, exit_on_error=False)
     def _open_defaults(self, defaults: list[ObjectItem]) -> None:

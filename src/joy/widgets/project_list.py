@@ -60,6 +60,12 @@ class ProjectList(Widget, can_focus=False):
         if self._projects:
             listview.index = 0
 
+    def select_index(self, index: int) -> None:
+        """Select project at given index."""
+        listview = self.query_one("#project-listview", JoyListView)
+        if 0 <= index < len(self._projects):
+            listview.index = index
+
     def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
         """When highlight changes, notify parent with project data."""
         index = event.list_view.index  # ListView.Highlighted has no index attr in Textual 8.x
