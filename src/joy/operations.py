@@ -76,7 +76,7 @@ def _open_iterm(item: ObjectItem, config: Config) -> None:
     # Escape backslashes first, then double quotes for AppleScript string safety.
     # Order matters: reversing would double-escape the backslash in \".
     # This prevents AppleScript injection via malicious project names (T-1-03-01).
-    name = item.value.replace("\\", "\\\\").replace('"', '\\"')
+    name = item.value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ").replace("\r", " ")
     script = f'''
     tell application "iTerm2"
         activate
