@@ -51,13 +51,13 @@ def test_open_url_notion_desktop():
 
 
 def test_open_url_slack_desktop():
-    """URL with slack.com hostname opens via open -a Slack."""
+    """Slack URLs use plain open so macOS URL scheme handler navigates to the thread."""
     item = make_item(PresetKind.THREAD, "https://app.slack.com/client/T123/C456")
     config = Config()
     with patch("joy.operations.subprocess.run") as mock_run:
         open_object(item=item, config=config)
     mock_run.assert_called_once_with(
-        ["open", "-a", "Slack", "https://app.slack.com/client/T123/C456"], check=True
+        ["open", "https://app.slack.com/client/T123/C456"], check=True
     )
 
 
