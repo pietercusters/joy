@@ -19,7 +19,52 @@ class JoyListView(ListView):
         Binding("enter", "select_cursor", "Open"),
         Binding("j", "cursor_down", "Down", show=False),
         Binding("k", "cursor_up", "Up", show=False),
+        Binding("D", "delete_project", "Delete", show=True),
+        Binding("delete", "delete_project", "Delete", show=False),
     ]
+
+    def action_delete_project(self) -> None:
+        """Delete the highlighted project after confirmation (PROJ-05, D-12, D-13)."""
+        from joy.screens import ConfirmationModal  # noqa: PLC0415 — lazy import avoids circular dep
+        parent = self.app.query_one("#project-list", ProjectList)
+        index = self.index
+        if index is None or index >= len(parent._projects):
+            return
+        project = parent._projects[index]
+
+        def on_confirm(confirmed: bool) -> None:
+            if not confirmed:
+                return
+            projects = self.app._projects
+            try:
+                projects.remove(project)
+            except ValueError:
+                return  # already removed
+            self.app._save_projects_bg()
+            # Refresh project list
+            parent.set_projects(projects)
+            if projects:
+                # Select adjacent: next if available, else previous (D-13)
+                new_index = min(index, len(projects) - 1)
+                parent.select_index(new_index)
+            else:
+                # No projects left — clear detail pane
+                from joy.widgets.project_detail import ProjectDetail  # noqa: PLC0415
+                detail = self.app.query_one("#project-detail", ProjectDetail)
+                detail._project = None
+                detail._rows = []
+                detail._cursor = -1
+                scroll = detail.query_one("#detail-scroll")
+                scroll.remove_children()
+            self.app.notify(f"Deleted project: '{project.name}'", markup=False)
+
+        self.app.push_screen(
+            ConfirmationModal(
+                title="Delete Project",
+                prompt=f"Delete project '{project.name}'? This will remove it and all its objects.",
+            ),
+            on_confirm,
+        )
 
 
 class ProjectList(Widget, can_focus=False):

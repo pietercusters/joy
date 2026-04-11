@@ -449,3 +449,156 @@ async def test_a_escape_noop(mock_store, mock_save):
         await pilot.press("escape")
         await pilot.pause(0.1)
         assert len(project.objects) == initial_obj_count
+
+
+# ---------------------------------------------------------------------------
+# MGMT-02: e key edits highlighted object
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_e_edits_object(mock_store, mock_save):
+    """MGMT-02: Pressing e, modifying value, Enter updates the object."""
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        # Focus detail pane (project-alpha)
+        await pilot.press("enter")
+        await pilot.pause(0.1)
+        detail = app.query_one("#project-detail")
+        item = detail.highlighted_object
+        assert item is not None
+        original_value = item.value
+        # Press e to open edit modal
+        await pilot.press("e")
+        await pilot.pause(0.1)
+        # Clear existing value and type new one
+        for _ in range(len(original_value)):
+            await pilot.press("backspace")
+        for ch in "edited-value":
+            await pilot.press(ch)
+        await pilot.press("enter")
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        assert item.value == "edited-value"
+
+
+@pytest.mark.asyncio
+async def test_e_no_object_shows_error(mock_store, mock_save):
+    """MGMT-02: Pressing e with no highlighted object shows error."""
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        # Navigate to project-empty (3rd project)
+        await pilot.press("down")
+        await pilot.press("down")
+        await pilot.pause(0.1)
+        await pilot.press("enter")
+        await pilot.pause(0.1)
+        # Press e — should show error (no objects in empty project)
+        await pilot.press("e")
+        await pilot.pause(0.1)
+        assert app.is_running  # no crash
+
+
+# ---------------------------------------------------------------------------
+# MGMT-03: d key deletes highlighted object
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_d_deletes_object(mock_store, mock_save):
+    """MGMT-03: Pressing d, Enter deletes the highlighted object."""
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        await pilot.press("enter")
+        await pilot.pause(0.1)
+        detail = app.query_one("#project-detail")
+        initial_count = len(detail._project.objects)
+        # Press d to open confirmation
+        await pilot.press("d")
+        await pilot.pause(0.1)
+        # Press Enter to confirm deletion
+        await pilot.press("enter")
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        assert len(detail._project.objects) == initial_count - 1
+
+
+@pytest.mark.asyncio
+async def test_d_escape_noop(mock_store, mock_save):
+    """MGMT-03: Pressing d then Escape cancels deletion."""
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        await pilot.press("enter")
+        await pilot.pause(0.1)
+        detail = app.query_one("#project-detail")
+        initial_count = len(detail._project.objects)
+        await pilot.press("d")
+        await pilot.pause(0.1)
+        await pilot.press("escape")
+        await pilot.pause(0.1)
+        assert len(detail._project.objects) == initial_count
+
+
+# ---------------------------------------------------------------------------
+# PROJ-05: delete/D key deletes project
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_D_deletes_project(mock_store, mock_save):
+    """PROJ-05: Pressing D on project list, Enter deletes the project."""
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        initial_count = len(app._projects)
+        # Focus is on project list by default
+        # Press D to open delete confirmation for first project
+        await pilot.press("D")
+        await pilot.pause(0.1)
+        await pilot.press("enter")
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        assert len(app._projects) == initial_count - 1
+
+
+@pytest.mark.asyncio
+async def test_D_escape_noop(mock_store, mock_save):
+    """PROJ-05: Pressing D then Escape cancels project deletion."""
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        initial_count = len(app._projects)
+        await pilot.press("D")
+        await pilot.pause(0.1)
+        await pilot.press("escape")
+        await pilot.pause(0.1)
+        assert len(app._projects) == initial_count
+
+
+@pytest.mark.asyncio
+async def test_D_selects_adjacent(mock_store, mock_save):
+    """PROJ-05/D-13: After deletion, adjacent project is selected."""
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        # Delete first project (project-alpha)
+        await pilot.press("D")
+        await pilot.pause(0.1)
+        await pilot.press("enter")
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        # project-beta should now be selected (was index 1, now index 0)
+        detail = app.query_one("#project-detail")
+        assert detail._project is not None
+        assert detail._project.name == "project-beta"
