@@ -14,7 +14,7 @@ def _sample_projects() -> list[Project]:
         Project(
             name="project-alpha",
             objects=[
-                ObjectItem(kind=PresetKind.BRANCH, value="main"),
+                ObjectItem(kind=PresetKind.BRANCH, value="main", open_by_default=False),
                 ObjectItem(kind=PresetKind.MR, value="https://example.com/mr/1", label="MR #1"),
                 ObjectItem(kind=PresetKind.WORKTREE, value="/tmp/alpha"),
             ],
@@ -24,6 +24,10 @@ def _sample_projects() -> list[Project]:
             objects=[
                 ObjectItem(kind=PresetKind.TICKET, value="https://notion.so/ticket-1", label="TICK-1"),
             ],
+        ),
+        Project(
+            name="project-empty",
+            objects=[],
         ),
     ]
 
@@ -37,6 +41,20 @@ def mock_store():
     so the name is resolved from joy.store at call time — patch intercepts correctly.
     """
     with patch("joy.store.load_projects", return_value=_sample_projects()) as mock:
+        yield mock
+
+
+@pytest.fixture
+def mock_operations():
+    """Mock operations.open_object to avoid subprocess calls."""
+    with patch("joy.operations.open_object") as mock:
+        yield mock
+
+
+@pytest.fixture
+def mock_save():
+    """Mock store.save_projects to avoid file I/O."""
+    with patch("joy.store.save_projects") as mock:
         yield mock
 
 
@@ -104,3 +122,124 @@ async def test_quit_with_q(mock_store):
     async with app.run_test() as pilot:
         await pilot.press("q")
         # App should have exited (no assertion needed -- if it hangs, test fails by timeout)
+
+
+# ---------------------------------------------------------------------------
+# ACT-01: o key opens highlighted object
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_o_opens_object(mock_store, mock_operations):
+    """ACT-01: Pressing o on a highlighted object calls open_object."""
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        # Press Enter to focus detail pane (project-alpha with BRANCH "main" highlighted)
+        await pilot.press("enter")
+        await pilot.pause(0.1)
+        # Press o to open the highlighted object
+        await pilot.press("o")
+        await pilot.pause(0.1)
+        await app.workers.wait_for_complete()
+        assert mock_operations.called, "open_object should have been called"
+
+
+@pytest.mark.asyncio
+async def test_o_no_object_shows_error(mock_store):
+    """ACT-01: Pressing o with no highlighted object shows error toast."""
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        # Navigate to project-empty (3rd project, index 2)
+        await pilot.press("down")
+        await pilot.press("down")
+        await pilot.pause(0.1)
+        # Press Enter to focus detail pane (empty project, no objects)
+        await pilot.press("enter")
+        await pilot.pause(0.1)
+        detail = app.query_one("#project-detail")
+        assert detail.highlighted_object is None, "Should have no highlighted object"
+        # Press o — should show error toast without crashing
+        await pilot.press("o")
+        await pilot.pause(0.1)
+        # App should still be running (no crash)
+        assert app.is_running
+
+
+@pytest.mark.asyncio
+async def test_o_success_toast(mock_store, mock_operations):
+    """ACT-01: Pressing o on highlighted object triggers success toast (no crash)."""
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        await pilot.press("enter")
+        await pilot.pause(0.1)
+        # Mock open_object as no-op (already done by mock_operations fixture)
+        await pilot.press("o")
+        await pilot.pause(0.1)
+        await app.workers.wait_for_complete()
+        # open_object was called and app is still running
+        assert mock_operations.called
+        assert app.is_running
+
+
+@pytest.mark.asyncio
+async def test_o_failure_toast(mock_store):
+    """ACT-01: Pressing o when open_object raises shows error toast."""
+    import subprocess
+    app = JoyApp()
+    with patch("joy.operations.open_object", side_effect=subprocess.CalledProcessError(1, "open")):
+        async with app.run_test() as pilot:
+            await pilot.pause(0.2)
+            await app.workers.wait_for_complete()
+            await pilot.press("enter")
+            await pilot.pause(0.1)
+            await pilot.press("o")
+            await pilot.pause(0.2)
+            await app.workers.wait_for_complete()
+            # App should still be running (exit_on_error=False prevents crash)
+            assert app.is_running
+
+
+# ---------------------------------------------------------------------------
+# ACT-03: space key toggles open_by_default
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_space_toggles_default(mock_store, mock_save):
+    """ACT-03: Pressing space flips open_by_default on the highlighted item."""
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        # Focus detail pane (project-alpha, first object is BRANCH "main" open_by_default=False)
+        await pilot.press("enter")
+        await pilot.pause(0.1)
+        detail = app.query_one("#project-detail")
+        item = detail.highlighted_object
+        assert item is not None, "Should have a highlighted object"
+        initial = item.open_by_default
+        # Press space to toggle
+        await pilot.press("space")
+        await pilot.pause(0.1)
+        assert item.open_by_default == (not initial), "open_by_default should have flipped"
+
+
+@pytest.mark.asyncio
+async def test_space_persists_toggle(mock_store, mock_save):
+    """ACT-03: Pressing space calls save_projects to persist the toggle."""
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        await pilot.press("enter")
+        await pilot.pause(0.1)
+        await pilot.press("space")
+        await pilot.pause(0.1)
+        await app.workers.wait_for_complete()
+        assert mock_save.called, "save_projects should have been called to persist toggle"

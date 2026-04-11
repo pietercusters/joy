@@ -1,6 +1,7 @@
 """Right pane: full project detail widget with grouped objects and cursor navigation."""
 from __future__ import annotations
 
+from textual import work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import VerticalScroll
@@ -8,7 +9,7 @@ from textual.widget import Widget
 from textual.widgets import Static
 
 from joy.models import ObjectItem, PresetKind, Project
-from joy.widgets.object_row import ObjectRow
+from joy.widgets.object_row import ObjectRow, _success_message, _truncate
 
 # Display order for groups in the detail pane
 GROUP_ORDER: list[PresetKind] = [
@@ -65,6 +66,8 @@ class ProjectDetail(Widget, can_focus=True):
         Binding("down", "cursor_down", "Down"),
         Binding("k", "cursor_up", "Up"),
         Binding("j", "cursor_down", "Down"),
+        Binding("o", "open_object", "Open"),
+        Binding("space", "toggle_default", "Toggle"),
     ]
 
     DEFAULT_CSS = """
@@ -171,6 +174,47 @@ class ProjectDetail(Widget, can_focus=True):
         project_list = self.app.query_one("#project-list")
         listview = project_list.query_one("#project-listview")
         listview.focus()
+
+    def action_open_object(self) -> None:
+        """Open the highlighted object via operations.open_object (ACT-01, per D-09)."""
+        item = self.highlighted_object
+        if item is None:
+            self.app.notify("No object selected", severity="error", markup=False)
+            return
+        self._do_open(item)
+
+    @work(thread=True, exit_on_error=False)
+    def _do_open(self, item: ObjectItem) -> None:
+        """Run open_object in background thread to avoid blocking TUI."""
+        from joy.operations import open_object  # noqa: PLC0415
+        try:
+            open_object(item=item, config=self.app._config)
+            self.app.notify(
+                _success_message(item, self.app._config),
+                markup=False,
+            )
+        except Exception:
+            display = _truncate(item.label if item.label else item.value)
+            self.app.notify(f"Failed to open: {display}", severity="error", markup=False)
+
+    def action_toggle_default(self) -> None:
+        """Toggle open_by_default on highlighted object (ACT-03, per D-09, D-12)."""
+        item = self.highlighted_object
+        if item is None:
+            return
+        item.open_by_default = not item.open_by_default
+        # Update the row's dot indicator in-place
+        if 0 <= self._cursor < len(self._rows):
+            self._rows[self._cursor].refresh_indicator()
+        # Persist in background
+        self._save_toggle()
+
+    @work(thread=True, exit_on_error=False)
+    def _save_toggle(self) -> None:
+        """Persist toggle change to TOML in background thread (D-12)."""
+        from joy.store import save_projects  # noqa: PLC0415
+        if hasattr(self.app, "_projects"):
+            save_projects(self.app._projects)
 
     @property
     def highlighted_object(self) -> ObjectItem | None:

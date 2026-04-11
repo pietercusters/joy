@@ -250,3 +250,24 @@ def test_object_fields_preserved(tmp_path: Path) -> None:
     assert loaded_obj.value == "/Users/dev/worktrees/project"
     assert loaded_obj.label == "My Worktree"
     assert loaded_obj.open_by_default is True
+
+
+# ---------------------------------------------------------------------------
+# Toggle round-trip test (ACT-03)
+# ---------------------------------------------------------------------------
+
+
+def test_toggle_round_trip(tmp_path: Path) -> None:
+    """ACT-03: Toggling open_by_default persists through save/load cycle."""
+    from joy.store import load_projects, save_projects
+
+    projects_path = tmp_path / "projects.toml"
+    obj = ObjectItem(kind=PresetKind.BRANCH, value="main", open_by_default=False)
+    project = Project(name="toggle-test", objects=[obj])
+    save_projects(projects=[project], path=projects_path)
+    # Toggle
+    loaded = load_projects(path=projects_path)
+    loaded[0].objects[0].open_by_default = True
+    save_projects(projects=loaded, path=projects_path)
+    reloaded = load_projects(path=projects_path)
+    assert reloaded[0].objects[0].open_by_default is True
