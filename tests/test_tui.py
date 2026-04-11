@@ -41,14 +41,19 @@ def _sample_projects() -> list[Project]:
 
 @pytest.fixture
 def mock_store():
-    """Mock store.load_projects to return sample data without touching ~/.joy/.
+    """Mock store.load_projects and load_config to return sample data without touching ~/.joy/.
 
     Patched on joy.store (not joy.app) because app.py imports lazily:
     `from joy.store import load_projects` runs inside _load_data on each call,
     so the name is resolved from joy.store at call time — patch intercepts correctly.
+
+    load_config is also patched so tests that depend on app._config use a known
+    default Config() rather than whatever is in ~/.joy/config.toml on the host machine.
     """
-    with patch("joy.store.load_projects", return_value=_sample_projects()) as mock:
-        yield mock
+    from joy.models import Config
+    with patch("joy.store.load_projects", return_value=_sample_projects()), \
+         patch("joy.store.load_config", return_value=Config()):
+        yield
 
 
 @pytest.fixture
