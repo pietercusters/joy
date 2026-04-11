@@ -69,6 +69,8 @@ class ProjectDetail(Widget, can_focus=True):
         Binding("o", "open_object", "Open"),
         Binding("space", "toggle_default", "Toggle"),
         Binding("a", "add_object", "Add"),
+        Binding("e", "edit_object", "Edit"),
+        Binding("d", "delete_object", "Delete"),
     ]
 
     DEFAULT_CSS = """
@@ -110,13 +112,15 @@ class ProjectDetail(Widget, can_focus=True):
         gen = self._render_generation
         self.call_after_refresh(lambda: self._render_project(gen))
 
-    def _render_project(self, gen: int = 0) -> None:
+    def _render_project(self, gen: int = 0, *, initial_cursor: int | None = None) -> None:
         """Rebuild the grouped object rows for the current project.
 
         Args:
             gen: The render generation this callback was issued for. If it no longer
                  matches the current generation, this render has been superseded and
                  is skipped.
+            initial_cursor: If provided, set cursor to this position (clamped to valid
+                 range) instead of the default 0. Used for post-delete cursor restore.
         """
         if gen != getattr(self, "_render_generation", 0):
             return  # superseded by a newer set_project call
@@ -147,7 +151,10 @@ class ProjectDetail(Widget, can_focus=True):
                 row_index += 1
 
         self._rows = new_rows
-        self._cursor = 0 if new_rows else -1
+        if initial_cursor is not None:
+            self._cursor = max(0, min(initial_cursor, len(new_rows) - 1)) if new_rows else -1
+        else:
+            self._cursor = 0 if new_rows else -1
         self._update_highlight()
 
     def _update_highlight(self) -> None:
@@ -215,6 +222,70 @@ class ProjectDetail(Widget, can_focus=True):
         if self._project is None:
             return
         self.app._start_add_object_loop(self._project)
+
+    def _set_project_with_cursor(self, project: Project, cursor: int) -> None:
+        """Re-render project and restore cursor near given position."""
+        self._project = project
+        self._render_generation = getattr(self, "_render_generation", 0) + 1
+        gen = self._render_generation
+        self.call_after_refresh(lambda: self._render_project(gen, initial_cursor=cursor))
+
+    def action_edit_object(self) -> None:
+        """Open edit modal for highlighted object (MGMT-02, D-08, D-09)."""
+        from joy.screens import ValueInputModal  # noqa: PLC0415 — lazy import avoids circular dep
+        item = self.highlighted_object
+        if item is None:
+            self.app.notify("No object selected", severity="error", markup=False)
+            return
+        kind = item.kind
+
+        def on_value(new_value: str | None) -> None:
+            if new_value is None:
+                return  # Escape — no change
+            item.value = new_value
+            self._save_toggle()  # reuse existing bg save method (same as toggle persist)
+            self.set_project(self._project)  # re-render to show updated value
+            display = _truncate(new_value)
+            self.app.notify(f"Updated: {kind.value} '{display}'", markup=False)
+
+        self.app.push_screen(
+            ValueInputModal(kind, existing_value=item.value),
+            on_value,
+        )
+
+    def action_delete_object(self) -> None:
+        """Delete highlighted object after confirmation (MGMT-03, D-10, D-11)."""
+        from joy.screens import ConfirmationModal  # noqa: PLC0415 — lazy import avoids circular dep
+        item = self.highlighted_object
+        if item is None:
+            self.app.notify("No object selected", severity="error", markup=False)
+            return
+        kind_val = item.kind.value
+        value_display = _truncate(item.label if item.label else item.value)
+        prev_cursor = self._cursor
+
+        def on_confirm(confirmed: bool) -> None:
+            if not confirmed:
+                return
+            # Remove by index to avoid value-equality issues
+            try:
+                idx = self._project.objects.index(item)
+                self._project.objects.pop(idx)
+            except ValueError:
+                return  # item already removed (shouldn't happen)
+            self._save_toggle()  # persist in background
+            # Re-render with cursor at previous position - 1 (D-11)
+            target_cursor = max(0, prev_cursor - 1)
+            self._set_project_with_cursor(self._project, target_cursor)
+            self.app.notify(f"Deleted: {kind_val} '{value_display}'", markup=False)
+
+        self.app.push_screen(
+            ConfirmationModal(
+                title="Delete Object",
+                prompt=f"Delete {kind_val} '{value_display}'?",
+            ),
+            on_confirm,
+        )
 
     @work(thread=True, exit_on_error=False)
     def _save_toggle(self) -> None:
