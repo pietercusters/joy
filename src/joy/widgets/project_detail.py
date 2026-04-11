@@ -92,8 +92,11 @@ class ProjectDetail(Widget, can_focus=True):
         width: 1fr;
         height: 1fr;
     }
-    ObjectRow.--highlight {
+    ProjectDetail:focus-within ObjectRow.--highlight {
         background: $accent;
+    }
+    ObjectRow.--highlight {
+        background: $accent 30%;
     }
     """
 
