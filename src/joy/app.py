@@ -3,11 +3,13 @@ from __future__ import annotations
 
 from textual import work
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.widgets import Footer, Header
 
-from joy.models import Config, Project
-from joy.widgets.project_detail import ProjectDetail
+from joy.models import Config, ObjectItem, Project
+from joy.widgets.object_row import _success_message, _truncate
+from joy.widgets.project_detail import GROUP_ORDER, ProjectDetail
 from joy.widgets.project_list import ProjectList
 
 
@@ -22,7 +24,10 @@ class JoyApp(App):
     #project-detail { width: 2fr; }
     """
 
-    BINDINGS = [("q", "quit", "Quit")]
+    BINDINGS = [
+        ("q", "quit", "Quit"),
+        Binding("shift+o,O", "open_all_defaults", "Open All", priority=True),
+    ]
 
     _config: Config = Config()
 
@@ -80,6 +85,41 @@ class JoyApp(App):
         """When Enter pressed on project, update detail and shift focus (D-04)."""
         self.query_one(ProjectDetail).set_project(message.project)
         self.query_one(ProjectDetail).focus()
+
+    def action_open_all_defaults(self) -> None:
+        """Open all open_by_default objects for the current project (ACT-02, D-10)."""
+        detail = self.query_one(ProjectDetail)
+        project = detail._project
+        if project is None:
+            return  # silent no-op: data not loaded yet (D-11)
+        # Collect defaults in GROUP_ORDER display order (D-06)
+        defaults: list[ObjectItem] = []
+        for kind in GROUP_ORDER:
+            for item in project.objects:
+                if item.kind == kind and item.open_by_default:
+                    defaults.append(item)
+        if not defaults:
+            return  # silent no-op: no defaults (D-11)
+        self._open_defaults(defaults)
+
+    @work(thread=True, exit_on_error=False)
+    def _open_defaults(self, defaults: list[ObjectItem]) -> None:
+        """Open default objects sequentially in a background thread (D-06, D-07, D-08)."""
+        from joy.operations import open_object  # noqa: PLC0415
+        errors: list[str] = []
+        for item in defaults:
+            try:
+                open_object(item=item, config=self._config)
+                self.app.notify(
+                    _success_message(item, self._config),
+                    markup=False,
+                )
+            except Exception:
+                display = _truncate(item.label if item.label else item.value)
+                errors.append(display)
+        # Show accumulated error toasts at the end (D-07)
+        for err in errors:
+            self.app.notify(f"Failed to open: {err}", severity="error", markup=False)
 
 
 def main() -> None:

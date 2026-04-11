@@ -9,20 +9,27 @@ from joy.models import ObjectItem, PresetKind, Project
 
 
 def _sample_projects() -> list[Project]:
-    """Create sample projects for testing."""
+    """Create sample projects for testing.
+
+    project-alpha: BRANCH "main" open_by_default=False, MR #1, WORKTREE "/tmp/alpha" open_by_default=True,
+                   BRANCH "feature" open_by_default=True  (2 default objects total for ACT-02 tests)
+    project-beta:  all open_by_default=False  (used for D-11 no-op test)
+    project-empty: no objects
+    """
     return [
         Project(
             name="project-alpha",
             objects=[
                 ObjectItem(kind=PresetKind.BRANCH, value="main", open_by_default=False),
                 ObjectItem(kind=PresetKind.MR, value="https://example.com/mr/1", label="MR #1"),
-                ObjectItem(kind=PresetKind.WORKTREE, value="/tmp/alpha"),
+                ObjectItem(kind=PresetKind.WORKTREE, value="/tmp/alpha", open_by_default=True),
+                ObjectItem(kind=PresetKind.BRANCH, value="feature", open_by_default=True),
             ],
         ),
         Project(
             name="project-beta",
             objects=[
-                ObjectItem(kind=PresetKind.TICKET, value="https://notion.so/ticket-1", label="TICK-1"),
+                ObjectItem(kind=PresetKind.TICKET, value="https://notion.so/ticket-1", label="TICK-1", open_by_default=False),
             ],
         ),
         Project(
@@ -243,3 +250,54 @@ async def test_space_persists_toggle(mock_store, mock_save):
         await pilot.pause(0.1)
         await app.workers.wait_for_complete()
         assert mock_save.called, "save_projects should have been called to persist toggle"
+
+
+# ---------------------------------------------------------------------------
+# ACT-02: O key opens all open_by_default objects
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_O_opens_default_objects(mock_store, mock_operations, mock_save):
+    """ACT-02: O opens all open_by_default objects for the current project."""
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        await pilot.press("O")
+        await pilot.pause(0.3)
+        await app.workers.wait_for_complete()
+        # project-alpha has 2 default objects: WORKTREE "/tmp/alpha" and BRANCH "feature"
+        assert mock_operations.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_O_silent_noop_no_defaults(mock_store, mock_operations, mock_save):
+    """ACT-02/D-11: O is a silent no-op when no default objects exist."""
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        # Navigate to project-beta (no defaults)
+        await pilot.press("down")
+        await pilot.pause(0.1)
+        await pilot.press("O")
+        await pilot.pause(0.3)
+        await app.workers.wait_for_complete()
+        assert mock_operations.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_O_works_from_project_list(mock_store, mock_operations, mock_save):
+    """D-10: O fires from project list without pressing Enter (global binding)."""
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        # Do NOT press Enter -- stay on project list
+        # Press O from project list
+        await pilot.press("O")
+        await pilot.pause(0.3)
+        await app.workers.wait_for_complete()
+        # project-alpha has 2 default objects
+        assert mock_operations.call_count == 2
