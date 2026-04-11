@@ -46,7 +46,7 @@ class JoyListView(ListView):
             if projects:
                 # Select adjacent: next if available, else previous (D-13)
                 new_index = min(index, len(projects) - 1)
-                parent.select_index(new_index)
+                parent.call_after_refresh(parent.select_index, new_index)
             else:
                 # No projects left — clear detail pane
                 from joy.widgets.project_detail import ProjectDetail  # noqa: PLC0415
