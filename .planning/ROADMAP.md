@@ -68,9 +68,9 @@ Plans:
 **UI hint**: yes
 
 Plans:
-- [ ] 03-01-PLAN.md -- ObjectRow dot indicator, Config caching, toast message helpers
-- [ ] 03-02-PLAN.md -- Single open (o) and toggle (space) bindings on ProjectDetail
-- [ ] 03-03-PLAN.md -- Bulk open (O) global binding on JoyApp, visual checkpoint
+- [x] 03-01-PLAN.md -- ObjectRow dot indicator, Config caching, toast message helpers
+- [x] 03-02-PLAN.md -- Single open (o) and toggle (space) bindings on ProjectDetail
+- [x] 03-03-PLAN.md -- Bulk open (O) global binding on JoyApp, visual checkpoint
 
 ### Phase 4: CRUD
 **Goal**: Users can create new projects, add/edit/delete objects, and delete projects -- all through modal forms with keyboard navigation and confirmation dialogs
