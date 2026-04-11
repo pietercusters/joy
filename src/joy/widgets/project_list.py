@@ -161,7 +161,11 @@ class ProjectList(Widget, can_focus=False):
         self._is_filtered = False
         if restore:
             self.set_projects(list(self.app._projects))  # canonical list (D-09, Pitfall 3)
-        listview.call_after_refresh(listview.focus)  # restore keyboard focus
+        def _restore_focus_and_cursor() -> None:
+            listview.focus()
+            if self._projects and listview.index is None:
+                listview.index = 0  # restore blue bar lost after listview.clear()
+        listview.call_after_refresh(_restore_focus_and_cursor)
 
     def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
         """When highlight changes, notify parent with project data."""
