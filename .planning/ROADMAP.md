@@ -104,9 +104,9 @@ Plans:
 **UI hint**: yes
 
 Plans:
-- [ ] 05-01-PLAN.md -- SettingsModal screen (4 Input fields + SelectionList + Save button) + JoyApp wiring (s binding)
-- [ ] 05-02-PLAN.md -- Project list filtering (/ binding, inline Input, real-time substring match)
-- [ ] 05-03-PLAN.md -- Distribution: --version flag, README documentation, visual checkpoint
+- [x] 05-01-PLAN.md -- SettingsModal screen (4 Input fields + SelectionList + Save button) + JoyApp wiring (s binding)
+- [x] 05-02-PLAN.md -- Project list filtering (/ binding, inline Input, real-time substring match)
+- [x] 05-03-PLAN.md -- Distribution: --version flag, README documentation, visual checkpoint
 
 ## Progress
 
