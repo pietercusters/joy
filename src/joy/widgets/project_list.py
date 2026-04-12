@@ -59,11 +59,15 @@ class JoyListView(ListView):
             parent.set_projects(projects)
             if projects:
                 # Select adjacent: next if available, else previous (D-13).
-                # clear()+append() in set_projects are synchronous DOM mutations,
-                # so focus and index can be restored immediately after.
+                # Defer until after next refresh: append() mounts Labels async,
+                # so setting index immediately fires Highlighted before Labels exist.
                 new_index = min(index, len(projects) - 1)
-                self.focus()           # restore keyboard focus lost when clear() ran
-                self.index = new_index  # restore visual highlight on adjacent item
+
+                def _restore_selection() -> None:
+                    self.focus()
+                    self.index = new_index
+
+                self.app.call_after_refresh(_restore_selection)
             else:
                 # No projects left — clear detail pane
                 from joy.widgets.project_detail import ProjectDetail  # noqa: PLC0415
@@ -180,8 +184,10 @@ class ProjectList(Widget, can_focus=False):
             # Validate label matches to guard against transient stale-index window
             # (set_projects replaces _projects synchronously but DOM mutations are async,
             # so a Highlighted event can fire with an index valid in the old list)
-            label_widget = event.item.query_one(Label)
-            if str(label_widget.renderable) == project.name:
+            labels = event.item.query(Label)
+            if not labels:
+                return
+            if labels.first().content == project.name:
                 self.post_message(self.ProjectHighlighted(project))
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
