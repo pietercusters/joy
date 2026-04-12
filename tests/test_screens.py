@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import pytest
 from textual.app import App, ComposeResult
-from textual.widgets import Static
+from textual.widgets import Input, SelectionList, Static
 
-from joy.models import PresetKind
+from joy.models import Config, PresetKind
 from joy.screens import ConfirmationModal, NameInputModal, PresetPickerModal, ValueInputModal
+from joy.screens.settings import SettingsModal
 
 
 class ModalTestApp(App):
@@ -221,3 +222,66 @@ async def test_confirmation_escape_returns_false():
         await pilot.press("escape")
         await pilot.pause(0.1)
     assert result_holder == [False]
+
+
+# ---------------------------------------------------------------------------
+# SettingsModal tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_settings_save_returns_config():
+    """SettingsModal returns a Config instance when Save button is pressed."""
+    result_holder: list[Config | None] = []
+    app = ModalTestApp()
+    async with app.run_test() as pilot:
+        await app.push_screen(SettingsModal(Config()), result_holder.append)
+        await pilot.pause(0.1)
+        # Tab 5 times from field-ide (already focused) to reach btn-save:
+        # field-ide -> field-editor -> field-vault -> field-terminal -> field-kinds -> btn-save
+        for _ in range(5):
+            await pilot.press("tab")
+        await pilot.pause(0.1)
+        await pilot.press("enter")
+        await pilot.pause(0.1)
+    assert len(result_holder) == 1
+    assert isinstance(result_holder[0], Config)
+    # Don't assert specific field values -- that belongs in test_settings_prepopulated
+
+
+@pytest.mark.asyncio
+async def test_settings_escape_returns_none():
+    """SettingsModal returns None on Escape."""
+    result_holder: list[Config | None] = []
+    app = ModalTestApp()
+    async with app.run_test() as pilot:
+        await app.push_screen(SettingsModal(Config()), result_holder.append)
+        await pilot.pause(0.1)
+        await pilot.press("escape")
+        await pilot.pause(0.1)
+    assert result_holder == [None]
+
+
+@pytest.mark.asyncio
+async def test_settings_prepopulated():
+    """SettingsModal Input fields show values from the provided Config."""
+    app = ModalTestApp()
+    async with app.run_test() as pilot:
+        await app.push_screen(SettingsModal(Config(ide="VSCode", editor="vim")), lambda _: None)
+        await pilot.pause(0.1)
+        assert app.screen.query_one("#field-ide", Input).value == "VSCode"
+        assert app.screen.query_one("#field-editor", Input).value == "vim"
+
+
+@pytest.mark.asyncio
+async def test_settings_kinds_prepopulated():
+    """SettingsModal SelectionList shows pre-selected kinds from Config."""
+    app = ModalTestApp()
+    async with app.run_test() as pilot:
+        await app.push_screen(
+            SettingsModal(Config(default_open_kinds=["worktree"])),
+            lambda _: None,
+        )
+        await pilot.pause(0.1)
+        selected = app.screen.query_one("#field-kinds", SelectionList).selected
+        assert list(selected) == ["worktree"]

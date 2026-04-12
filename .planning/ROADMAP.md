@@ -91,17 +91,22 @@ Plans:
 - [x] 04-03-PLAN.md -- Edit object (e), delete object (d), delete project (D/delete) + visual checkpoint
 
 ### Phase 5: Settings, Search & Distribution
-**Goal**: Users can configure global preferences via a settings screen, filter projects by name, reorder objects to control activation sequence, and install joy globally via uv
+**Goal**: Users can configure global preferences via a settings screen, filter projects by name, and install joy globally via uv (MGMT-04 object reordering deferred per user decision D-13)
 **Depends on**: Phase 4
 **Requirements**: SETT-01, SETT-02, SETT-03, SETT-04, SETT-05, SETT-06, PROJ-06, MGMT-04, DIST-01, DIST-03, DIST-04
 **Success Criteria** (what must be TRUE):
   1. A dedicated settings screen is accessible from the main screen where user can view and edit IDE, editor, vault path, terminal tool, and default "open by default" object types
   2. User can press `/` to filter the project list by substring in real-time; clearing the filter restores the full list
-  3. User can press `J`/`K` to move the selected object up/down, changing display order which controls `O` activation order; reorder persists across restarts
+  3. ~~User can press `J`/`K` to move the selected object up/down~~ (MGMT-04 deferred per D-13)
   4. App is installable globally via `uv tool install git+<repo>` and `joy --version` outputs the installed version
   5. README documents installation, first-run setup, and key usage
-**Plans**: TBD
+**Plans:** 3 plans
 **UI hint**: yes
+
+Plans:
+- [x] 05-01-PLAN.md -- SettingsModal screen (4 Input fields + SelectionList + Save button) + JoyApp wiring (s binding)
+- [x] 05-02-PLAN.md -- Project list filtering (/ binding, inline Input, real-time substring match)
+- [x] 05-03-PLAN.md -- Distribution: --version flag, README documentation, visual checkpoint
 
 ## Progress
 
@@ -114,4 +119,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 2. TUI Shell | 0/3 | In progress | - |
 | 3. Activation | 0/3 | Not started | - |
 | 4. CRUD | 0/3 | Not started | - |
-| 5. Settings, Search & Distribution | 0/? | Not started | - |
+| 5. Settings, Search & Distribution | 0/3 | Not started | - |

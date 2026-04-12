@@ -602,3 +602,56 @@ async def test_D_selects_adjacent(mock_store, mock_save):
         detail = app.query_one("#project-detail")
         assert detail._project is not None
         assert detail._project.name == "project-beta"
+
+
+# ---------------------------------------------------------------------------
+# Settings modal integration tests (SETT-01 through SETT-06)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_s_opens_settings_modal(mock_store):
+    """SETT-06: Pressing s from the main view opens the SettingsModal overlay."""
+    from joy.screens.settings import SettingsModal
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        await pilot.press("s")
+        await pilot.pause(0.1)
+        assert isinstance(app.screen, SettingsModal)
+
+
+@pytest.mark.asyncio
+async def test_s_escape_no_save(mock_store):
+    """D-04: Pressing Escape in settings modal does not call save_config."""
+    with patch("joy.store.save_config") as mock_cfg:
+        app = JoyApp()
+        async with app.run_test() as pilot:
+            await pilot.pause(0.2)
+            await app.workers.wait_for_complete()
+            await pilot.press("s")
+            await pilot.pause(0.1)
+            await pilot.press("escape")
+            await pilot.pause(0.1)
+            await app.workers.wait_for_complete()
+            assert not mock_cfg.called
+
+
+@pytest.mark.asyncio
+async def test_s_save_persists_config(mock_store):
+    """D-04: Save Settings button calls save_config via background thread."""
+    with patch("joy.store.save_config") as mock_cfg:
+        app = JoyApp()
+        async with app.run_test() as pilot:
+            await pilot.pause(0.2)
+            await app.workers.wait_for_complete()
+            await pilot.press("s")
+            await pilot.pause(0.1)
+            # Tab 5 times from field-ide to reach btn-save, then press Enter
+            for _ in range(5):
+                await pilot.press("tab")
+            await pilot.press("enter")
+            await pilot.pause(0.2)
+            await app.workers.wait_for_complete()
+            assert mock_cfg.called, "save_config should have been called"

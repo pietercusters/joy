@@ -1,6 +1,8 @@
 """Entry point for the joy CLI."""
 from __future__ import annotations
 
+import sys
+
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -8,7 +10,7 @@ from textual.containers import Horizontal
 from textual.widgets import Footer, Header
 
 from joy.models import Config, ObjectItem, PresetKind, Project
-from joy.screens import NameInputModal, PresetPickerModal, ValueInputModal
+from joy.screens import NameInputModal, PresetPickerModal, SettingsModal, ValueInputModal
 from joy.widgets.object_row import _success_message, _truncate
 from joy.widgets.project_detail import GROUP_ORDER, ProjectDetail
 from joy.widgets.project_list import JoyListView, ProjectList
@@ -29,6 +31,7 @@ class JoyApp(App):
         ("q", "quit", "Quit"),
         Binding("shift+o,O", "open_all_defaults", "Open All", priority=True),
         Binding("n", "new_project", "New", priority=True),
+        Binding("s", "settings", "Settings", priority=True),
     ]
 
     _config: Config = Config()
@@ -42,6 +45,7 @@ class JoyApp(App):
         yield Footer()
 
     def on_mount(self) -> None:
+        self.sub_title = _get_version()
         self._load_data()
 
     @work(thread=True)
@@ -159,6 +163,22 @@ class JoyApp(App):
         from joy.store import save_projects  # noqa: PLC0415
         save_projects(self._projects)
 
+    def action_settings(self) -> None:
+        """Open settings modal overlay (D-01, D-05, SETT-06)."""
+        def on_settings(config: Config | None) -> None:
+            if config is None:
+                return  # Escaped -- no change (D-04)
+            self._config = config
+            self._save_config_bg()
+            self.notify("Settings saved", markup=False)
+        self.push_screen(SettingsModal(self._config), on_settings)
+
+    @work(thread=True, exit_on_error=False)
+    def _save_config_bg(self) -> None:
+        """Persist config to TOML in background thread (D-04)."""
+        from joy.store import save_config  # noqa: PLC0415
+        save_config(self._config)
+
     @work(thread=True, exit_on_error=False)
     def _open_defaults(self, defaults: list[ObjectItem]) -> None:
         """Open default objects sequentially in a background thread (D-06, D-07, D-08)."""
@@ -179,8 +199,20 @@ class JoyApp(App):
             self.app.notify(f"Failed to open: {err}", severity="error", markup=False)
 
 
+def _get_version() -> str:
+    """Return installed package version, or 'unknown' if not installed."""
+    import importlib.metadata  # noqa: PLC0415
+    try:
+        return importlib.metadata.version("joy")
+    except importlib.metadata.PackageNotFoundError:
+        return "unknown"
+
+
 def main() -> None:
     """Main entry point for the joy CLI."""
+    if "--version" in sys.argv:
+        print(f"joy {_get_version()}")
+        return
     app = JoyApp()
     app.run()
 

@@ -12,7 +12,11 @@ Every artifact for the active project, openable instantly from one interface —
 
 ### Validated
 
-(None yet — ship to validate)
+**Phase 01 (Foundation):** Python package structure, TOML config/store, Config dataclass, Project/ObjectItem models, uv toolchain  
+**Phase 02 (TUI Shell):** Two-pane Textual layout, JoyApp, ProjectList/ProjectDetail widgets, keyboard navigation  
+**Phase 03 (Activation):** All 9 preset kind activations, `o`/`O`/Space/a/e/d bindings, macOS open+pbcopy+osascript integration  
+**Phase 04 (CRUD):** New project modal, edit object, delete project with confirmation, ConfirmationModal  
+**Phase 05 (Settings + Search + Distribution):** SettingsModal with 5 Config fields (`s` key), project filter mode (`/` key), `--version` CLI flag, README, version in TUI header — Validated 2026-04-12
 
 ### Active
 
@@ -120,4 +124,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-10 after initialization*
+*Last updated: 2026-04-12 — Phase 05 complete, milestone v1.0 fully executed*
