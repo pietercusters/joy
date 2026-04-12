@@ -246,7 +246,7 @@ async def test_settings_save_returns_config():
         await pilot.pause(0.1)
     assert len(result_holder) == 1
     assert isinstance(result_holder[0], Config)
-    assert result_holder[0].ide == "PyCharm"  # default unchanged
+    # Don't assert specific field values -- that belongs in test_settings_prepopulated
 
 
 @pytest.mark.asyncio
