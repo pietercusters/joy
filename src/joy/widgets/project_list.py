@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from textual.app import ComposeResult
 from textual.binding import Binding
+from textual.css.query import NoMatches
 from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import Input, Label, ListItem, ListView
@@ -155,8 +156,8 @@ class ProjectList(Widget, can_focus=False):
         try:
             filter_input = self.query_one("#filter-input", Input)
             filter_input.remove()
-        except Exception:
-            pass
+        except NoMatches:
+            pass  # already removed -- expected
         listview._filter_active = False
         self._is_filtered = False
         if restore:
@@ -175,7 +176,13 @@ class ProjectList(Widget, can_focus=False):
             and index is not None
             and index < len(self._projects)
         ):
-            self.post_message(self.ProjectHighlighted(self._projects[index]))
+            project = self._projects[index]
+            # Validate label matches to guard against transient stale-index window
+            # (set_projects replaces _projects synchronously but DOM mutations are async,
+            # so a Highlighted event can fire with an index valid in the old list)
+            label_widget = event.item.query_one(Label)
+            if str(label_widget.renderable) == project.name:
+                self.post_message(self.ProjectHighlighted(project))
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         """When Enter is pressed, post selection message (D-04)."""
