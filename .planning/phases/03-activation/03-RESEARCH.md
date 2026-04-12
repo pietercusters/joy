@@ -395,17 +395,19 @@ def _save_toggle(self) -> None:
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **`O` — priority binding vs standard BINDINGS on `JoyApp`**
    - What we know: `O` is in `JoyApp.BINDINGS`. Standard bindings on App are effectively global since App is the root.
    - What's unclear: Whether `O` needs `priority=True` to fire before child widgets consume it. Currently no child widget uses `O`.
    - Recommendation: Use standard BINDINGS. If a future widget needs `O`, revisit with `priority=True`.
+   - RESOLVED: Use standard BINDINGS on JoyApp (no priority=True needed).
 
 2. **Rich style string for Textual CSS variables in Static widgets**
    - What we know: `Text.append(dot, style="white")` works in the shell. `Text.append(dot, style="$text")` may or may not resolve in non-CSS Rich contexts.
    - What's unclear: Whether Textual CSS variable names (`$text`, `$text-muted`) resolve as Rich style strings inside `Static.update()`.
    - Recommendation: Use explicit Rich color names (`"bright_white"` and `"grey50"`) as the safe fallback. Add a visual test step to verify appearance.
+   - RESOLVED: Use explicit Rich color names bright_white and grey50.
 
 ---
 
