@@ -10,8 +10,13 @@ import pytest
 from unittest.mock import patch
 
 from joy.app import JoyApp
-from joy.models import Config, ObjectItem, PresetKind, Project, Repo, WorktreeInfo
+from joy.models import Config, MRInfo, ObjectItem, PresetKind, Project, Repo, WorktreeInfo
 from joy.widgets.worktree_pane import (
+    ICON_CI_FAIL,
+    ICON_CI_PASS,
+    ICON_CI_PENDING,
+    ICON_MR_DRAFT,
+    ICON_MR_OPEN,
     WorktreePane,
     WorktreeRow,
     GroupHeader,
@@ -449,3 +454,211 @@ async def test_pane_read_only(mock_store_with_worktrees):
         )
         # Pane must be focusable (for Tab cycling)
         assert pane.can_focus is True, "WorktreePane must have can_focus=True"
+
+
+# ---------------------------------------------------------------------------
+# Phase 11 Plan 02: MR row rendering, pane wiring, app integration
+# ---------------------------------------------------------------------------
+
+
+def _sample_mr_info(
+    mr_number: int = 42,
+    is_draft: bool = False,
+    ci_status: str | None = "pass",
+    author: str = "@pieter",
+    last_commit_hash: str = "abc1234",
+    last_commit_msg: str = "fix: login redirect",
+) -> MRInfo:
+    return MRInfo(
+        mr_number=mr_number,
+        is_draft=is_draft,
+        ci_status=ci_status,
+        author=author,
+        last_commit_hash=last_commit_hash,
+        last_commit_msg=last_commit_msg,
+    )
+
+
+# ---------------------------------------------------------------------------
+# build_content MR rendering tests (unit, no Textual app needed)
+# ---------------------------------------------------------------------------
+
+
+def test_build_content_no_mr_unchanged():
+    """Phase 9 layout preserved: no MR -> path on line 2, no MR number."""
+    content = WorktreeRow.build_content("feat-x", False, True, "~/path", mr_info=None)
+    text = str(content)
+    lines = text.split("\n")
+    assert "~/path" in lines[1], f"Expected path on line 2, got: {lines[1]}"
+    assert "!" not in text, f"MR number should not appear: {text}"
+
+
+def test_build_content_mr_number_shown():
+    """MR number appears as !N in content when MRInfo is present."""
+    content = WorktreeRow.build_content(
+        "feat-x", False, True, "~/path", mr_info=_sample_mr_info(mr_number=42)
+    )
+    assert "!42" in str(content)
+
+
+def test_build_content_mr_open_icon():
+    """Open MR shows ICON_MR_OPEN."""
+    content = WorktreeRow.build_content(
+        "feat-x", False, True, "~/path", mr_info=_sample_mr_info(is_draft=False)
+    )
+    assert ICON_MR_OPEN in str(content)
+
+
+def test_build_content_mr_draft_icon():
+    """Draft MR shows ICON_MR_DRAFT but not ICON_MR_OPEN."""
+    content = WorktreeRow.build_content(
+        "feat-x", False, True, "~/path", mr_info=_sample_mr_info(is_draft=True)
+    )
+    text = str(content)
+    assert ICON_MR_DRAFT in text
+    assert ICON_MR_OPEN not in text
+
+
+def test_build_content_ci_pass():
+    """CI pass shows ICON_CI_PASS."""
+    content = WorktreeRow.build_content(
+        "feat-x", False, True, "~/path", mr_info=_sample_mr_info(ci_status="pass")
+    )
+    assert ICON_CI_PASS in str(content)
+
+
+def test_build_content_ci_fail():
+    """CI fail shows ICON_CI_FAIL."""
+    content = WorktreeRow.build_content(
+        "feat-x", False, True, "~/path", mr_info=_sample_mr_info(ci_status="fail")
+    )
+    assert ICON_CI_FAIL in str(content)
+
+
+def test_build_content_ci_pending():
+    """CI pending shows ICON_CI_PENDING."""
+    content = WorktreeRow.build_content(
+        "feat-x", False, True, "~/path", mr_info=_sample_mr_info(ci_status="pending")
+    )
+    assert ICON_CI_PENDING in str(content)
+
+
+def test_build_content_ci_none_blank():
+    """CI None shows no CI icon at all."""
+    content = WorktreeRow.build_content(
+        "feat-x", False, True, "~/path", mr_info=_sample_mr_info(ci_status=None)
+    )
+    text = str(content)
+    assert ICON_CI_PASS not in text
+    assert ICON_CI_FAIL not in text
+    assert ICON_CI_PENDING not in text
+
+
+def test_build_content_mr_author_on_line2():
+    """MR present -> line 2 shows @author."""
+    content = WorktreeRow.build_content(
+        "feat-x", False, True, "~/path", mr_info=_sample_mr_info(author="@pieter")
+    )
+    lines = str(content).split("\n")
+    assert "@pieter" in lines[1], f"Expected @pieter on line 2, got: {lines[1]}"
+
+
+def test_build_content_mr_commit_on_line2():
+    """MR present -> line 2 shows commit hash + message."""
+    content = WorktreeRow.build_content(
+        "feat-x", False, True, "~/path",
+        mr_info=_sample_mr_info(last_commit_hash="abc1234", last_commit_msg="fix: login redirect"),
+    )
+    lines = str(content).split("\n")
+    assert "abc1234" in lines[1], f"Expected commit hash on line 2, got: {lines[1]}"
+    assert "fix: login redirect" in lines[1], f"Expected commit msg on line 2, got: {lines[1]}"
+
+
+def test_build_content_no_mr_path_on_line2():
+    """No MR -> line 2 shows abbreviated path (Phase 9 behavior preserved)."""
+    content = WorktreeRow.build_content(
+        "feat-x", False, True, "~/Github/joy", mr_info=None
+    )
+    lines = str(content).split("\n")
+    assert "~/Github/joy" in lines[1], f"Expected path on line 2, got: {lines[1]}"
+
+
+# ---------------------------------------------------------------------------
+# WorktreeRow constructor test
+# ---------------------------------------------------------------------------
+
+
+def test_worktree_row_accepts_mr_info():
+    """WorktreeRow constructor accepts mr_info keyword and renders MR number."""
+    wt = WorktreeInfo(
+        repo_name="joy",
+        branch="feat-x",
+        path="/tmp/joy/wt/feat-x",
+    )
+    row = WorktreeRow(wt, mr_info=_sample_mr_info(mr_number=42))
+    assert "!42" in str(row.content)
+
+
+# ---------------------------------------------------------------------------
+# set_worktrees with mr_data test (async, minimal Textual app)
+# ---------------------------------------------------------------------------
+
+
+def test_set_worktrees_with_mr_data():
+    """set_worktrees passes MRInfo from mr_data dict to matching WorktreeRow."""
+    from textual.app import App, ComposeResult
+
+    class _TestApp(App):
+        def compose(self) -> ComposeResult:
+            yield WorktreePane()
+
+    import asyncio
+
+    async def _run():
+        app = _TestApp()
+        async with app.run_test() as pilot:
+            pane = app.query_one(WorktreePane)
+            worktrees = [
+                WorktreeInfo(
+                    repo_name="joy",
+                    branch="feat-z",
+                    path="/tmp/joy/wt/feat-z",
+                ),
+            ]
+            mr_data = {("joy", "feat-z"): _sample_mr_info(mr_number=42)}
+            await pane.set_worktrees(worktrees, mr_data=mr_data)
+            await pilot.pause(0.1)
+            rows = pane.query(WorktreeRow)
+            assert len(rows) == 1
+            assert "!42" in str(rows[0].content), (
+                f"Expected !42 in row content, got: {str(rows[0].content)}"
+            )
+
+    asyncio.run(_run())
+
+
+# ---------------------------------------------------------------------------
+# set_refresh_label mr_error test
+# ---------------------------------------------------------------------------
+
+
+def test_refresh_label_mr_error():
+    """set_refresh_label with mr_error=True adds warning to border_title."""
+    from textual.app import App, ComposeResult
+
+    class _TestApp(App):
+        def compose(self) -> ComposeResult:
+            yield WorktreePane()
+
+    import asyncio
+
+    async def _run():
+        app = _TestApp()
+        async with app.run_test() as pilot:
+            pane = app.query_one(WorktreePane)
+            pane.set_refresh_label("5s ago", mr_error=True)
+            assert "\u26a0" in pane.border_title or "mr" in pane.border_title.lower(), (
+                f"Expected warning in border_title, got: {pane.border_title}"
+            )
+
+    asyncio.run(_run())
