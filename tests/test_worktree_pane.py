@@ -173,7 +173,7 @@ def test_grouping_by_repo():
             headers = pane.query(GroupHeader)
             assert len(headers) == 2
 
-    asyncio.get_event_loop().run_until_complete(_run())
+    asyncio.run(_run())
 
 
 def test_empty_repos_hidden():
@@ -200,10 +200,10 @@ def test_empty_repos_hidden():
             ]
             pane.set_worktrees(worktrees)
             await pilot.pause(0.1)
-            header_texts = [str(h.renderable) for h in pane.query(GroupHeader)]
+            header_texts = [str(h.content) for h in pane.query(GroupHeader)]
             assert not any("beta" in t.lower() for t in header_texts)
 
-    asyncio.get_event_loop().run_until_complete(_run())
+    asyncio.run(_run())
 
 
 def test_repo_order_alphabetical():
@@ -228,11 +228,11 @@ def test_repo_order_alphabetical():
             pane.set_worktrees(worktrees)
             await pilot.pause(0.1)
             headers = pane.query(GroupHeader)
-            names = [str(h.renderable) for h in headers]
+            names = [str(h.content) for h in headers]
             lower_names = [n.lower() for n in names]
             assert lower_names == sorted(lower_names), f"Expected alphabetical order, got: {names}"
 
-    asyncio.get_event_loop().run_until_complete(_run())
+    asyncio.run(_run())
 
 
 def test_worktree_order_alphabetical():
@@ -262,7 +262,7 @@ def test_worktree_order_alphabetical():
             lower_names = [n.lower() for n in branch_names]
             assert lower_names == sorted(lower_names), f"Expected sorted branches, got: {branch_names}"
 
-    asyncio.get_event_loop().run_until_complete(_run())
+    asyncio.run(_run())
 
 
 def test_row_shows_branch():
@@ -365,7 +365,7 @@ def test_set_worktrees_idempotent():
                 f"Header count changed: {header_first} -> {header_second}"
             )
 
-    asyncio.get_event_loop().run_until_complete(_run())
+    asyncio.run(_run())
 
 
 # ---------------------------------------------------------------------------
