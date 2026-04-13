@@ -1,501 +1,795 @@
-# Pitfalls Research: joy
+# Pitfalls Research: joy v1.1 Workspace Intelligence
 
-**Domain:** Python TUI project artifact manager (Textual, macOS-only, keyboard-driven)
-**Researched:** 2026-04-10
+**Domain:** Adding background data fetching, iTerm2 Python API, and new panes to an existing Python TUI
+**Researched:** 2026-04-13
+**Focus:** Integration pitfalls for v1.1 features added to the existing v1.0 Textual app
+**Overall confidence:** HIGH (most findings verified from primary sources)
+
+NOTE: v1.0 pitfalls (CP-1 through CP-4, CM-1 through CM-6, IR-1 through IR-3, PD-1 through PD-3, UR-1, UR-2) are already addressed in the shipped codebase. This file documents NEW pitfalls specific to v1.1 features.
 
 ---
 
-## Critical Pitfalls
+## iTerm2 Python API Pitfalls
 
-Mistakes that cause rewrites, broken UX, or unusable shipped product.
+### IT-1: Event Loop Conflict -- iterm2.run_until_complete() vs Textual's asyncio Loop (CRITICAL)
 
-### CP-1: Blocking the Textual Event Loop
+**What goes wrong:** Calling `iterm2.run_until_complete(main)` from inside a running Textual app raises `RuntimeError: This event loop is already running`. The iTerm2 library internally calls `asyncio.new_event_loop()` and `loop.run_until_complete()`, which conflicts with the already-running Textual event loop on the same thread.
 
-**What goes wrong:** Any synchronous/blocking call inside an event handler, `on_mount`, or message handler freezes the entire TUI. The screen goes unresponsive -- no key input, no rendering, no feedback. Even a 200ms file read or subprocess call is noticeable.
+**Why it happens:** Textual runs its own asyncio event loop. The iTerm2 Python API's `run_until_complete()` creates a NEW event loop and tries to run it. Python forbids running two event loops in the same thread. This is the single most dangerous integration pitfall for v1.1.
 
-**Why it happens:** Textual runs on asyncio. Coroutines only yield at `await` points. If you call `subprocess.run()`, `open().read()`, or `time.sleep()` inside a handler, the event loop is blocked until it returns. This is the single most common Textual mistake.
+**Consequences:** App crash on first iTerm2 API call. Complete failure of terminal pane.
 
-**Consequences:** UI appears frozen or dead. Users think the app crashed. Especially bad for joy because `o` (activate object) launches subprocesses (`open`, `osascript`) and those calls MUST be non-blocking.
+**Warning signs:** `RuntimeError: This event loop is already running` in logs. iTerm2 features silently do nothing.
 
 **Prevention:**
-- Use `@work(thread=True)` decorator or `self.run_worker()` for any I/O or subprocess call
-- Use `asyncio.create_subprocess_exec()` instead of `subprocess.run()` for launching URLs/apps
-- Never use `time.sleep()` -- use `await asyncio.sleep()` or `self.set_timer()`
-- Use `app.call_from_thread()` when a threaded worker needs to update the UI
+- NEVER use `iterm2.run_until_complete()` inside the Textual app
+- Use `iterm2.Connection.async_create()` instead -- this was designed for environments where an event loop already exists (REPL, embedded contexts). It returns a connection without creating a new event loop, using `asyncio.ensure_future()` to schedule its dispatch on the existing loop.
+- Run all iTerm2 API calls as `await`-able coroutines within Textual's existing event loop
+- Pattern:
+  ```python
+  async def _connect_iterm2(self) -> iterm2.Connection:
+      return await iterm2.Connection.async_create()
+  ```
+- If `async_create()` proves insufficient, the fallback is to run iTerm2 API calls in a separate thread with its own event loop using `@work(thread=True)` and `asyncio.run()` inside that thread
 
-**Detection:** App freezes momentarily when opening URLs, files, or iTerm2 windows. Profile with `python -X importtime` for import-time issues.
+**Detection:** Test iTerm2 connection during app startup. If `RuntimeError` occurs, the integration pattern is wrong.
 
-**Phase:** Phase 1 (core TUI) -- establish the pattern from day one. Every object activation handler must be async.
+**Phase:** Must be resolved in the very first phase that introduces iTerm2 Python API. Proof-of-concept before building features.
 
-**Confidence:** HIGH -- documented in official Textual docs, confirmed by multiple sources.
+**Confidence:** HIGH -- verified by reading the iTerm2 connection.py source code: `run_until_complete` calls `loop = asyncio.new_event_loop()` then `loop.run_until_complete()`.
 
 ---
 
-### CP-2: Slow Startup from Eager Imports
+### IT-2: iTerm2 Not Running or Python API Disabled
 
-**What goes wrong:** The TUI takes 500ms+ to show first paint. For a "snappy developer tool," anything over 300ms feels sluggish. Textual + Rich alone import in ~130-230ms. Add httpx, pydantic, or any heavy library and you easily hit 500ms+.
+**What goes wrong:** The iTerm2 Python API requires: (1) iTerm2 running, (2) "Enable Python API server" enabled in Preferences > General > Magic. If either is false, the connection fails. With `retry=True`, the connection retries forever, blocking the worker. With `retry=False`, it raises immediately but every 30-second refresh hits the same error.
 
-**Why it happens:** Python evaluates all top-level imports eagerly. Textual and Rich have substantial import trees. Any additional dependency (TOML writer, AppleScript helpers, etc.) compounds the problem.
+**Why it happens:** The iTerm2 Python API communicates via a local websocket server that iTerm2 hosts. If iTerm2 is not running, there is no server. If the API is disabled, the server rejects connections (permission denied / 401).
 
-**Consequences:** Users perceive the tool as slow. For a tool meant to be launched dozens of times daily, even 200ms extra startup is painful.
+**Consequences:** Terminal pane permanently blank. If retry=True, the worker is blocked forever -- consuming resources and never returning.
+
+**Warning signs:** Terminal pane shows "Connecting..." forever. CPU creeps up from retry loops.
 
 **Prevention:**
-- Profile imports early: `python -X importtime -c "from joy.app import JoyApp" 2>&1 | head -30`
-- Move non-essential imports inside functions (e.g., TOML writing only when saving, AppleScript only when activating agents)
-- Use Textual's `Lazy` widget for the detail pane content -- only render visible content on startup
-- Avoid libraries that auto-detect and import optional deps (httpx does this with click/rich)
-- Keep `__init__.py` files minimal -- no imports that trigger dependency chains
-- Target: first paint under 350ms
+- Default to `retry=False`. Catch the connection error and set a "disconnected" state
+- Show clear status: "iTerm2 not running" or "Enable Python API in iTerm2 Preferences > General > Magic"
+- Implement exponential backoff for reconnection: 5s, 10s, 30s, then stop until manual refresh (`r`)
+- Cache the connection object and reuse it. Only reconnect when the cached connection is dead
+- On first failure, check if iTerm2 is running via `subprocess.run(["pgrep", "-x", "iTerm2"])` -- if not, skip API calls entirely
+- Provide a green/red dot indicator in the terminal pane for connection status
 
-**Detection:** Run `time joy` from shell. If it's over 400ms to first paint, investigate.
+**Detection:** Launch joy with iTerm2 not running. Launch with Python API disabled. Both must degrade gracefully.
 
-**Phase:** Phase 1 -- measure from the very first prototype. Much harder to fix retroactively.
+**Phase:** Same phase as IT-1 -- connection lifecycle designed as a unit.
 
-**Confidence:** HIGH -- Posting (a real Textual app) documented a 40% improvement (580ms to 360ms) using exactly these techniques. Source: https://darren.codes/posts/python-startup-time/
+**Confidence:** HIGH -- verified from iTerm2 troubleshooting docs: connection errors produce specific codes (2 = connection error, not running or API not enabled).
 
 ---
 
-### CP-3: Fire-and-Forget Async Tasks (The Heisenbug)
+### IT-3: GPLv2+ License of the iterm2 Package
 
-**What goes wrong:** You create an asyncio task with `asyncio.create_task()` but don't store a reference. The garbage collector destroys the task before it completes. The operation silently fails -- no error, no warning, no traceback.
+**What goes wrong:** The `iterm2` package is GPLv2+ licensed (verified on PyPI, version 2.15 released 2026-04-12). If joy is MIT-licensed, adding `iterm2` as a hard dependency creates a license conflict.
 
-**Why it happens:** Unlike threads, asyncio tasks have no lifecycle protection. If no reference exists, GC collects them. This is intermittent and timing-dependent, making it extremely hard to debug.
+**Why it happens:** GPLv2+ is copyleft. A project that depends on GPLv2+ code must comply with GPL terms for distribution. MIT is compatible as input, but the distributed combination must honor GPL.
 
-**Consequences:** Object activations randomly fail to open. iTerm2 windows sometimes don't create. URLs sometimes don't open. The randomness makes it look like a system issue, not a code bug.
+**Consequences:** License compliance issue for a public repo.
 
 **Prevention:**
-- Always store task references: `self._tasks.add(task); task.add_done_callback(self._tasks.discard)`
-- Use Textual's `@work` decorator instead of raw `create_task()` -- it manages task lifecycle
-- Use `asyncio.TaskGroup` (Python 3.11+) for grouped operations
-- Never use bare `asyncio.create_task()` without storing the result
+- Make `iterm2` an optional dependency: `[project.optional-dependencies] terminal = ["iterm2>=2.7"]`
+- At runtime: `try: import iterm2` with fallback to AppleScript via `osascript`
+- This also eliminates import time cost when the Python API is not needed
+- The AppleScript fallback (already used in v1.0 for agents) provides basic session listing without the iterm2 package
 
-**Detection:** Operations that "sometimes work" are the classic symptom. Add logging to task completion callbacks.
+**Detection:** Review `pyproject.toml` dependency list.
 
-**Phase:** Phase 1 -- use `@work` from the start and never use raw `create_task`.
+**Phase:** Architecture decision before any iTerm2 code is written.
 
-**Confidence:** HIGH -- documented by Textual's creator: https://textual.textualize.io/blog/2023/02/11/the-heisenbug-lurking-in-your-async-code/
+**Confidence:** HIGH -- GPLv2+ verified on PyPI page.
 
 ---
 
-### CP-4: Non-Atomic Config File Writes Causing Data Loss
+### IT-4: Async Exception Swallowing in iTerm2 API Calls
 
-**What goes wrong:** Power loss, crash, or keyboard interrupt during a TOML write leaves `~/.joy/projects.toml` as a zero-byte or half-written file. Next startup fails with a parse error or silently loads empty data. All project configurations lost.
+**What goes wrong:** Exceptions in async tasks connected to the iTerm2 API are silently swallowed. Screen content reads fail, session lookups return None, RPCException is raised -- but no error surfaces. The terminal pane shows stale data.
 
-**Why it happens:** Naive `open("file", "w").write(data)` truncates the file before writing. If the process dies between truncation and write completion, the file is corrupted.
+**Why it happens:** Python asyncio discards exceptions in unawaited tasks. The iTerm2 troubleshooting docs explicitly warn: "Always catch exceptions in async tasks. They are silently swallowed." Combined with Textual workers using `exit_on_error=False`, errors vanish.
 
-**Consequences:** Total data loss for all project configurations. For a personal tool that stores workflow state, this is catastrophic.
+**Consequences:** Terminal pane shows stale data with no error indication. Debugging is blind.
 
 **Prevention:**
-- Write to a temp file in the same directory, then `os.replace()` (atomic on POSIX)
-- Pattern: `write to ~/.joy/.projects.toml.tmp` then `os.replace(tmp, target)`
-- Use the `safer` library if you want a drop-in replacement for `open()`
-- Keep a `.bak` copy before writes: `shutil.copy2(target, target + ".bak")`
-- On startup, if main file is corrupt/missing, check for `.bak` and recover
+- Wrap every iTerm2 API call in try/except and log or display the error
+- Use a structured error state: `_last_error: str | None` on the terminal pane widget
+- When `_last_error` is set, render it in the pane instead of stale data
+- Log exceptions to `~/.joy/debug.log` when `--debug` flag is passed
+- Pattern:
+  ```python
+  try:
+      contents = await session.async_get_screen_contents()
+  except iterm2.RPCException as e:
+      self._last_error = f"iTerm2 error: {e}"
+      return
+  ```
 
-**Detection:** Corrupt config file on startup. Add a try/except around TOML parsing with recovery logic.
+**Detection:** Force an error (close target session while joy reads it) and verify the pane shows an error.
 
-**Phase:** Phase 2 (data storage) -- implement atomic writes from the first file operation.
+**Phase:** Every phase that adds iTerm2 API calls must include error handling.
 
-**Confidence:** HIGH -- well-established pattern. The `atomicwrites` library is deprecated; use `safer` or manual temp+rename.
+**Confidence:** HIGH -- documented in iTerm2 Python API troubleshooting guide.
 
 ---
 
-## Common Mistakes
+### IT-5: Session Enumeration Returns Stale Data
 
-Frequently made errors in Textual TUI development that degrade quality.
+**What goes wrong:** The iTerm2 `App` object is a snapshot. Sessions created after the snapshot are invisible. Closed sessions may still appear.
 
-### CM-1: Textual Widget Lifecycle Confusion (compose vs on_mount timing)
+**Why it happens:** `await iterm2.async_get_app(connection)` captures current state. It does not update automatically.
 
-**What goes wrong:** Accessing child widgets or DOM in the wrong lifecycle phase. Trying to query children immediately after `mount()` -- they aren't ready yet. Trying to set reactive attributes in `__init__` before the widget is mounted -- watchers that query DOM crash.
-
-**Why it happens:** Textual guarantees mount completion by the *next* message handler, not immediately. `compose()` yields widgets, but they're not in the DOM until after compose returns.
-
-**Consequences:** AttributeError or NoMatches exceptions during initialization. Widgets appear blank or in wrong state.
+**Consequences:** Terminal pane lists closed sessions. New sessions don't appear until next full refresh.
 
 **Prevention:**
-- Data loading and widget population goes in `on_mount()`, not `__init__()` or `compose()`
-- Use `self.call_after_refresh()` if you need to act after layout is complete
-- For reactive attributes in `__init__`, use `self.set_reactive(MyWidget.my_attr, value)` instead of direct assignment
-- Never query child widgets inside `compose()` -- they don't exist yet
+- Re-fetch the app object before each enumeration: `app = await iterm2.async_get_app(connection)`
+- Use `NewSessionMonitor` and `SessionTerminationMonitor` for real-time tracking instead of polling
+- Catch `InvalidSessionId` when accessing a session that was closed between enumeration and use
 
-**Detection:** Exceptions during app startup containing "NoMatches" or "not mounted."
+**Detection:** Open/close iTerm2 tabs rapidly while terminal pane is updating.
 
-**Phase:** Phase 1 -- understand the lifecycle before building any widgets.
+**Phase:** Terminal pane implementation.
 
-**Confidence:** HIGH -- documented in Textual official docs and GitHub issues.
+**Confidence:** MEDIUM -- inferred from API design (snapshot model) and lifecycle docs.
 
 ---
 
-### CM-2: Textual CSS Sizing and Layout Traps
+### IT-6: Startup Time Regression from iterm2 + protobuf Import
 
-**What goes wrong:** Widgets render at wrong sizes, overflow their containers, or collapse to zero height. The two-pane layout (project list + detail) either doesn't split correctly or one pane dominates.
+**What goes wrong:** Adding `iterm2` pulls in `protobuf` and `websockets`. Eager import at module level adds 100-250ms, pushing past the 350ms startup target.
 
-**Why it happens:** Textual CSS is inspired by web CSS but has significant differences. Common traps:
-- Default `box-sizing` is `border-box` (border/padding reduces content area)
-- `height: auto` auto-detects from content but can collapse to 0 if content is empty
-- Forgetting to set explicit widths on the two panes (use `width: 1fr` and `width: 2fr` for a 1:2 split)
-- Button/Input widgets have default padding/border that make them taller than expected
+**Why it happens:** `protobuf` compiles proto message classes on import. v1.0 has ~250ms startup. Adding 200ms pushes to 450ms.
 
-**Consequences:** Broken layout. Detail pane either takes all space or collapses. Scrolling doesn't work in panes.
+**Consequences:** Joy feels sluggish on launch.
 
 **Prevention:**
-- Use `fr` units for the two-pane split: left pane `width: 1fr`, right pane `width: 2fr`
-- Set `height: 1fr` on containers that should fill available space
-- Use Textual's DevTools (`textual run --dev`) to inspect widget dimensions live
-- Set `overflow-y: auto` on the detail pane for scrolling
-- Remove default widget border/padding when building compact layouts: `border: none; padding: 0;`
+- NEVER import `iterm2` at module top-level
+- Import inside terminal pane's `on_mount()` or refresh worker
+- The terminal pane renders after the top row -- user sees projects first, so 200ms delay in terminal is invisible
+- Measure: `python -X importtime -c "import iterm2" 2>&1 | head -20`
 
-**Detection:** Visual inspection. Run with `textual run --dev` for live CSS debugging.
+**Detection:** `time joy` shows >400ms to first paint.
 
-**Phase:** Phase 1 -- get the two-pane layout right in the first milestone.
+**Phase:** First phase of v1.1.
 
-**Confidence:** HIGH -- documented in Textual layout guide and confirmed by GitHub issues.
+**Confidence:** HIGH -- protobuf import cost is well-documented. v1.0 already uses lazy imports.
 
 ---
 
-### CM-3: Key Binding Conflicts with Terminal Emulators
+### IT-7: Shell Integration Required for Some Variables
 
-**What goes wrong:** Keyboard shortcuts that work in one terminal don't work in another. Ctrl+key combinations are intercepted by the terminal, tmux, or iTerm2 before reaching the Textual app. Arrow keys stop working in certain contexts.
+**What goes wrong:** `session.async_get_variable("path")` returns None/empty without iTerm2 shell integration installed. Also affects `hostname`, `username`, `lastCommand`.
 
-**Why it happens:** Textual can only receive keys that the terminal emulator forwards. iTerm2, Terminal.app, and tmux all intercept certain key combinations. Ctrl+C, Ctrl+Z, and many Ctrl+letter combos are claimed by the terminal. Even Escape can have timing issues (terminal escape sequences).
-
-**Consequences:** Core navigation breaks for users with different terminal configurations.
+**Why it happens:** These variables rely on shell integration scripts being sourced in the user's shell profile. Without them, iTerm2 cannot track working directory.
 
 **Prevention:**
-- Stick to simple, safe bindings: single letters (`o`, `a`, `e`, `d`), Enter, Escape, Tab, arrow keys
-- Avoid Ctrl+key for primary operations (fine for secondary shortcuts)
-- Test in both iTerm2 and Terminal.app
-- Use Textual's binding priority system for critical bindings: `Binding("o", "activate", priority=True)`
-- Document that joy is designed for iTerm2 but should work in most terminals
+- Handle None/empty for all session variables -- show "Unknown" for missing data
+- `jobName` and `commandLine` work WITHOUT shell integration (from process table), so Claude detection is unaffected
+- Show a one-time hint: "Install iTerm2 shell integration for directory tracking"
 
-**Detection:** Test all keybindings in iTerm2 specifically, since that's the target terminal.
+**Detection:** Test with a fresh iTerm2 profile that has no shell integration.
 
-**Phase:** Phase 1 -- design the keymap once and test early.
+**Phase:** Terminal pane implementation.
 
-**Confidence:** HIGH -- confirmed by Textual FAQ, Posting project docs, and GitHub issues.
+**Confidence:** MEDIUM -- documented in iTerm2 variables reference, but exact fallback behavior needs testing.
 
 ---
 
-### CM-4: Using `webbrowser.open()` Instead of `subprocess.run(["open", ...])`
+## Background Polling Pitfalls
 
-**What goes wrong:** `webbrowser.open()` doesn't reliably handle custom URL schemes (`notion://`, `obsidian://`, `slack://`). It may open in the wrong app, fail silently, or not handle `file://` paths.
+### BP-1: Subprocess Calls Blocking the Event Loop (CRITICAL)
 
-**Why it happens:** `webbrowser.open()` is designed for HTTP URLs and browser control. Custom URL schemes require macOS's `open` command which delegates to the OS URL handler.
+**What goes wrong:** Running `subprocess.run(["gh", "pr", "list"])` on the main thread blocks Textual. With 10 repos at 30s intervals, the UI freezes for seconds every cycle.
 
-**Consequences:** Notion links open in browser instead of Notion app. Obsidian URIs fail. Slack deep links don't work.
+**Why it happens:** `subprocess.run()` is synchronous. 10 repos x 500ms each = 5 seconds of blocking.
+
+**Consequences:** UI freezes periodically. Keys queue up and fire in bursts.
 
 **Prevention:**
-- Always use `subprocess.run(["open", url])` or `asyncio.create_subprocess_exec("open", url)` on macOS
-- For app-specific URLs: `subprocess.run(["open", "-a", "Notion", url])` to force the correct app
-- For Obsidian: `subprocess.run(["open", f"obsidian://open?vault={vault}&file={file}"])`
-- URL-encode paths properly: use `urllib.parse.quote()` for file paths with spaces/special chars
+- Use `@work(thread=True)` for all subprocess calls (v1.0 established this pattern)
+- Run repos concurrently with `asyncio.create_subprocess_exec()` + `asyncio.gather()`
+- Cap concurrency with `asyncio.Semaphore(4)` to avoid fork-bombing
+- Always set `timeout=10` on subprocess calls
+- Pattern:
+  ```python
+  async def refresh_all_repos(repos):
+      sem = asyncio.Semaphore(4)
+      async def refresh_one(repo):
+          async with sem:
+              proc = await asyncio.create_subprocess_exec(
+                  "git", "worktree", "list", "--porcelain",
+                  cwd=repo.path, stdout=PIPE, stderr=PIPE
+              )
+              stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+              return parse_worktrees(stdout.decode())
+      return await asyncio.gather(*(refresh_one(r) for r in repos), return_exceptions=True)
+  ```
 
-**Detection:** URLs opening in browser instead of the native app.
+**Detection:** Time refresh cycles. Log if any takes >2 seconds.
 
-**Phase:** Phase 2 (object operations) -- this is the core of joy's activate functionality.
+**Phase:** Background refresh engine -- first thing to get right.
 
-**Confidence:** HIGH -- macOS `open` command behavior is well-documented. `webbrowser` limitations confirmed by Python docs.
+**Confidence:** HIGH -- standard async subprocess pattern.
 
 ---
 
-### CM-5: TOML Read/Write Library Mismatch
+### BP-2: GitHub API Rate Limiting via gh CLI
 
-**What goes wrong:** Using `tomllib` (stdlib, read-only) for reading but a different library for writing, leading to subtle formatting differences, lost comments, or round-trip corruption.
+**What goes wrong:** `gh` CLI uses GraphQL API. Authenticated users get 5,000 points/hour. At 30s intervals for 10 repos, that is 1,200 calls/hour. Each call costs 1-2 points. Approaching the limit, gh returns 403 errors.
 
-**Why it happens:** Python's stdlib `tomllib` (3.11+) only reads TOML. For writing, you need a separate library. `tomli-w` is minimal and doesn't preserve style. `tomlkit` preserves style but is heavier.
+**Consequences:** All GitHub data stops updating. Error messages flood the TUI.
 
-**Consequences:** Config files lose comments or formatting on save. Users who manually edit `~/.joy/config.toml` find their formatting destroyed.
+**Warning signs:** "API rate limit exceeded" errors from gh. Data stops updating.
 
 **Prevention:**
-- Use `tomlkit` for both reading and writing -- it preserves comments and formatting during round-trips
-- If startup time matters (it does for joy), lazy-import tomlkit: import inside the save function, not at module level
-- Alternative: use `tomllib` for reading (fast, stdlib) and `tomli-w` for writing (fast), but accept that manual formatting will be lost on save
-- Recommendation for joy: `tomllib` for reading (already in stdlib, zero import cost), `tomli-w` for writing (lightweight). Accept lost formatting since users rarely hand-edit these files.
+- Poll active project's repo at 30s, background repos at 5-minute intervals
+- Check rate limit: `gh api rate_limit --jq '.resources.graphql.remaining'` -- if below 500, extend interval to 5 minutes
+- Batch queries with `gh api graphql` instead of multiple `gh pr list` calls
+- Show rate limit status in footer
+- Design tiered refresh: active=30s, others=5m, low-rate=stop
 
-**Detection:** Save a config, inspect the file, check if comments/formatting survived.
+**Detection:** Monitor remaining rate limit after each cycle.
 
-**Phase:** Phase 2 (data storage) -- decide the library pair before writing any persistence code.
+**Phase:** Background refresh engine design.
 
-**Confidence:** HIGH -- confirmed by Real Python TOML guide and library comparisons.
+**Confidence:** HIGH -- GitHub rate limits verified from official docs. gh CLI discussion #5381 confirms GraphQL usage.
 
 ---
 
-### CM-6: Focus Traps in Keyboard-Only Navigation
+### BP-3: gh/glab CLI Not Installed or Not Authenticated
 
-**What goes wrong:** Focus gets stuck in a widget (e.g., an input field, a modal, or a sub-list) with no obvious way to escape. The user presses Escape or Tab and nothing happens. They're trapped.
+**What goes wrong:** `gh` not installed gives `FileNotFoundError`. Installed but not authenticated gives auth errors on stderr. `glab` has similar failure modes plus known issues with token expiry (keyring tokens broken since glab 1.84.0).
 
-**Why it happens:** Textual's focus chain follows DOM order. If a widget consumes Escape or Tab without propagating, focus is trapped. Modals that don't handle dismiss properly are the most common cause.
+**Consequences:** Every refresh produces errors. Error toast spam.
 
-**Consequences:** User has to Ctrl+C to quit. For a keyboard-only tool, this is a critical UX failure.
+**Warning signs:** `FileNotFoundError`. Non-zero exit with "not logged in" on stderr.
 
 **Prevention:**
-- Always handle Escape to dismiss/unfocus: every modal, input, and dialog must respond to Escape
-- Test the complete focus cycle: Tab through all widgets, Escape from every state
-- Use `self.app.pop_screen()` for screen-based navigation -- built-in Escape handling
-- Implement `action_focus_next` and `action_focus_previous` for Tab/Shift+Tab navigation
-- The project list and detail pane should be the only two focusable regions in the main view
+- On startup, probe CLI availability: `shutil.which("gh")` and `shutil.which("glab")`. Cache result.
+- If CLI not found, disable that provider and show "gh not installed" inline
+- Detect auth errors: gh writes "not logged into any GitHub hosts" to stderr. Use `capture_output=True` or `stderr=subprocess.PIPE`
+- IMPORTANT: gh writes some errors to stderr that `subprocess.run()` does NOT capture by default
+- Check auth once on startup: `gh auth status` (exit 0 = authenticated, 1 = not)
+- Check common PATH locations for macOS: `/usr/local/bin/gh`, `/opt/homebrew/bin/gh`
+- Make MR/CI status purely additive: worktree pane works fine without it
 
-**Detection:** Manual testing: try to Tab/Escape from every interactive element.
+**Detection:** Test with gh not installed. Test with gh installed but not authenticated.
 
-**Phase:** Phase 1 -- design focus management into the navigation model.
+**Phase:** First phase introducing gh/glab calls.
 
-**Confidence:** MEDIUM -- based on general TUI UX patterns and Textual focus documentation.
+**Confidence:** HIGH -- verified from gh CLI issue discussions and glab GitLab issues.
 
 ---
 
-## iTerm2 Integration Risks
+### BP-4: Subprocess Timeout and Zombie Processes
 
-Specific risks for the `agents` object type that creates/activates named iTerm2 windows.
+**What goes wrong:** `subprocess.run()` with no timeout hangs when git commands encounter SSH key prompts, DNS failures, or network timeouts. With `shell=True`, only the shell is killed on timeout -- the actual command becomes an orphan.
 
-### IR-1: AppleScript Is Deprecated, but Python API Has Higher Complexity
+**Why it happens:** `subprocess.run(timeout=N)` kills the child process, but with `shell=True` it kills the shell, not the grandchild. Git over SSH prompts for passphrase interactively, hanging forever.
 
-**What goes wrong:** AppleScript for iTerm2 is in "maintenance mode" and no longer receiving improvements. The official recommendation is to use the iTerm2 Python API. However, the Python API requires iTerm2 to be running and has its own complexity.
-
-**Why it happens:** iTerm2's Python API is more powerful but requires:
-- iTerm2 must be running (can't launch it via the API)
-- Scripts must connect to a running iTerm2 instance via its IPC mechanism
-- The API is async-only with `async_`-prefixed methods
-- Installing the `iterm2` Python package adds a dependency
-
-**Consequences:** Extra complexity. If iTerm2 isn't running, the API can't connect. The `iterm2` package adds import time even when not used.
+**Consequences:** Zombie processes accumulate. One hung subprocess per refresh = 120 zombies/hour.
 
 **Prevention:**
-- Use AppleScript via `osascript` for joy's simple use case (create window, set name, activate). It's simpler and sufficient.
-- AppleScript being in "maintenance mode" doesn't mean it's broken -- it just won't get new features. joy's needs are basic.
-- Fall back gracefully: if `osascript` fails, show an error in the TUI rather than crashing
-- Lazy-import the iTerm2 helper module -- never import at top level
-- Launch iTerm2 first if not running: `subprocess.run(["open", "-a", "iTerm"])` then wait briefly before AppleScript
+- NEVER use `shell=True`. Always pass command as a list: `["gh", "pr", "list"]`
+- Always set `timeout=10` on every subprocess call
+- Use `start_new_session=True` so the subprocess gets its own process group. On timeout, the entire group is killed
+- Set `GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=5"` in subprocess environment to prevent SSH prompts
+- Pattern:
+  ```python
+  result = subprocess.run(
+      ["git", "worktree", "list", "--porcelain"],
+      cwd=repo_path, capture_output=True, text=True, timeout=10,
+      env={**os.environ, "GIT_SSH_COMMAND": "ssh -o BatchMode=yes -o ConnectTimeout=5"}
+  )
+  ```
 
-**Detection:** Test with iTerm2 not running. Test with multiple iTerm2 windows already open.
+**Detection:** Monitor process count. Test with a repo whose remote is unreachable.
 
-**Phase:** Phase 3 (agents object type) -- this is a later feature, not critical path.
+**Phase:** Background refresh engine -- from the first subprocess call.
 
-**Confidence:** MEDIUM -- AppleScript still works, but the iTerm2 team explicitly recommends the Python API. For joy's simple needs, AppleScript is pragmatic.
+**Confidence:** HIGH -- verified via Python subprocess docs and CPython issues (30154, 37424).
 
 ---
 
-### IR-2: Race Condition in AppleScript Session Targeting
+### BP-5: Refresh Timer Stacking
 
-**What goes wrong:** AppleScript sends text or commands to the wrong iTerm2 session/window if the target session was closed or if another session was activated between the "find window" and "write to session" steps.
+**What goes wrong:** `set_interval(30)` fires regardless of how long the previous refresh took. If a refresh takes 35 seconds, two cycles overlap, doubling subprocess load and causing race conditions with out-of-order completion.
 
-**Why it happens:** There's a documented iTerm2 bug (GitLab issue #5462): if an initial session gets killed and another session is already open, AppleScript writes text to the wrong session. AppleScript commands are not atomic.
+**Why it happens:** `set_interval` fires on a fixed schedule, not relative to completion.
 
-**Consequences:** Commands intended for one project's agent window end up in another window. Data leaks between projects.
+**Consequences:** Concurrent refreshes compete. Older data overwrites newer data.
 
 **Prevention:**
-- Always identify windows by name, not by index or "current window"
-- After creating/finding a window, immediately set and verify its name property
-- Use a unique naming convention: `joy: <project-name>` to minimize collision risk
-- Add a brief delay (200-500ms) between creating a window and sending commands to it
-- If the target window can't be found by name, create a new one rather than falling back to "current"
+- Use `@work(thread=True, exclusive=True)` -- cancels previous worker when new one starts
+- Better: use `set_timer(30)` (single-fire) at the END of each refresh cycle instead of `set_interval(30)`. Next refresh starts 30s after completion, not 30s after start.
+- Track `_refresh_in_progress` flag. Skip if already running.
+- Use a generation counter (like existing `_render_generation` in ProjectDetail) to discard stale results
+- Pattern:
+  ```python
+  def _schedule_next_refresh(self):
+      self.set_timer(30, self._do_refresh)
 
-**Detection:** Test rapid open/close of iTerm2 windows while joy is activating agents.
+  @work(thread=True, exclusive=True)
+  def _do_refresh(self):
+      # ... work ...
+      self.call_from_thread(self._schedule_next_refresh)
+  ```
 
-**Phase:** Phase 3 (agents) -- build and test carefully with race conditions in mind.
+**Detection:** Timestamps in refresh logs. Check for overlapping cycles.
 
-**Confidence:** MEDIUM -- the specific bug is documented, but joy's use case (create/activate by name) is simpler than the documented failure mode (write to session).
+**Phase:** Background refresh engine design.
+
+**Confidence:** HIGH -- standard timer pattern. Textual timer docs confirm set_interval vs set_timer behavior.
 
 ---
 
-### IR-3: iTerm2 Window Naming is Session-Level, Not Window-Level
+### BP-6: UI Flicker and Cursor Jump on Background Refresh
 
-**What goes wrong:** iTerm2's AppleScript API sets names on sessions, not windows. A window's "title" is derived from its active session's name. If the window has multiple tabs, the name may not display as expected.
+**What goes wrong:** Every 30 seconds the panes refresh. If refresh replaces the entire widget tree (recompose), cursor position resets, scroll is lost, visible flicker occurs.
 
-**Why it happens:** iTerm2's hierarchy is: Application > Window > Tab > Session. The "name" property exists on sessions. Window titles are computed from the active tab's active session name, plus iTerm2's title bar configuration.
+**Why it happens:** Using `reactive(..., recompose=True)` destroys and recreates all children, losing all widget state.
 
-**Consequences:** Finding a window "by name" requires iterating windows, checking their sessions' names. If the user creates additional tabs in a joy-managed window, the naming may break.
+**Consequences:** User is viewing worktree #5, refresh happens, they are back at #1.
 
 **Prevention:**
-- Set the session name immediately after creation
-- When searching for existing windows, iterate all windows and check their first session's name
-- Use a prefix pattern (`joy:projectname`) that's unlikely to collide with user-set session names
-- Accept that if a user renames the session manually, joy won't find it -- document this behavior
+- Do NOT use `recompose=True` for periodically-refreshed data
+- Use update-in-place: compare old and new data, update existing widgets, add/remove only what changed
+- Preserve highlighted index: save before refresh, restore after, matching by identity (branch name, session ID) not position
+- Pattern: `self._highlighted_branch = current_branch_name` before refresh, find in new data after
+- v1.0's `_render_generation` pattern is a good foundation -- extend it with cursor preservation
 
-**Detection:** Create a joy agent window, manually add tabs to it, then try to reactivate from joy.
+**Detection:** Select worktree #3, wait for refresh, verify cursor stays on worktree #3.
 
-**Phase:** Phase 3 (agents).
+**Phase:** Background refresh engine -- build cursor preservation from day one.
 
-**Confidence:** MEDIUM -- based on iTerm2 API documentation for Window and Session objects.
+**Confidence:** HIGH -- well-known reactive UI issue. k9s and lazygit both solve it by preserving cursor by identity.
 
 ---
 
-## Packaging and Distribution Risks
+### BP-7: Stale Data After Repo Path Changes
 
-Edge cases with `uv tool install git+...` distribution model.
-
-### PD-1: Entry Point Not Found After Install
-
-**What goes wrong:** `uv tool install git+https://github.com/user/joy` succeeds but running `joy` gives "command not found."
-
-**Why it happens:** The `[project.scripts]` section in `pyproject.toml` is misconfigured or the entry point function doesn't exist. Common mistakes:
-- Typo in the module path: `joy = "joy.app:main"` where `main` doesn't exist in `joy/app.py`
-- Missing `__init__.py` in the package directory
-- The `[build-system]` section is missing or misconfigured
-
-**Consequences:** Users install but can't run the tool. First impression is "broken."
+**What goes wrong:** A repo is moved or deleted. Background refresh tries the old path, gets errors, but the pane shows last successful data.
 
 **Prevention:**
-- Test `uv tool install .` locally before pushing
-- Verify the entry point: `[project.scripts]\njoy = "joy.__main__:main"` and ensure that function exists
-- Include `[build-system]\nrequires = ["hatchling"]\nbuild-backend = "hatchling.build"` (or setuptools equivalent)
-- Test in a clean environment: `uv tool install --force git+file:///path/to/local/repo`
+- On subprocess error for a repo, clear its pane data and show "Repo not found: /path"
+- Validate paths on startup: `os.path.isdir(repo.path)` and check for `.git`
+- Mark unreachable repos with a visual indicator
+- Always show "last updated" timestamps
 
-**Detection:** `which joy` returns nothing after install.
+**Detection:** Delete a repo directory while joy is running.
 
-**Phase:** Phase 1 -- validate the installation path on day one.
+**Phase:** Repo registry implementation.
 
-**Confidence:** HIGH -- standard Python packaging issue, well-documented.
+**Confidence:** MEDIUM -- standard pattern.
 
 ---
 
-### PD-2: Upgrade Doesn't Pull Latest Git Commit
+## Textual Layout Pitfalls
 
-**What goes wrong:** Running `uv tool upgrade joy` doesn't fetch new commits from the git repo. The user is stuck on an old version.
+### TL-1: 4-Pane Layout Breaking Existing 2-Pane (CRITICAL)
 
-**Why it happens:** `uv tool upgrade` respects the originally installed version constraints. For git sources, it may not re-resolve to the latest commit on the branch. The lockfile pins a specific commit hash.
+**What goes wrong:** Adding two panes to the existing `Horizontal(ProjectList, ProjectDetail)` breaks CSS sizing. `width: 1fr / 2fr` rules produce unexpected results. Panes collapse to zero height.
 
-**Consequences:** Users don't get updates. They think they've upgraded but are running old code.
+**Why it happens:** The current layout is a flat Horizontal with two children. A 2x2 grid requires restructuring to nested containers (`Vertical > two Horizontals`). This changes the DOM structure, breaking CSS selectors and widget queries.
+
+**Consequences:** Complete layout breakage. All existing CSS invalid.
 
 **Prevention:**
-- Document the upgrade process: `uv tool install --force git+https://github.com/user/joy` (reinstall, not upgrade)
-- Consider using `uv tool install --reinstall` for updates
-- Pin a version in pyproject.toml and tag releases -- then `uv tool upgrade` works as expected
-- Add a `joy --version` command so users can verify their installed version
+- Do this as a single atomic change. Do not add panes incrementally.
+- Recommended structure:
+  ```python
+  def compose(self):
+      yield Header()
+      with Vertical(id="main-content"):
+          with Horizontal(id="top-row"):
+              yield ProjectList(id="project-list")
+              yield ProjectDetail(id="project-detail")
+          with Horizontal(id="bottom-row"):
+              yield TerminalPane(id="terminal-pane")
+              yield WorktreePane(id="worktree-pane")
+      yield Footer()
+  ```
+- Use explicit heights: `#top-row { height: 1fr; } #bottom-row { height: 1fr; }` for 50/50
+- Preserve existing width ratios within each row
+- CRITICAL: Update ALL `query_one()` calls in app.py -- DOM path may change
+- Test with `textual run --dev` to inspect computed sizes
 
-**Detection:** `joy --version` shows wrong version after "upgrade."
+**Detection:** Visual inspection. All four panes visible with correct proportions.
 
-**Phase:** Phase 1 -- document the install/upgrade process in README.
+**Phase:** THE FIRST THING to implement in v1.1. Everything depends on layout.
 
-**Confidence:** HIGH -- confirmed by uv docs and GitHub issues about git dependency locking.
+**Confidence:** HIGH -- standard CSS layout restructuring.
 
 ---
 
-### PD-3: Missing Implicit Dependencies
+### TL-2: Focus Management with Non-Interactive Panes
 
-**What goes wrong:** The tool installs fine in the development environment but fails for users because a dependency that's globally available in dev isn't declared in `pyproject.toml`.
+**What goes wrong:** Worktree and terminal panes are primarily display-only. If `can_focus=True`, Tab navigation includes them (4 panes to tab through). If `can_focus=False`, their keybindings (Enter, r) don't work.
 
-**Why it happens:** `uv tool install` creates an isolated virtual environment. Any package not listed in `[project.dependencies]` won't be available. Common culprits:
-- `tomlkit` or `tomli-w` (not stdlib)
-- `iterm2` Python package (if using the Python API instead of AppleScript)
-- Forgetting to declare `textual` itself
-
-**Consequences:** ImportError on first run. Terrible first experience.
+**Consequences:** Either: Tab cycling is tedious (4 panes), or new panes can't respond to keys.
 
 **Prevention:**
-- Test installation in a completely clean environment (new user account or container)
-- Run `uv tool install .` in a fresh directory without a virtualenv active
-- List ALL runtime dependencies in `[project.dependencies]`
-- Use `uv tool install --python 3.12` to test with a specific Python version
+- Make new panes `can_focus=True` with specific BINDINGS (Enter, r)
+- Use dedicated keys to jump to panes: `1`=project list, `2`=detail, `3`=terminal, `4`=worktree
+- OR: Keep Tab cycling top row only, use dedicated keys for bottom panes
+- Escape from bottom panes returns to top row
+- `r` (refresh) should be a priority binding on App level, working regardless of focus
 
-**Detection:** ImportError on first run after clean install.
+**Detection:** Tab through all panes. Count keystrokes to reach each. Escape from each.
 
-**Phase:** Phase 1 -- CI should test `uv tool install` in a clean environment.
+**Phase:** Layout phase -- design focus model before content.
 
-**Confidence:** HIGH -- standard packaging pitfall.
+**Confidence:** HIGH -- based on existing joy patterns and Textual focus docs.
 
 ---
 
-## Obsidian and URL Scheme Risks
+### TL-3: Widget Count Performance Degradation
 
-### UR-1: Obsidian URI Path Encoding Breaks on Spaces and Special Characters
+**What goes wrong:** Two new panes with many child widgets (40+ worktree rows) plus existing detail pane rows. Textual recalculates layout for all visible widgets on every update.
 
-**What goes wrong:** Opening `obsidian://open?vault=My Vault&file=My Note` fails because the spaces and special characters aren't properly URL-encoded.
-
-**Why it happens:** The Obsidian URI scheme requires proper percent-encoding for spaces, slashes, and special characters in vault names and file paths. The `open` command on macOS passes the URI as-is to the handler, but shell escaping and URL encoding are separate concerns.
-
-**Consequences:** Notes with spaces in filenames (extremely common) fail to open. Users think Obsidian integration is broken.
+**Consequences:** Perceptible lag when switching projects. Flicker during updates.
 
 **Prevention:**
-- Always URL-encode the vault name and file path: `urllib.parse.quote(vault_name, safe="")` and `urllib.parse.quote(file_path, safe="/")`
-- Build the URI carefully: `f"obsidian://open?vault={quote(vault)}&file={quote(file)}"`
-- Test with file paths containing: spaces, parentheses, apostrophes, unicode characters, and nested directories
-- Shell-escape the full URI when passing to subprocess: use list form `["open", uri]` not string form
+- Use batched DOM updates: remove all children then mount all new ones
+- Use `widget.update(content)` to update existing widgets instead of remounting
+- Consider a single `Static` widget rendering all worktree data as Rich text
+- Profile with `textual run --dev`
 
-**Detection:** Test with a note file named "My Project (2024) Notes/Daily Log.md".
+**Detection:** Measure render time with varying widget counts.
 
-**Phase:** Phase 2 (object operations) -- test encoding edge cases for every URL scheme.
+**Phase:** After basic pane content works -- optimize if needed.
 
-**Confidence:** HIGH -- documented in Obsidian help docs, confirmed by forum posts about encoding issues.
+**Confidence:** MEDIUM -- depends on actual widget counts.
 
 ---
 
-### UR-2: Notion/Slack URL Scheme Changes Break Deep Links
+### TL-4: Key Binding Conflicts in 4-Pane Layout
 
-**What goes wrong:** `notion://` or `slack://` URL schemes change format between app versions, breaking previously-stored deep links.
+**What goes wrong:** `j`/`k` defined on existing panes (JoyListView, ProjectDetail) may conflict with navigation in new panes. App-level bindings (q, n, s, O) may shadow pane bindings.
 
-**Why it happens:** URL schemes for desktop apps are not standardized. Notion has changed its URL scheme format in the past. Slack's deep link format differs between the web and desktop app.
-
-**Consequences:** Stored project URLs stop working after an app update.
+**Why it happens:** Textual walks from focused widget up to app. Pane bindings take priority unless app uses `priority=True`. With four panes, conflicts multiply.
 
 **Prevention:**
-- Store the original HTTPS URL, not the scheme-rewritten URL
-- Convert `https://` to `notion://` (or equivalent) at activation time, not at storage time
-- This way, if the scheme changes, you only need to update the conversion logic, not all stored data
-- For Notion: replace `https://www.notion.so/` with `notion://www.notion.so/` at open time
-- For Slack: consider using `open -a Slack <https-url>` instead of scheme rewriting
+- Document binding ownership:
+  - App level (priority=True): `q`, `n`, `s`, `r`, `O`
+  - Each pane: `j`/`k` for navigation, pane-specific actions
+- `j`/`k` defined per pane, only active when that pane has focus
+- App-level must-always-work bindings use `priority=True`
+- Create a test matrix: (key x focused_pane) -- verify each cell
 
-**Detection:** Stored URLs fail to open in the desktop app after an app update.
+**Detection:** Test every binding in every focus state.
 
-**Phase:** Phase 2 (object operations) -- design the storage format to store raw URLs.
+**Phase:** Layout and focus model phase.
 
-**Confidence:** MEDIUM -- based on community reports of scheme changes; not independently verified for current versions.
+**Confidence:** HIGH -- verified against Textual input documentation and existing joy code.
 
 ---
 
-## Per-Phase Warnings Summary
+## Claude Detection Pitfalls
 
-| Phase | Pitfall | Severity | Mitigation |
-|-------|---------|----------|------------|
-| Phase 1 (Core TUI) | CP-1: Event loop blocking | CRITICAL | Use @work decorator for all I/O |
-| Phase 1 (Core TUI) | CP-2: Slow startup imports | CRITICAL | Profile imports, lazy-load non-essential |
-| Phase 1 (Core TUI) | CP-3: Task GC heisenbug | CRITICAL | Always use @work, never bare create_task |
-| Phase 1 (Core TUI) | CM-1: Widget lifecycle | HIGH | Load data in on_mount, not compose/init |
-| Phase 1 (Core TUI) | CM-2: CSS layout traps | HIGH | Use fr units, test with --dev |
-| Phase 1 (Core TUI) | CM-3: Key binding conflicts | HIGH | Stick to simple letter keys, test in iTerm2 |
-| Phase 1 (Core TUI) | CM-6: Focus traps | HIGH | Escape always unfocuses/dismisses |
-| Phase 1 (Core TUI) | PD-1: Entry point config | HIGH | Test uv tool install . on day one |
-| Phase 2 (Data/Ops) | CP-4: Non-atomic writes | CRITICAL | Write temp + os.replace pattern |
-| Phase 2 (Data/Ops) | CM-4: webbrowser.open | HIGH | Use subprocess open command |
-| Phase 2 (Data/Ops) | CM-5: TOML library choice | MEDIUM | tomllib read + tomli-w write |
-| Phase 2 (Data/Ops) | UR-1: Obsidian URI encoding | HIGH | URL-encode all path components |
-| Phase 2 (Data/Ops) | UR-2: URL scheme fragility | MEDIUM | Store HTTPS, convert at open time |
-| Phase 3 (Agents) | IR-1: AppleScript deprecation | MEDIUM | Use AppleScript for simplicity, accept risk |
-| Phase 3 (Agents) | IR-2: Session race condition | MEDIUM | Identify by name, add delays |
-| Phase 3 (Agents) | IR-3: Window vs session naming | MEDIUM | Use session name with prefix convention |
-| Distribution | PD-2: Git upgrade behavior | HIGH | Document reinstall-based updates |
-| Distribution | PD-3: Missing dependencies | HIGH | Test clean install in isolation |
+### CD-1: Process-Name Detection Unreliable
+
+**What goes wrong:** Detecting "Claude is busy" via iTerm2's `jobName` variable fails because Claude Code runs as `node` (or full path like `/Users/pieter/.nvm/versions/node/v22.17.1/bin/node`). When Claude spawns subprocesses (git, npm), the foreground job changes temporarily.
+
+**Consequences:** False negatives (Claude running but shows "idle" because jobName is "node"). False positives (other Node.js process). Flicker (Claude alternates with its subprocess tools).
+
+**Prevention:**
+- Use `commandLine` not `jobName`: `"claude" in (await session.async_get_variable("commandLine") or "").lower()`
+- Handle flicker: maintain a 5-second sticky state. If Claude was foreground within last 5 seconds, still show "busy"
+- Combine signals: commandLine contains "claude" AND (optionally) screen content matches Claude's UI
+- Accept detection will never be 100%. Show "likely busy" / "likely idle" not definitive states
+
+**Detection:** Run Claude Code, trigger tool use, verify detection doesn't flicker.
+
+**Phase:** Terminal pane implementation.
+
+**Confidence:** MEDIUM -- inferred from iTerm2 variable docs and Claude Code's Node.js architecture. The exact commandLine format needs empirical verification.
+
+---
+
+### CD-2: Screen Content Reading is Expensive and Racy
+
+**What goes wrong:** `session.async_get_screen_contents()` for every terminal session every 30 seconds is expensive. Each call is a websocket round-trip. With 5+ sessions, adds significant latency.
+
+**Prevention:**
+- Only read screen contents for the selected/visible session
+- For non-selected sessions, use lightweight variables only: `jobName`, `commandLine`, `path`
+- Use `ScreenStreamer` (push-based) instead of polling for screen changes
+- Rate limit screen reads to once per 5 seconds per session
+- Cache content, only re-render if changed (compare hashes)
+
+**Detection:** Time terminal pane refresh with varying session counts.
+
+**Phase:** Terminal pane -- after basic connection works.
+
+**Confidence:** MEDIUM -- based on API design. Needs benchmarking.
+
+---
+
+### CD-3: False Positives from Screen Content Matching
+
+**What goes wrong:** Searching terminal content for "claude" produces false matches. `git log` showing a commit by "Claude" triggers false busy detection. Any script printing "claude" looks like Claude running.
+
+**Prevention:**
+- Prefer process-based detection (commandLine) over screen content
+- If using screen content, match Claude Code's specific TUI patterns (status bar, spinner characters, specific layout at terminal bottom)
+- Combine signals: commandLine AND screen pattern must both agree for "busy"
+- Allow manual session marking in settings as a reliable override
+- Never match on just the word "claude" in screen content
+
+**Detection:** Run `echo "claude is great"` in a terminal and verify no false trigger.
+
+**Phase:** Terminal pane -- after basic detection works.
+
+**Confidence:** MEDIUM -- screen content matching is inherently heuristic.
+
+---
+
+## Worktree Discovery Pitfalls
+
+### WD-1: Bare Repositories in Porcelain Output
+
+**What goes wrong:** `git worktree list --porcelain` includes the bare repo as the first entry when the repo was cloned with `--bare`. Output has `bare` flag but no `HEAD` or `branch` line. Parsing code expecting `branch` crashes.
+
+**Porcelain output for bare repo:**
+```
+worktree /path/to/bare-repo
+bare
+
+```
+
+**Prevention:**
+- Check for `bare` flag when parsing. Skip bare entries entirely.
+- Parse each block as a dict of attributes. Only create worktree rows when `bare` is NOT present.
+
+**Detection:** Test with a bare-cloned repository.
+
+**Phase:** Worktree discovery implementation.
+
+**Confidence:** HIGH -- verified from official `git worktree list --porcelain` documentation.
+
+---
+
+### WD-2: Detached HEAD Worktrees Have No Branch
+
+**What goes wrong:** Detached HEAD worktrees show `detached` instead of `branch`. Code extracting branch name gets None.
+
+**Porcelain output for detached:**
+```
+worktree /path/to/worktree
+HEAD abc123def456
+detached
+
+```
+
+**Prevention:**
+- If `branch` absent, check for `detached`. Display as "detached @ abc1234" (first 7 of HEAD)
+- Pattern: `branch = attrs.get("branch", "").removeprefix("refs/heads/") or f"detached @ {attrs.get('HEAD', '?')[:7]}"`
+
+**Detection:** Create detached worktree: `git worktree add --detach /tmp/test HEAD~2`.
+
+**Phase:** Worktree discovery.
+
+**Confidence:** HIGH -- verified from official git docs.
+
+---
+
+### WD-3: Locked and Prunable Worktrees
+
+**What goes wrong:** `locked` appears as `locked` (no reason) or `locked some reason text` (with reason). `prunable` similarly. Variable-format breaks naive parsing.
+
+**Prevention:**
+- Parse `locked` and `prunable` as optional attributes with optional values
+- Show lock icon for locked worktrees, warning icon for prunable
+- Use `--porcelain -z` (NUL-terminated) for robust parsing of reasons with unusual characters
+- Skip or dim prunable worktrees (gitdir points to non-existent location)
+
+**Detection:** Lock a worktree: `git worktree lock /path --reason "testing"`.
+
+**Phase:** Worktree discovery.
+
+**Confidence:** HIGH -- verified from official git docs.
+
+---
+
+### WD-4: Repo vs Worktree vs Submodule Confusion
+
+**What goes wrong:** Running `git worktree list` from a worktree checkout (not main repo) still lists all worktrees -- but if both the main repo AND a worktree checkout are in the registry, worktrees appear twice. Submodule directories produce unexpected results.
+
+**Why it happens:** Git worktrees have a `.git` file (not directory) pointing to the main repo. `git worktree list` always operates relative to the main repository. Submodules similarly redirect.
+
+**Prevention:**
+- Resolve the real repo root: `git rev-parse --git-common-dir` to find shared git dir, then deduplicate
+- When adding repos to registry, normalize to main worktree: parse first entry of `git worktree list --porcelain`
+- Skip submodule directories: `.git` is a file containing `gitdir: ...modules/...` path
+- Deduplicate: if two registry entries share the same git-common-dir, merge them
+
+**Detection:** Add both a main repo and one of its worktrees to the registry. Verify no duplication.
+
+**Phase:** Repo registry implementation.
+
+**Confidence:** MEDIUM -- depends on user's repo setup.
+
+---
+
+### WD-5: Worktree List Hangs on Unreachable Paths
+
+**What goes wrong:** If a repo path points to a network filesystem that is unreachable or an unmounted external drive, `git worktree list` hangs waiting for the filesystem.
+
+**Prevention:**
+- Always use `timeout=10` on subprocess calls (covered in BP-4)
+- Pre-check with `os.path.exists(repo.path)` -- fast, fails on unreachable mounts
+- Run repo refreshes concurrently so one hung repo doesn't block others
+- Show per-repo refresh status: "refreshing...", "timed out", "complete"
+
+**Detection:** Add a repo path pointing to non-existent or unmounted path.
+
+**Phase:** Background refresh engine.
+
+**Confidence:** HIGH -- standard filesystem timeout issue.
+
+---
+
+### WD-6: Dirty Detection Overhead
+
+**What goes wrong:** Detecting dirty status requires `git status` for each worktree. With 20 worktrees, that is 20 subprocess calls, each 200-500ms for large repos.
+
+**Prevention:**
+- Run dirty checks concurrently with semaphore pattern from BP-1
+- Use `git diff --quiet HEAD` -- exits 0 if clean, 1 if dirty, no output parsing. Fastest option.
+- Show dirty status only for active project's worktrees. Others on 5-minute interval.
+- Alternative: `git status --porcelain --untracked-files=no` for minimal output
+
+**Detection:** Measure refresh time with 20 worktrees.
+
+**Phase:** Worktree pane implementation.
+
+**Confidence:** MEDIUM -- performance depends on repo size.
+
+---
+
+## Mixed Platform (GitHub/GitLab) Pitfalls
+
+### MP-1: Remote URL Detection Fails for Non-Standard Hosts
+
+**What goes wrong:** Detecting GitHub vs GitLab by checking for "github.com" or "gitlab.com" in the remote URL fails for: self-hosted GitLab, GitHub Enterprise, SSH config aliases.
+
+**Prevention:**
+- Use CLIs for detection: `gh repo view --json name 2>/dev/null` succeeds for GitHub-compatible remotes. `glab repo view 2>/dev/null` for GitLab.
+- Allow manual override per repo in settings
+- Fall back to URL pattern matching as a heuristic, not primary method
+- For SSH aliases, use `git remote get-url origin` (returns configured URL)
+
+**Detection:** Test with SSH alias repo. Test with self-hosted GitLab.
+
+**Phase:** Mixed platform support.
+
+**Confidence:** MEDIUM -- detection heuristics have edge cases.
+
+---
+
+### MP-2: Different CLI Output Formats
+
+**What goes wrong:** `gh pr list --json` and `glab mr list --json` return different JSON schemas. Field names differ: `headRefName` vs `source_branch`, `url` vs `web_url`, `state` values differ in case.
+
+**Prevention:**
+- Create a unified internal model (dataclass) for MR/PR data
+- Write separate parser functions per CLI, each mapping to the unified model
+- Key mappings:
+  - gh `headRefName` = glab `source_branch`
+  - gh `url` = glab `web_url`
+  - gh `state` (OPEN/CLOSED/MERGED) = glab `state` (opened/closed/merged) -- case differs
+  - gh `author.login` = glab `author.username`
+- Test both parsers with real CLI output
+
+**Detection:** Run both CLIs on real repos and compare output.
+
+**Phase:** Mixed platform support.
+
+**Confidence:** HIGH -- different schemas are verifiable.
+
+---
+
+### MP-3: Auth Credentials Independent Between Platforms
+
+**What goes wrong:** User authenticated with `gh` but not `glab` (or vice versa). `glab` commands fail with "401 Unauthorized" or "token was revoked" -- looks like a network error, not an auth error.
+
+**Prevention:**
+- Check auth per platform on startup: `gh auth status` and `glab auth status`
+- Store auth status per platform. If not authenticated, show "Run `glab auth login`" inline
+- Do not attempt API calls for unauthenticated platforms
+- Handle token expiry: if 401 after previously successful calls, re-check auth
+
+**Detection:** Test with gh authenticated but glab not.
+
+**Phase:** Mixed platform support.
+
+**Confidence:** HIGH -- standard multi-platform auth issue.
+
+---
+
+## Phase-Specific Warnings Summary
+
+| Phase Topic | Pitfall ID | Severity | Mitigation |
+|-------------|------------|----------|------------|
+| Layout restructure | TL-1 | CRITICAL | Atomic layout change, update all queries |
+| Layout restructure | TL-2 | HIGH | Design focus model before content |
+| Layout restructure | TL-4 | HIGH | Document binding ownership matrix |
+| iTerm2 connection | IT-1 | CRITICAL | async_create(), never run_until_complete() |
+| iTerm2 connection | IT-2 | HIGH | Graceful degradation, exponential backoff |
+| iTerm2 dependency | IT-3 | HIGH | Optional dependency with AppleScript fallback |
+| iTerm2 errors | IT-4 | HIGH | try/except every API call |
+| Startup time | IT-6 | HIGH | Lazy import iterm2 in terminal pane only |
+| Background refresh | BP-1 | CRITICAL | Thread workers + semaphore concurrency |
+| Background refresh | BP-2 | HIGH | Tiered polling, rate limit monitoring |
+| Background refresh | BP-4 | HIGH | Timeouts, no shell=True, BatchMode SSH |
+| Background refresh | BP-5 | HIGH | Exclusive workers, set_timer not set_interval |
+| Background refresh | BP-6 | HIGH | Update-in-place, preserve cursor by identity |
+| CLI availability | BP-3 | HIGH | Probe with shutil.which, cache result |
+| Worktree discovery | WD-1 | HIGH | Skip bare repo entries |
+| Worktree discovery | WD-2 | HIGH | Handle detached HEAD display |
+| Worktree discovery | WD-4 | MEDIUM | Deduplicate via git-common-dir |
+| Worktree discovery | WD-6 | MEDIUM | Concurrent dirty checks, limit scope |
+| Claude detection | CD-1 | MEDIUM | commandLine not jobName, sticky state |
+| Claude detection | CD-3 | MEDIUM | Combine signals, avoid screen content alone |
+| Terminal pane | IT-5 | MEDIUM | Re-fetch app object before enumeration |
+| Terminal pane | IT-7 | MEDIUM | Handle None for shell integration vars |
+| Terminal pane | CD-2 | MEDIUM | Read screen only for selected session |
+| Platform detection | MP-1 | MEDIUM | CLI probing, manual override |
+| Platform detection | MP-2 | HIGH | Unified data model, separate parsers |
+| Platform auth | MP-3 | HIGH | Check auth on startup per platform |
+| Performance | TL-3 | MEDIUM | Profile widget count, batch updates |
+| Filesystem | WD-5 | MEDIUM | Timeouts + concurrent refreshes |
+| Stale data | BP-7 | MEDIUM | Validate paths, staleness indicators |
 
 ---
 
 ## Key Findings
 
-1. **Event loop blocking is the #1 Textual pitfall.** Every `subprocess.run()`, file read, or external tool invocation must go through `@work(thread=True)` or `asyncio.create_subprocess_exec()`. This must be the default pattern from line one of code, not retrofitted.
+1. **The iTerm2 event loop conflict (IT-1) is the single most dangerous pitfall.** `iterm2.run_until_complete()` MUST NOT be used inside a Textual app. Use `iterm2.Connection.async_create()`. This must be validated in a proof-of-concept before building any features on top. Verified from source code.
 
-2. **Startup time will be a fight.** Textual + Rich alone cost 130-230ms. The Posting project (a real Textual app) documented a 40% reduction by lazy-importing non-essential modules. Joy should measure startup on every PR and target under 350ms to first paint.
+2. **The iterm2 package is GPLv2+ licensed (IT-3).** Make it an optional dependency with an AppleScript fallback. This also eliminates import-time cost and avoids license complications for a public repo.
 
-3. **Atomic file writes are non-negotiable for `~/.joy/` data.** A single interrupted write can destroy all project configurations. The temp-file-then-rename pattern costs nothing and prevents catastrophic data loss.
+3. **Background subprocess polling needs three safety measures:** thread workers (BP-1), timeouts on every call (BP-4), and exclusive workers to prevent stacking (BP-5). Together these prevent the most common failure modes. The concurrent semaphore pattern caps system load.
 
-4. **AppleScript is simpler than iTerm2's Python API for joy's needs.** The Python API is more powerful but requires iTerm2 to be running and adds dependency complexity. For "create named window + activate by name," AppleScript via `osascript` is the pragmatic choice despite being in maintenance mode.
+4. **The 4-pane layout (TL-1) must be done as a single atomic restructure.** The current `Horizontal(ProjectList, ProjectDetail)` becomes `Vertical(Horizontal(top), Horizontal(bottom))`. All CSS and query_one() calls must be updated simultaneously. This is the first thing to implement.
 
-5. **Store original URLs, not scheme-rewritten URLs.** Converting `https://` to `notion://` at storage time is a data design mistake. Convert at activation time so the storage format remains resilient to URL scheme changes across app versions.
+5. **Claude detection (CD-1) will never be 100% reliable.** Use `commandLine` (not `jobName`) as primary signal with 5-second sticky decay. Design for "likely busy" / "likely idle" rather than definitive states.
+
+6. **GitHub rate limiting (BP-2) is real at 30s polling.** Implement tiered refresh: active project at 30s, background repos at 5m, back off when rate limit is low. The 5,000 points/hour limit is consumed faster than intuition suggests.
+
+7. **Refresh must preserve cursor position (BP-6).** Recompose-on-data-change is an anti-pattern for periodic refresh. Update widgets in-place, match items by identity (branch name / session ID), and restore cursor after data changes.
 
 ---
 
 ## Sources
 
-- Posting startup optimization: https://darren.codes/posts/python-startup-time/
-- Textual async heisenbug: https://textual.textualize.io/blog/2023/02/11/the-heisenbug-lurking-in-your-async-code/
-- Textual workers guide: https://textual.textualize.io/guide/workers/
-- Textual layout guide: https://textual.textualize.io/guide/layout/
-- Textual CSS guide: https://textual.textualize.io/guide/CSS/
-- Textual input/bindings: https://textual.textualize.io/guide/input/
-- 7 Lessons from Textual: https://www.textualize.io/blog/7-things-ive-learned-building-a-modern-tui-framework/
-- iTerm2 Python API: https://iterm2.com/python-api/window.html
-- iTerm2 AppleScript docs: https://iterm2.com/documentation-scripting.html
-- iTerm2 session race condition bug: https://gitlab.com/gnachman/iterm2/-/work_items/5462
-- Obsidian URI scheme: https://help.obsidian.md/Extending+Obsidian/Obsidian+URI
-- Python TOML guide: https://realpython.com/python-toml/
-- Atomic writes (safer vs atomicwrites): https://docs.bswen.com/blog/2026-04-04-safer-vs-atomicwrites-python/
-- PEP 810 lazy imports: https://peps.python.org/pep-0810/
-- uv tools guide: https://docs.astral.sh/uv/concepts/tools/
-- uv git dependency updates: https://iifx.dev/en/articles/457001353/updating-git-dependencies-with-uv-the-upgrade-solution
+- iTerm2 connection.py source: https://github.com/gnachman/iTerm2/blob/master/api/library/python/iterm2/iterm2/connection.py
+- iTerm2 Python API Connection docs: https://iterm2.com/python-api/connection.html
+- iTerm2 Python API Session docs: https://iterm2.com/python-api/session.html
+- iTerm2 Python API Screen docs: https://iterm2.com/python-api/screen.html
+- iTerm2 Python API Troubleshooting: https://iterm2.com/python-api/tutorial/troubleshooting.html
+- iTerm2 Python API Lifecycle: https://iterm2.com/python-api/lifecycle.html
+- iTerm2 Variables reference: https://iterm2.com/documentation-variables.html
+- iTerm2 Python API auth: https://iterm2.com/python-api-auth.html
+- iTerm2 package on PyPI (GPLv2+): https://pypi.org/project/iterm2/
+- Textual Workers guide: https://textual.textualize.io/guide/workers/
+- Textual Input/Bindings guide: https://textual.textualize.io/guide/input/
+- Textual Timer API: https://textual.textualize.io/api/timer/
+- GitHub CLI rate limits discussion: https://github.com/cli/cli/discussions/5381
+- GitHub REST API rate limits: https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
+- GitHub CLI subprocess stderr issue: https://discuss.python.org/t/gh-pr-list-stderr-is-not-captured-by-subprocess/29300
+- GitLab CLI docs: https://docs.gitlab.com/cli/
+- GitLab rate limits: https://docs.gitlab.com/security/rate_limits/
+- glab keyring token issues: https://gitlab.com/gitlab-org/cli/-/work_items/8168
+- Git worktree documentation: https://git-scm.com/docs/git-worktree
+- Git worktrees with submodules: https://gist.github.com/ashwch/946ad983977c9107db7ee9abafeb95bd
+- Python subprocess timeout issues: https://bugs.python.org/issue30154
+- Python subprocess zombie fix: https://github.com/python/cpython/issues/81605
+- Claude Code process issues: https://github.com/anthropics/claude-code/issues/11122
+- asyncio RuntimeError workaround: https://medium.com/@vyshali.enukonda/how-to-get-around-runtimeerror-this-event-loop-is-already-running-3f26f67e762e
