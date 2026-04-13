@@ -75,7 +75,7 @@ Plans:
 **Plans:** 2 plans
 Plans:
 - [x] 08-01-PLAN.md — Stub widgets (TerminalPane, WorktreePane) + failing TDD tests for 4-pane layout
-- [ ] 08-02-PLAN.md — Grid layout refactor in app.py + regression verification
+- [x] 08-02-PLAN.md — Grid layout refactor in app.py + regression verification
 **UI hint**: yes
 
 ### Phase 9: Worktree Pane
