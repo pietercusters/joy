@@ -26,7 +26,9 @@ def _sample_projects() -> list[Project]:
 def mock_store():
     """Mock store to avoid filesystem access."""
     with patch("joy.store.load_projects", return_value=_sample_projects()), \
-         patch("joy.store.load_config", return_value=Config()):
+         patch("joy.store.load_config", return_value=Config()), \
+         patch("joy.store.load_repos", return_value=[]), \
+         patch("joy.worktrees.discover_worktrees", return_value=[]):
         yield
 
 
@@ -62,18 +64,23 @@ async def test_grid_container_used(mock_store):
 
 @pytest.mark.asyncio
 async def test_stub_panes_show_coming_soon(mock_store):
-    """PANE-01/D-09: Stub panes display centered 'coming soon' text."""
+    """PANE-01/D-09: TerminalPane still shows 'coming soon'; WorktreePane now shows live data.
+
+    Phase 9 replaced the WorktreePane stub with a real implementation, so the worktrees pane
+    no longer shows 'coming soon'. The terminal pane remains a stub.
+    """
     app = JoyApp()
     async with app.run_test() as pilot:
         await pilot.pause(0.1)
         terminal = app.query_one("#terminal-pane")
-        worktrees = app.query_one("#worktrees-pane")
-        # Each should have a Static child with "coming soon"
+        # TerminalPane is still a stub — check for 'coming soon'
         from textual.widgets import Static
         terminal_static = terminal.query_one(Static)
-        worktrees_static = worktrees.query_one(Static)
         assert "coming soon" in str(terminal_static.content).lower()
-        assert "coming soon" in str(worktrees_static.content).lower()
+        # WorktreePane is now a live pane — verify it exists and contains at least one Static
+        worktrees = app.query_one("#worktrees-pane")
+        worktrees_statics = worktrees.query(Static)
+        assert len(worktrees_statics) >= 1, "WorktreePane must contain at least one Static widget"
 
 
 # ---------------------------------------------------------------------------

@@ -9,7 +9,7 @@ from textual.binding import Binding
 from textual.containers import Grid
 from textual.widgets import Footer, Header
 
-from joy.models import Config, ObjectItem, PresetKind, Project
+from joy.models import Config, ObjectItem, PresetKind, Project, WorktreeInfo
 from joy.screens import NameInputModal, PresetPickerModal, SettingsModal, ValueInputModal
 from joy.widgets.object_row import _success_message, _truncate
 from joy.widgets.project_detail import GROUP_ORDER, ProjectDetail
@@ -87,6 +87,25 @@ class JoyApp(App):
         self.query_one(ProjectList).set_projects(projects)
         if projects:
             self.query_one(ProjectList).select_first()
+        self._load_worktrees()
+
+    @work(thread=True)
+    def _load_worktrees(self) -> None:
+        """Load worktree data in background thread and push to pane (D-01)."""
+        from joy.store import load_repos  # noqa: PLC0415
+        from joy.worktrees import discover_worktrees  # noqa: PLC0415
+
+        repos = load_repos()
+        worktrees = discover_worktrees(repos, self._config.branch_filter)
+        repo_count = len(repos)
+        branch_filter = ", ".join(self._config.branch_filter) if self._config.branch_filter else ""
+        self.app.call_from_thread(self._set_worktrees, worktrees, repo_count, branch_filter)
+
+    def _set_worktrees(self, worktrees: list[WorktreeInfo], repo_count: int, branch_filter: str) -> None:
+        """Push worktree data to the pane widget (D-01)."""
+        self.query_one(WorktreePane).set_worktrees(
+            worktrees, repo_count=repo_count, branch_filter=branch_filter
+        )
 
     def on_descendant_focus(self, event) -> None:
         """Update sub_title based on which pane has focus (D-08, D-13)."""
