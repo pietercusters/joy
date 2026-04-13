@@ -39,7 +39,7 @@ Every artifact for the active project, openable instantly from one interface —
 
 ### Active
 
-*(Next milestone requirements go here — use `/gsd-new-milestone` to define)*
+- ✓ App displays a 2x2 grid layout with four panes and Tab cycling across them (PANE-01, PANE-02) — v1.1 Phase 8
 
 ### Out of Scope
 
@@ -91,4 +91,4 @@ Every artifact for the active project, openable instantly from one interface —
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-12 after v1.0 milestone*
+*Last updated: 2026-04-13 after Phase 8 (4-pane layout) — v1.1 Workspace Intelligence milestone*
