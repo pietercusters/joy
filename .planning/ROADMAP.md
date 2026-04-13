@@ -88,9 +88,9 @@ Plans:
   3. Worktree pane is read-only — no selection cursor, no keyboard interaction beyond scrolling
 **Plans:** 3 plans
 Plans:
-- [ ] 09-01-PLAN.md — Wave 0 test scaffolding (test_worktree_pane.py with all unit + integration tests)
-- [ ] 09-02-PLAN.md — WorktreePane implementation + app-level data loading worker
-- [ ] 09-03-PLAN.md — Visual verification checkpoint (human-verify)
+- [x] 09-01-PLAN.md — Wave 0 test scaffolding (test_worktree_pane.py with all unit + integration tests)
+- [x] 09-02-PLAN.md — WorktreePane implementation + app-level data loading worker
+- [x] 09-03-PLAN.md — Visual verification checkpoint (human-verify)
 **UI hint**: yes
 
 ### Phase 10: Background Refresh Engine
