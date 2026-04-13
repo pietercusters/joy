@@ -96,6 +96,10 @@ class Config:
     default_open_kinds: list[str] = field(
         default_factory=lambda: ["worktree", "agents"]
     )
+    refresh_interval: int = 30
+    branch_filter: list[str] = field(
+        default_factory=lambda: ["main", "testing"]
+    )
 
     def to_dict(self) -> dict:
         """Serialize to a TOML-compatible dict."""
@@ -105,7 +109,51 @@ class Config:
             "obsidian_vault": self.obsidian_vault,
             "terminal": self.terminal,
             "default_open_kinds": self.default_open_kinds,
+            "refresh_interval": self.refresh_interval,
+            "branch_filter": self.branch_filter,
         }
+
+
+@dataclass
+class Repo:
+    """A registered git repository."""
+
+    name: str
+    local_path: str
+    remote_url: str = ""
+    forge: str = "unknown"
+
+    def to_dict(self) -> dict:
+        """Serialize to a TOML-compatible dict."""
+        return {
+            "name": self.name,
+            "local_path": self.local_path,
+            "remote_url": self.remote_url,
+            "forge": self.forge,
+        }
+
+
+@dataclass
+class WorktreeInfo:
+    """A discovered git worktree with status indicators."""
+
+    repo_name: str  # Name of the parent Repo this worktree belongs to
+    branch: str  # Branch name, or "HEAD" for detached HEAD
+    path: str  # Absolute filesystem path to the worktree
+    is_dirty: bool = False  # True if worktree has uncommitted changes
+    has_upstream: bool = True  # True if branch tracks a remote upstream
+
+
+@dataclass
+class MRInfo:
+    """MR/PR enrichment data for a worktree branch. Per Phase 11 D-08."""
+
+    mr_number: int
+    is_draft: bool
+    ci_status: str | None  # "pass" | "fail" | "pending" | None
+    author: str  # "@login" format
+    last_commit_hash: str  # 7-char short hash, or "" if unavailable
+    last_commit_msg: str  # commit headline, or "" if unavailable
 
 
 @dataclass
@@ -116,3 +164,15 @@ class TerminalSession:
     session_name: str
     foreground_process: str
     cwd: str
+
+
+def detect_forge(remote_url: str) -> str:
+    """Detect forge type from remote URL. Returns 'github', 'gitlab', or 'unknown'.
+
+    Per D-06: simple substring match only.
+    """
+    if "github.com" in remote_url:
+        return "github"
+    if "gitlab.com" in remote_url:
+        return "gitlab"
+    return "unknown"

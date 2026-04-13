@@ -95,42 +95,42 @@ def test_session_row_shows_session_name():
     """SessionRow renders the session_name in its content."""
     session = _make_session(session_name="my-session")
     row = SessionRow(session)
-    assert "my-session" in str(row.renderable)
+    assert "my-session" in str(row.content)
 
 
 def test_session_row_non_claude_uses_icon_session():
     """Non-Claude SessionRow uses ICON_SESSION."""
     session = _other_session()
     row = SessionRow(session, is_claude=False)
-    assert ICON_SESSION in str(row.renderable)
+    assert ICON_SESSION in str(row.content)
 
 
 def test_session_row_claude_uses_icon_claude():
     """Claude SessionRow uses ICON_CLAUDE."""
     session = _claude_session()
     row = SessionRow(session, is_claude=True, is_busy=True)
-    assert ICON_CLAUDE in str(row.renderable)
+    assert ICON_CLAUDE in str(row.content)
 
 
 def test_session_row_claude_busy_shows_indicator_busy():
     """Claude busy SessionRow shows INDICATOR_BUSY."""
     session = _claude_session()
     row = SessionRow(session, is_claude=True, is_busy=True)
-    assert INDICATOR_BUSY in str(row.renderable)
+    assert INDICATOR_BUSY in str(row.content)
 
 
 def test_session_row_claude_waiting_shows_indicator_waiting():
     """Claude waiting SessionRow shows INDICATOR_WAITING."""
     session = _claude_session()
     row = SessionRow(session, is_claude=True, is_busy=False)
-    assert INDICATOR_WAITING in str(row.renderable)
+    assert INDICATOR_WAITING in str(row.content)
 
 
 def test_session_row_shows_process():
     """SessionRow includes foreground_process in content."""
     session = _make_session(foreground_process="python")
     row = SessionRow(session)
-    assert "python" in str(row.renderable)
+    assert "python" in str(row.content)
 
 
 def test_session_row_shows_abbreviated_cwd():
@@ -139,7 +139,7 @@ def test_session_row_shows_abbreviated_cwd():
     home = os.path.expanduser("~")
     session = _make_session(cwd=f"{home}/Github/joy")
     row = SessionRow(session)
-    content = str(row.renderable)
+    content = str(row.content)
     assert "~/Github/joy" in content
 
 
@@ -222,7 +222,7 @@ def test_set_sessions_groups_claude_sessions():
             await pane.set_sessions(sessions)
             await pilot.pause(0.1)
             headers = pane.query(GroupHeader)
-            header_texts = [str(h.renderable) for h in headers]
+            header_texts = [str(h.content) for h in headers]
             assert any("Claude" in t for t in header_texts), (
                 f"Expected 'Claude' header, got: {header_texts}"
             )
@@ -249,7 +249,7 @@ def test_set_sessions_groups_other_sessions():
             await pane.set_sessions(sessions)
             await pilot.pause(0.1)
             headers = pane.query(GroupHeader)
-            header_texts = [str(h.renderable) for h in headers]
+            header_texts = [str(h.content) for h in headers]
             assert any("Other" in t for t in header_texts), (
                 f"Expected 'Other' header, got: {header_texts}"
             )
@@ -276,7 +276,7 @@ def test_set_sessions_omits_empty_group_headers():
             await pane.set_sessions(sessions)
             await pilot.pause(0.1)
             headers = pane.query(GroupHeader)
-            header_texts = [str(h.renderable) for h in headers]
+            header_texts = [str(h.content) for h in headers]
             assert not any("Claude" in t for t in header_texts), (
                 f"Expected no 'Claude' header, got: {header_texts}"
             )
@@ -303,7 +303,7 @@ def test_set_sessions_none_shows_unavailable():
             await pane.set_sessions(None)
             await pilot.pause(0.1)
             statics = pane.query(Static)
-            texts = [str(s.renderable).lower() for s in statics]
+            texts = [str(s.content).lower() for s in statics]
             assert any("iterm2 unavailable" in t for t in texts), (
                 f"Expected 'iTerm2 unavailable' message, got: {texts}"
             )
@@ -329,7 +329,7 @@ def test_set_sessions_empty_shows_no_sessions():
             await pane.set_sessions([])
             await pilot.pause(0.1)
             statics = pane.query(Static)
-            texts = [str(s.renderable).lower() for s in statics]
+            texts = [str(s.content).lower() for s in statics]
             assert any("no terminal sessions" in t for t in texts), (
                 f"Expected 'No terminal sessions' message, got: {texts}"
             )
@@ -475,8 +475,10 @@ def test_enter_key_calls_activate_session():
 
     async def _run():
         app = _TestApp()
+        # activate_session is lazily imported inside _do_activate worker,
+        # so we patch it at the terminal_sessions module level.
         with patch(
-            "joy.widgets.terminal_pane.activate_session",
+            "joy.terminal_sessions.activate_session",
             return_value=True,
         ) as mock_activate:
             async with app.run_test() as pilot:
@@ -488,7 +490,7 @@ def test_enter_key_calls_activate_session():
                 await pilot.pause(0.1)
                 pane.focus()
                 await pilot.press("enter")
-                await pilot.pause(0.1)
+                await pilot.pause(0.2)
                 await app.workers.wait_for_complete()
                 mock_activate.assert_called_once_with("session-id-abc")
 
@@ -506,7 +508,7 @@ def test_enter_key_noop_when_no_sessions():
     async def _run():
         app = _TestApp()
         with patch(
-            "joy.widgets.terminal_pane.activate_session",
+            "joy.terminal_sessions.activate_session",
             return_value=True,
         ) as mock_activate:
             async with app.run_test() as pilot:
