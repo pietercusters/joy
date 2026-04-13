@@ -58,10 +58,19 @@ def _toml_to_projects(data: dict) -> list[Project]:
                     stacklevel=2,
                 )
                 continue
+            try:
+                value = obj["value"]
+            except KeyError:
+                warnings.warn(
+                    f"Object in project {name!r} is missing required 'value' field — skipping object",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                continue
             objects.append(
                 ObjectItem(
                     kind=kind,
-                    value=obj["value"],
+                    value=value,
                     label=obj.get("label", ""),
                     open_by_default=obj.get("open_by_default", False),
                 )
@@ -76,6 +85,7 @@ def _toml_to_projects(data: dict) -> list[Project]:
                 warnings.warn(
                     f"Cannot parse created date {created_raw!r} for project {name!r}, using today",
                     UserWarning,
+                    stacklevel=2,
                 )
                 created = date.today()
         else:
@@ -106,14 +116,15 @@ def load_config(*, path: Path = CONFIG_PATH) -> Config:
         return Config()
     with open(path, "rb") as f:
         data = tomllib.load(f)
+    defaults = Config()
     return Config(
-        ide=data.get("ide", "PyCharm"),
-        editor=data.get("editor", "Sublime Text"),
-        obsidian_vault=data.get("obsidian_vault", ""),
-        terminal=data.get("terminal", "iTerm2"),
-        default_open_kinds=data.get("default_open_kinds", ["worktree", "agents"]),
-        refresh_interval=data.get("refresh_interval", 30),
-        branch_filter=data.get("branch_filter", ["main", "testing"]),
+        ide=data.get("ide", defaults.ide),
+        editor=data.get("editor", defaults.editor),
+        obsidian_vault=data.get("obsidian_vault", defaults.obsidian_vault),
+        terminal=data.get("terminal", defaults.terminal),
+        default_open_kinds=data.get("default_open_kinds", defaults.default_open_kinds),
+        refresh_interval=data.get("refresh_interval", defaults.refresh_interval),
+        branch_filter=data.get("branch_filter", defaults.branch_filter),
     )
 
 
