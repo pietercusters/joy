@@ -105,6 +105,7 @@ class ProjectDetail(Widget, can_focus=True):
         self._project: Project | None = None
         self._cursor: int = -1
         self._rows: list[ObjectRow] = []
+        self.border_title = "Details"
 
     def compose(self) -> ComposeResult:
         yield _DetailScroll(id="detail-scroll")

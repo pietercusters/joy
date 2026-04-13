@@ -109,6 +109,7 @@ class ProjectList(Widget, can_focus=False):
         super().__init__(**kwargs)
         self._projects: list[Project] = []
         self._is_filtered: bool = False
+        self.border_title = "Projects"
 
     def compose(self) -> ComposeResult:
         yield JoyListView(id="project-listview")
