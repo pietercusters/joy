@@ -96,6 +96,10 @@ class Config:
     default_open_kinds: list[str] = field(
         default_factory=lambda: ["worktree", "agents"]
     )
+    refresh_interval: int = 30
+    branch_filter: list[str] = field(
+        default_factory=lambda: ["main", "testing"]
+    )
 
     def to_dict(self) -> dict:
         """Serialize to a TOML-compatible dict."""
@@ -105,6 +109,8 @@ class Config:
             "obsidian_vault": self.obsidian_vault,
             "terminal": self.terminal,
             "default_open_kinds": self.default_open_kinds,
+            "refresh_interval": self.refresh_interval,
+            "branch_filter": self.branch_filter,
         }
 
 

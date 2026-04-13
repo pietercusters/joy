@@ -110,6 +110,8 @@ def load_config(*, path: Path = CONFIG_PATH) -> Config:
         obsidian_vault=data.get("obsidian_vault", ""),
         terminal=data.get("terminal", "iTerm2"),
         default_open_kinds=data.get("default_open_kinds", ["worktree", "agents"]),
+        refresh_interval=data.get("refresh_interval", 30),
+        branch_filter=data.get("branch_filter", ["main", "testing"]),
     )
 
 

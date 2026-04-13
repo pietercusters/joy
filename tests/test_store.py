@@ -271,3 +271,42 @@ def test_toggle_round_trip(tmp_path: Path) -> None:
     save_projects(projects=loaded, path=projects_path)
     reloaded = load_projects(path=projects_path)
     assert reloaded[0].objects[0].open_by_default is True
+
+
+# ---------------------------------------------------------------------------
+# Config new fields round-trip tests
+# ---------------------------------------------------------------------------
+
+
+def test_config_round_trip_new_fields(tmp_path: Path) -> None:
+    """Save Config with new fields, load back, assert both fields match."""
+    from joy.store import load_config, save_config
+
+    config_path = tmp_path / "config.toml"
+    custom = Config(refresh_interval=45, branch_filter=["develop"])
+    save_config(config=custom, path=config_path)
+    loaded = load_config(path=config_path)
+    assert loaded.refresh_interval == 45
+    assert loaded.branch_filter == ["develop"]
+
+
+def test_config_backward_compat_missing_new_fields(tmp_path: Path) -> None:
+    """Old config.toml files without new fields load with correct defaults."""
+    import tomllib
+
+    config_path = tmp_path / "config.toml"
+    # Write raw TOML with only old fields (no refresh_interval or branch_filter)
+    old_toml = (
+        'ide = "VSCode"\n'
+        'editor = "Vim"\n'
+        'obsidian_vault = ""\n'
+        'terminal = "iTerm2"\n'
+        'default_open_kinds = ["worktree", "agents"]\n'
+    )
+    config_path.write_bytes(old_toml.encode("utf-8"))
+
+    from joy.store import load_config
+
+    loaded = load_config(path=config_path)
+    assert loaded.refresh_interval == 30
+    assert loaded.branch_filter == ["main", "testing"]

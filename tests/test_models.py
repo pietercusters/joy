@@ -223,6 +223,8 @@ class TestConfig:
         assert config.obsidian_vault == ""
         assert config.terminal == "iTerm2"
         assert config.default_open_kinds == ["worktree", "agents"]
+        assert config.refresh_interval == 30
+        assert config.branch_filter == ["main", "testing"]
 
     def test_config_custom_values(self) -> None:
         config = Config(
@@ -254,6 +256,8 @@ class TestConfig:
             "obsidian_vault": "",
             "terminal": "iTerm2",
             "default_open_kinds": ["worktree", "agents"],
+            "refresh_interval": 30,
+            "branch_filter": ["main", "testing"],
         }
 
     def test_config_to_dict_custom(self) -> None:
@@ -261,6 +265,30 @@ class TestConfig:
         result = config.to_dict()
         assert result["ide"] == "VSCode"
         assert result["obsidian_vault"] == "/vault"
+
+    def test_config_defaults_refresh_interval(self) -> None:
+        assert Config().refresh_interval == 30
+
+    def test_config_defaults_branch_filter(self) -> None:
+        assert Config().branch_filter == ["main", "testing"]
+
+    def test_config_custom_refresh_interval(self) -> None:
+        assert Config(refresh_interval=60).refresh_interval == 60
+
+    def test_config_custom_branch_filter(self) -> None:
+        assert Config(branch_filter=["main"]).branch_filter == ["main"]
+
+    def test_config_branch_filter_not_shared(self) -> None:
+        """Each Config instance should have its own branch_filter list."""
+        c1 = Config()
+        c2 = Config()
+        c1.branch_filter.append("develop")
+        assert c2.branch_filter == ["main", "testing"]
+
+    def test_config_to_dict_includes_new_fields(self) -> None:
+        result = Config().to_dict()
+        assert result["refresh_interval"] == 30
+        assert result["branch_filter"] == ["main", "testing"]
 
 
 class TestRepo:
