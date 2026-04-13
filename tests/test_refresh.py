@@ -24,7 +24,8 @@ from unittest.mock import patch
 from textual.app import App, ComposeResult
 
 from joy.app import JoyApp
-from joy.models import Config, ObjectItem, PresetKind, Project, Repo, WorktreeInfo
+from joy.models import Config, ObjectItem, PresetKind, Project, Repo, TerminalSession, WorktreeInfo
+from joy.widgets.terminal_pane import TerminalPane, SessionRow
 from joy.widgets.worktree_pane import WorktreePane
 
 
@@ -250,14 +251,46 @@ def test_scroll_preserved_when_no_scroll():
 # ---------------------------------------------------------------------------
 
 
+def _sample_terminal_sessions() -> list[TerminalSession]:
+    """Two TerminalSession instances for terminal refresh tests."""
+    return [
+        TerminalSession(
+            session_id="s1",
+            session_name="main",
+            foreground_process="zsh",
+            cwd="/Users/pieter",
+        ),
+        TerminalSession(
+            session_id="s2",
+            session_name="claude-work",
+            foreground_process="claude",
+            cwd="/Users/pieter/Github/joy",
+        ),
+    ]
+
+
+@pytest.fixture
+def mock_fetch_sessions():
+    """Mock fetch_sessions returning 2 sample TerminalSession objects."""
+    with patch(
+        "joy.terminal_sessions.fetch_sessions",
+        return_value=_sample_terminal_sessions(),
+    ) as mock:
+        yield mock
+
+
 @pytest.fixture
 def mock_store_for_refresh():
-    """Mock store with repos and worktrees for refresh integration tests."""
+    """Mock store with repos, worktrees, and terminal sessions for refresh integration tests."""
     with (
         patch("joy.store.load_projects", return_value=_sample_projects()),
         patch("joy.store.load_config", return_value=Config()),
         patch("joy.store.load_repos", return_value=_sample_repos()),
         patch("joy.worktrees.discover_worktrees", return_value=_sample_worktrees()),
+        patch(
+            "joy.terminal_sessions.fetch_sessions",
+            return_value=_sample_terminal_sessions(),
+        ),
     ):
         yield
 
@@ -349,4 +382,94 @@ async def test_timestamp_updates_after_refresh(mock_store_for_refresh):
         )
         assert "Worktrees" in str(title2), (
             f"Expected 'Worktrees' prefix in border_title, got: {repr(title2)}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Terminal pane refresh integration tests (Plan 12-03)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_terminal_load_on_mount(mock_store_for_refresh):
+    """_load_terminal is called during mount; TerminalPane renders session rows."""
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        rows = app.query(SessionRow)
+        assert len(rows) >= 1, (
+            f"Expected at least 1 SessionRow after mount, got {len(rows)}"
+        )
+
+
+@pytest.mark.asyncio
+async def test_terminal_refresh_on_r_key(mock_store_for_refresh, mock_fetch_sessions):
+    """Pressing 'r' triggers terminal refresh (fetch_sessions call count increases)."""
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        call_count_before = mock_fetch_sessions.call_count
+        await pilot.press("r")
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        assert mock_fetch_sessions.call_count > call_count_before, (
+            f"Expected fetch_sessions call count to increase after 'r' press, "
+            f"before={call_count_before}, after={mock_fetch_sessions.call_count}"
+        )
+
+
+@pytest.mark.asyncio
+async def test_terminal_unavailable_shows_message(mock_store_for_refresh):
+    """When fetch_sessions returns None, TerminalPane shows 'iTerm2 unavailable'."""
+    with patch("joy.terminal_sessions.fetch_sessions", return_value=None):
+        app = JoyApp()
+        async with app.run_test() as pilot:
+            await pilot.pause(0.2)
+            await app.workers.wait_for_complete()
+            pane = app.query_one(TerminalPane)
+            # Find the Static widget with "iTerm2 unavailable" text
+            statics = pane.query("Static")
+            texts = [str(s.content) for s in statics]
+            assert any("iTerm2 unavailable" in t for t in texts), (
+                f"Expected 'iTerm2 unavailable' in TerminalPane, got: {texts}"
+            )
+
+
+@pytest.mark.asyncio
+async def test_terminal_refresh_independent(mock_store_for_refresh):
+    """iTerm2 failure (fetch_sessions raises) does NOT affect worktree pane display."""
+    with patch("joy.terminal_sessions.fetch_sessions", side_effect=Exception("iTerm2 gone")):
+        app = JoyApp()
+        async with app.run_test() as pilot:
+            await pilot.pause(0.2)
+            await app.workers.wait_for_complete()
+            # Worktree pane should still show data (title contains timestamp, not just "Worktrees")
+            wt_title = app.query_one(WorktreePane).border_title
+            assert "Worktrees" in str(wt_title), (
+                f"Expected WorktreePane to still show 'Worktrees' in title, got: {repr(wt_title)}"
+            )
+            # TerminalPane should show unavailable state
+            pane = app.query_one(TerminalPane)
+            statics = pane.query("Static")
+            texts = [str(s.content) for s in statics]
+            assert any("iTerm2 unavailable" in t for t in texts), (
+                f"Expected 'iTerm2 unavailable' in TerminalPane after exception, got: {texts}"
+            )
+
+
+@pytest.mark.asyncio
+async def test_terminal_refresh_label_updates(mock_store_for_refresh):
+    """After successful terminal load, TerminalPane border_title includes timestamp."""
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        title = app.query_one(TerminalPane).border_title
+        assert title != "Terminal", (
+            f"Expected TerminalPane border_title to include timestamp after load, got: {repr(title)}"
+        )
+        assert "Terminal" in str(title), (
+            f"Expected 'Terminal' prefix to be preserved, got: {repr(title)}"
         )
