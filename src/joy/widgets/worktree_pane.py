@@ -204,7 +204,7 @@ class WorktreePane(Widget, can_focus=True):
             id="worktree-scroll",
         )
 
-    def set_worktrees(
+    async def set_worktrees(
         self,
         worktrees: list[WorktreeInfo],
         *,
@@ -220,7 +220,7 @@ class WorktreePane(Widget, can_focus=True):
         """
         scroll = self.query_one("#worktree-scroll", _WorktreeScroll)
         saved_scroll_y = scroll.scroll_y
-        scroll.remove_children()
+        await scroll.remove_children()
         self._loaded = True
 
         if not worktrees:

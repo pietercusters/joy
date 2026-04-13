@@ -189,7 +189,7 @@ def test_scroll_preserved_across_set_worktrees():
             worktrees = _many_worktrees(25)
 
             # First call to populate
-            pane.set_worktrees(worktrees)
+            await pane.set_worktrees(worktrees)
             await pilot.pause(0.1)
 
             # Scroll down
@@ -201,7 +201,7 @@ def test_scroll_preserved_across_set_worktrees():
             saved_y = scroll.scroll_y
 
             # Second call to rebuild
-            pane.set_worktrees(worktrees)
+            await pane.set_worktrees(worktrees)
             await pilot.pause(0.1)
 
             # Scroll position should be preserved
@@ -227,7 +227,7 @@ def test_scroll_preserved_when_no_scroll():
             # Use only 2 worktrees — unlikely to overflow in test terminal
             worktrees = _sample_worktrees()[:2]
 
-            pane.set_worktrees(worktrees)
+            await pane.set_worktrees(worktrees)
             await pilot.pause(0.1)
 
             scroll = pane.query_one("#worktree-scroll")
@@ -235,7 +235,7 @@ def test_scroll_preserved_when_no_scroll():
                 f"Expected scroll_y=0 after first set_worktrees, got: {scroll.scroll_y}"
             )
 
-            pane.set_worktrees(worktrees)
+            await pane.set_worktrees(worktrees)
             await pilot.pause(0.1)
 
             assert scroll.scroll_y == 0, (

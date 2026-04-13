@@ -168,7 +168,7 @@ def test_grouping_by_repo():
         app = _TestApp()
         async with app.run_test() as pilot:
             pane = app.query_one(WorktreePane)
-            pane.set_worktrees(_sample_worktrees())
+            await pane.set_worktrees(_sample_worktrees())
             await pilot.pause(0.1)
             headers = pane.query(GroupHeader)
             assert len(headers) == 2
@@ -198,7 +198,7 @@ def test_empty_repos_hidden():
                     path="/tmp/alpha/wt/feat-x",
                 )
             ]
-            pane.set_worktrees(worktrees)
+            await pane.set_worktrees(worktrees)
             await pilot.pause(0.1)
             header_texts = [str(h.content) for h in pane.query(GroupHeader)]
             assert not any("beta" in t.lower() for t in header_texts)
@@ -225,7 +225,7 @@ def test_repo_order_alphabetical():
                 WorktreeInfo(repo_name="alpha", branch="main", path="/tmp/alpha/wt/main"),
                 WorktreeInfo(repo_name="Mid", branch="main", path="/tmp/mid/wt/main"),
             ]
-            pane.set_worktrees(worktrees)
+            await pane.set_worktrees(worktrees)
             await pilot.pause(0.1)
             headers = pane.query(GroupHeader)
             names = [str(h.content) for h in headers]
@@ -254,7 +254,7 @@ def test_worktree_order_alphabetical():
                 WorktreeInfo(repo_name="alpha", branch="feat-a", path="/tmp/alpha/wt/feat-a"),
                 WorktreeInfo(repo_name="alpha", branch="Develop", path="/tmp/alpha/wt/develop"),
             ]
-            pane.set_worktrees(worktrees)
+            await pane.set_worktrees(worktrees)
             await pilot.pause(0.1)
             rows = pane.query(WorktreeRow)
             # Extract branch names from each row's content
@@ -348,12 +348,12 @@ def test_set_worktrees_idempotent():
             pane = app.query_one(WorktreePane)
             worktrees = _sample_worktrees()
 
-            pane.set_worktrees(worktrees)
+            await pane.set_worktrees(worktrees)
             await pilot.pause(0.1)
             count_first = len(pane.query(WorktreeRow))
             header_first = len(pane.query(GroupHeader))
 
-            pane.set_worktrees(worktrees)
+            await pane.set_worktrees(worktrees)
             await pilot.pause(0.1)
             count_second = len(pane.query(WorktreeRow))
             header_second = len(pane.query(GroupHeader))
