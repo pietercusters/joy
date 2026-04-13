@@ -21,7 +21,7 @@ GITHUB_PR_JSON = [
         "isDraft": False,
         "author": {"login": "pieter"},
         "commits": [
-            {"oid": "abc1234def5678", "messageHeadline": "fix: login redirect"}
+            {"commit": {"oid": "abc1234def5678", "messageHeadline": "fix: login redirect"}}
         ],
         "statusCheckRollup": [
             {"status": "COMPLETED", "conclusion": "SUCCESS", "name": "build"}
@@ -36,7 +36,7 @@ GITHUB_PR_JSON_MULTI = [
         "isDraft": False,
         "author": {"login": "pieter"},
         "commits": [
-            {"oid": "abc1234def5678", "messageHeadline": "fix: login redirect"}
+            {"commit": {"oid": "abc1234def5678", "messageHeadline": "fix: login redirect"}}
         ],
         "statusCheckRollup": [
             {"status": "COMPLETED", "conclusion": "SUCCESS", "name": "build"}
@@ -48,7 +48,7 @@ GITHUB_PR_JSON_MULTI = [
         "isDraft": False,
         "author": {"login": "other"},
         "commits": [
-            {"oid": "zzz9999aaa0000", "messageHeadline": "chore: unrelated"}
+            {"commit": {"oid": "zzz9999aaa0000", "messageHeadline": "chore: unrelated"}}
         ],
         "statusCheckRollup": [],
     },
