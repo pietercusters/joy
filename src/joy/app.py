@@ -61,6 +61,7 @@ class JoyApp(App):
         self._projects: list[Project] = []
         self._last_refresh_at: datetime | None = None
         self._refresh_failed: bool = False
+        self._mr_fetch_failed: bool = False
         self._refresh_timer: object | None = None
         self._label_timer: object | None = None
 
@@ -112,21 +113,44 @@ class JoyApp(App):
         """Load worktree data in background thread and push to pane (D-01, D-07)."""
         from joy.store import load_repos  # noqa: PLC0415
         from joy.worktrees import discover_worktrees  # noqa: PLC0415
+        from joy.mr_status import fetch_mr_data  # noqa: PLC0415
 
         try:
             repos = load_repos()
             worktrees = discover_worktrees(repos, self._config.branch_filter)
+
+            # Phase 11 D-06: fetch MR/CI data in same thread
+            mr_data: dict = {}
+            mr_failed = False
+            try:
+                mr_data = fetch_mr_data(repos, worktrees)
+                # D-10: detect total failure -- repos with known forge exist,
+                # worktrees exist, but zero MR data returned
+                forgeable = [r for r in repos if r.forge != "unknown"]
+                if forgeable and worktrees and not mr_data:
+                    mr_failed = True
+            except Exception:
+                mr_failed = True
+
             repo_count = len(repos)
             branch_filter = ", ".join(self._config.branch_filter) if self._config.branch_filter else ""
-            self.app.call_from_thread(self._set_worktrees, worktrees, repo_count, branch_filter)
+            self.app.call_from_thread(self._set_worktrees, worktrees, repo_count, branch_filter, mr_data, mr_failed)
             self.app.call_from_thread(self._mark_refresh_success)
         except Exception:
             self.app.call_from_thread(self._mark_refresh_failure)
 
-    async def _set_worktrees(self, worktrees: list[WorktreeInfo], repo_count: int, branch_filter: str) -> None:
+    async def _set_worktrees(
+        self,
+        worktrees: list[WorktreeInfo],
+        repo_count: int,
+        branch_filter: str,
+        mr_data: dict | None = None,
+        mr_failed: bool = False,
+    ) -> None:
         """Push worktree data to the pane widget (D-01)."""
+        self._mr_fetch_failed = mr_failed
         await self.query_one(WorktreePane).set_worktrees(
-            worktrees, repo_count=repo_count, branch_filter=branch_filter
+            worktrees, repo_count=repo_count, branch_filter=branch_filter, mr_data=mr_data
         )
 
     def _trigger_worktree_refresh(self) -> None:
@@ -160,7 +184,9 @@ class JoyApp(App):
         timestamp = self._format_age(age_seconds)
         # D-04: stale if age > 2x interval OR refresh failed
         stale = self._refresh_failed or age_seconds > (2 * self._config.refresh_interval)
-        self.query_one(WorktreePane).set_refresh_label(timestamp, stale=stale)
+        self.query_one(WorktreePane).set_refresh_label(
+            timestamp, stale=stale, mr_error=self._mr_fetch_failed
+        )
 
     @staticmethod
     def _format_age(seconds: int) -> str:

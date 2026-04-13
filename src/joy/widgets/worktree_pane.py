@@ -9,7 +9,7 @@ from textual.containers import VerticalScroll
 from textual.widget import Widget
 from textual.widgets import Static
 
-from joy.models import WorktreeInfo
+from joy.models import MRInfo, WorktreeInfo
 
 # ---------------------------------------------------------------------------
 # Nerd Font icon constants (per D-08, verified codepoints from RESEARCH.md)
@@ -18,6 +18,13 @@ from joy.models import WorktreeInfo
 ICON_BRANCH = "\ue0a0"           # nf-pl-branch (same as PRESET_ICONS[BRANCH])
 ICON_DIRTY = "\uf111"            # nf-fa-circle
 ICON_NO_UPSTREAM = "\U000f0be1"  # nf-md-cloud_off (verified, NOT nf-fa-cloud_off)
+
+# Phase 11: MR/CI status icons (D-04, D-05)
+ICON_MR_OPEN    = "\uea64"      # nf-cod-git_pull_request (green for open)
+ICON_MR_DRAFT   = "\uebdb"      # nf-cod-git_pull_request_draft (dim for draft)
+ICON_CI_PASS    = "\uf00c"      # nf-fa-check (green)
+ICON_CI_FAIL    = "\uf00d"      # nf-fa-times (red)
+ICON_CI_PENDING = "\uf192"      # nf-fa-dot_circle_o (yellow) -- distinct from ICON_DIRTY
 
 
 # ---------------------------------------------------------------------------
@@ -126,6 +133,7 @@ class WorktreeRow(Static):
         worktree: WorktreeInfo,
         *,
         display_path: str | None = None,
+        mr_info: MRInfo | None = None,
         **kwargs,
     ) -> None:
         path = display_path if display_path is not None else abbreviate_home(worktree.path)
@@ -134,6 +142,7 @@ class WorktreeRow(Static):
             worktree.is_dirty,
             worktree.has_upstream,
             path,
+            mr_info=mr_info,
         )
         super().__init__(content, **kwargs)
 
@@ -143,17 +152,50 @@ class WorktreeRow(Static):
         is_dirty: bool,
         has_upstream: bool,
         display_path: str,
+        mr_info: MRInfo | None = None,
     ) -> Text:
-        """Build the rich.Text renderable for a two-line worktree row."""
+        """Build the rich.Text renderable for a two-line worktree row.
+
+        Per D-01/D-02: When mr_info is present, line 1 shows MR badges between
+        branch and dirty/upstream indicators; line 2 shows @author + commit.
+        When mr_info is None, layout is unchanged from Phase 9.
+        """
         t = Text(no_wrap=True, overflow="ellipsis")
         t.append(f" {ICON_BRANCH} ", style="bold")
         t.append(branch)
+
+        # D-02: MR badges between branch name and dirty/upstream indicators
+        if mr_info is not None:
+            t.append(f"  !{mr_info.mr_number} ", style="dim")
+            if mr_info.is_draft:
+                t.append(ICON_MR_DRAFT, style="dim")
+            else:
+                t.append(ICON_MR_OPEN, style="green")
+            # D-05: CI status icons (blank when None)
+            if mr_info.ci_status == "pass":
+                t.append(f" {ICON_CI_PASS}", style="green")
+            elif mr_info.ci_status == "fail":
+                t.append(f" {ICON_CI_FAIL}", style="red")
+            elif mr_info.ci_status == "pending":
+                t.append(f" {ICON_CI_PENDING}", style="yellow")
+
         if is_dirty:
             t.append(f" {ICON_DIRTY}", style="yellow")
         if not has_upstream:
             t.append(f" {ICON_NO_UPSTREAM}", style="dim")
         t.append("\n")
-        t.append(f"  {display_path}", style="dim")
+
+        # D-01: Line 2 is context-sensitive
+        if mr_info is not None and (mr_info.author or mr_info.last_commit_hash):
+            parts = []
+            if mr_info.author:
+                parts.append(mr_info.author)
+            if mr_info.last_commit_hash:
+                parts.append(f"{mr_info.last_commit_hash} {mr_info.last_commit_msg}")
+            t.append(f"  {'  '.join(parts)}", style="dim")
+        else:
+            t.append(f"  {display_path}", style="dim")
+
         return t
 
 
@@ -210,6 +252,7 @@ class WorktreePane(Widget, can_focus=True):
         *,
         repo_count: int = 0,
         branch_filter: str = "",
+        mr_data: dict[tuple[str, str], MRInfo] | None = None,
     ) -> None:
         """Populate the pane with grouped worktree rows. Idempotent (D-03).
 
@@ -217,7 +260,10 @@ class WorktreePane(Widget, can_focus=True):
             worktrees: Flat list from discover_worktrees(). Grouping happens here (D-04).
             repo_count: Number of registered repos — used to distinguish empty states (D-15/D-16).
             branch_filter: Comma-separated filter string for the empty-state hint (D-16).
+            mr_data: Mapping of (repo_name, branch) -> MRInfo from fetch_mr_data (Phase 11).
         """
+        if mr_data is None:
+            mr_data = {}
         scroll = self.query_one("#worktree-scroll", _WorktreeScroll)
         saved_scroll_y = scroll.scroll_y
         await scroll.remove_children()
@@ -257,18 +303,23 @@ class WorktreePane(Widget, can_focus=True):
             for wt in sorted(grouped[repo_name], key=lambda w: w.branch.lower()):
                 display_path = abbreviate_home(wt.path)
                 display_path = middle_truncate(display_path, available_width)
-                scroll.mount(WorktreeRow(wt, display_path=display_path))
+                mr_info = mr_data.get((wt.repo_name, wt.branch))
+                scroll.mount(WorktreeRow(wt, display_path=display_path, mr_info=mr_info))
 
         scroll.call_after_refresh(lambda: scroll.scroll_to(y=saved_scroll_y, animate=False))
 
-    def set_refresh_label(self, timestamp: str, *, stale: bool = False) -> None:
+    def set_refresh_label(self, timestamp: str, *, stale: bool = False, mr_error: bool = False) -> None:
         """Update border_title with refresh timestamp. Stale adds warning icon.
+        mr_error adds MR fetch failure note per D-10.
 
         Args:
             timestamp: Human-readable time string (e.g., "2m ago", "14:32").
             stale: If True, prefix timestamp with warning icon (U+26A0).
+            mr_error: If True, show MR fetch failure warning (D-10).
         """
-        if stale:
+        if mr_error:
+            self.border_title = f"Worktrees  \u26a0 mr fetch failed  {timestamp}"
+        elif stale:
             self.border_title = f"Worktrees  \u26a0 {timestamp}"
         else:
             self.border_title = f"Worktrees  {timestamp}"

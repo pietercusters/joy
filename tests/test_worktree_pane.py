@@ -94,6 +94,7 @@ def mock_store_with_worktrees():
         patch("joy.store.load_config", return_value=Config()),
         patch("joy.store.load_repos", return_value=_sample_repos()),
         patch("joy.worktrees.discover_worktrees", return_value=_sample_worktrees()),
+        patch("joy.mr_status.fetch_mr_data", return_value={}),
     ):
         yield
 
@@ -106,6 +107,7 @@ def mock_store_empty_repos():
         patch("joy.store.load_config", return_value=Config()),
         patch("joy.store.load_repos", return_value=[]),
         patch("joy.worktrees.discover_worktrees", return_value=[]),
+        patch("joy.mr_status.fetch_mr_data", return_value={}),
     ):
         yield
 
@@ -118,6 +120,7 @@ def mock_store_repos_no_worktrees():
         patch("joy.store.load_config", return_value=Config()),
         patch("joy.store.load_repos", return_value=_sample_repos()),
         patch("joy.worktrees.discover_worktrees", return_value=[]),
+        patch("joy.mr_status.fetch_mr_data", return_value={}),
     ):
         yield
 
