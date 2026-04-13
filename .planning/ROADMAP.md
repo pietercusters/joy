@@ -28,7 +28,7 @@ Full details: `.planning/milestones/v1.0-ROADMAP.md`
 - [ ] **Phase 7: Git Worktree Discovery** — Pure-logic module for discovering worktrees, dirty checks, and remote tracking
 - [ ] **Phase 8: 4-Pane Layout** — Restructure from 2-pane to 2x2 grid with stub panes and Tab focus cycling
 - [ ] **Phase 9: Worktree Pane** — Full worktree display with two-line rows, grouping by repo, and status indicators
-- [ ] **Phase 10: Background Refresh Engine** — Polling loop, manual refresh, timestamp display, and cursor preservation
+- [x] **Phase 10: Background Refresh Engine** — Polling loop, manual refresh, timestamp display, and cursor preservation (completed 2026-04-13)
 - [ ] **Phase 11: MR & CI Status** — GitHub/GitLab CLI integration for PR/MR status and CI pipeline indicators
 - [ ] **Phase 12: iTerm2 Integration & Terminal Pane** — iTerm2 Python API connection, session enumeration, Claude detection, and terminal pane UI
 - [ ] **Phase 13: Project Workflow, Settings & Docs** — Repo registry UI, project grouping by repo, new-project-from-worktree, README updates
@@ -103,10 +103,10 @@ Plans:
   3. A last-refresh timestamp is visible in the UI at all times
   4. When a refresh fails, panes show stale data with an age indicator rather than going blank
   5. Background refresh does not reset cursor position in any pane
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 Plans:
-- [ ] 10-01-PLAN.md — Scroll preservation + border_title refresh label API on WorktreePane
-- [ ] 10-02-PLAN.md — Timer, r binding, timestamp push, and stale detection in JoyApp
+- [x] 10-01-PLAN.md — Scroll preservation + border_title refresh label API on WorktreePane
+- [x] 10-02-PLAN.md — Timer, r binding, timestamp push, and stale detection in JoyApp
 
 ### Phase 11: MR & CI Status
 **Goal**: Users see open MR/PR status and CI pipeline results per worktree row, auto-detected from GitHub or GitLab
@@ -160,7 +160,7 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 11 -> 12 -> 13
 | 7. Git Worktree Discovery | v1.1 | 0/2 | Planning complete | - |
 | 8. 4-Pane Layout | v1.1 | 0/2 | Planning complete | - |
 | 9. Worktree Pane | v1.1 | 0/3 | Planning complete | - |
-| 10. Background Refresh Engine | v1.1 | 0/2 | Planning complete | - |
+| 10. Background Refresh Engine | v1.1 | 2/2 | Complete   | 2026-04-13 |
 | 11. MR & CI Status | v1.1 | 0/0 | Not started | - |
 | 12. iTerm2 Integration & Terminal Pane | v1.1 | 0/0 | Not started | - |
 | 13. Project Workflow, Settings & Docs | v1.1 | 0/0 | Not started | - |
