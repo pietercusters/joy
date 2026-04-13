@@ -11,6 +11,7 @@ from joy.models import (
     PresetKind,
     Project,
     Repo,
+    WorktreeInfo,
     detect_forge,
 )
 
@@ -374,3 +375,57 @@ class TestDetectForge:
 
     def test_no_dot_com_substring(self) -> None:
         assert detect_forge("https://notgithub.example.com/repo") == "unknown"
+
+
+class TestWorktreeInfo:
+    """Tests for the WorktreeInfo dataclass."""
+
+    def test_worktree_info_minimal_creation(self) -> None:
+        """WorktreeInfo with required fields only gets correct defaults."""
+        wt = WorktreeInfo(repo_name="joy", branch="feature/x", path="/tmp/wt")
+        assert wt.repo_name == "joy"
+        assert wt.branch == "feature/x"
+        assert wt.path == "/tmp/wt"
+        assert wt.is_dirty is False
+        assert wt.has_upstream is True
+
+    def test_worktree_info_full_creation(self) -> None:
+        """WorktreeInfo with all 5 fields explicitly set."""
+        wt = WorktreeInfo(
+            repo_name="backend",
+            branch="main",
+            path="/Users/dev/backend",
+            is_dirty=True,
+            has_upstream=False,
+        )
+        assert wt.repo_name == "backend"
+        assert wt.branch == "main"
+        assert wt.path == "/Users/dev/backend"
+        assert wt.is_dirty is True
+        assert wt.has_upstream is False
+
+    def test_worktree_info_defaults(self) -> None:
+        """is_dirty defaults to False, has_upstream defaults to True."""
+        wt = WorktreeInfo(repo_name="r", branch="b", path="/p")
+        assert wt.is_dirty is False
+        assert wt.has_upstream is True
+
+    def test_worktree_info_equality(self) -> None:
+        """Two instances with same fields are equal (dataclass __eq__)."""
+        wt1 = WorktreeInfo(repo_name="joy", branch="main", path="/tmp/wt")
+        wt2 = WorktreeInfo(repo_name="joy", branch="main", path="/tmp/wt")
+        assert wt1 == wt2
+
+    def test_worktree_info_bare_worktree(self) -> None:
+        """Detached HEAD case: branch='HEAD', path set, flags work normally."""
+        wt = WorktreeInfo(
+            repo_name="joy",
+            branch="HEAD",
+            path="/tmp/bare-wt",
+            is_dirty=True,
+            has_upstream=False,
+        )
+        assert wt.branch == "HEAD"
+        assert wt.path == "/tmp/bare-wt"
+        assert wt.is_dirty is True
+        assert wt.has_upstream is False
