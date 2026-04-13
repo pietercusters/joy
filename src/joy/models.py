@@ -156,6 +156,16 @@ class MRInfo:
     last_commit_msg: str  # commit headline, or "" if unavailable
 
 
+@dataclass
+class TerminalSession:
+    """An active iTerm2 terminal session. Pure data, no iterm2 objects."""
+
+    session_id: str
+    session_name: str
+    foreground_process: str
+    cwd: str
+
+
 def detect_forge(remote_url: str) -> str:
     """Detect forge type from remote URL. Returns 'github', 'gitlab', or 'unknown'.
 
