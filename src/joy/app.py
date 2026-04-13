@@ -124,11 +124,7 @@ class JoyApp(App):
             mr_failed = False
             try:
                 mr_data = fetch_mr_data(repos, worktrees)
-                # D-10: detect total failure -- repos with known forge exist,
-                # worktrees exist, but zero MR data returned
-                forgeable = [r for r in repos if r.forge != "unknown"]
-                if forgeable and worktrees and not mr_data:
-                    mr_failed = True
+                # No heuristic needed — fetch_mr_data returns {} for repos with no open MRs
             except Exception:
                 mr_failed = True
 
