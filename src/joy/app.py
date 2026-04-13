@@ -10,7 +10,7 @@ from textual.binding import Binding
 from textual.containers import Grid
 from textual.widgets import Footer, Header
 
-from joy.models import Config, ObjectItem, PresetKind, Project, WorktreeInfo
+from joy.models import Config, ObjectItem, PresetKind, Project, TerminalSession, WorktreeInfo
 from joy.screens import NameInputModal, PresetPickerModal, SettingsModal, ValueInputModal
 from joy.widgets.object_row import _success_message, _truncate
 from joy.widgets.project_detail import GROUP_ORDER, ProjectDetail
@@ -64,6 +64,8 @@ class JoyApp(App):
         self._mr_fetch_failed: bool = False
         self._refresh_timer: object | None = None
         self._label_timer: object | None = None
+        self._terminal_last_refresh_at: datetime | None = None
+        self._terminal_refresh_failed: bool = False
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -102,11 +104,12 @@ class JoyApp(App):
             self._config.refresh_interval, self._trigger_worktree_refresh
         )
         if self._label_timer is None:
-            self._label_timer = self.set_interval(5, self._update_refresh_label)
+            self._label_timer = self.set_interval(5, self._update_all_refresh_labels)
         self.query_one(ProjectList).set_projects(projects)
         if projects:
             self.query_one(ProjectList).select_first()
         self._load_worktrees()
+        self._load_terminal()
 
     @work(thread=True)
     def _load_worktrees(self) -> None:
@@ -135,6 +138,19 @@ class JoyApp(App):
         except Exception:
             self.app.call_from_thread(self._mark_refresh_failure)
 
+    @work(thread=True, exit_on_error=False)
+    def _load_terminal(self) -> None:
+        """Load terminal session data in background thread (D-15). Independent of _load_worktrees."""
+        from joy.terminal_sessions import fetch_sessions  # noqa: PLC0415
+
+        try:
+            sessions = fetch_sessions()
+            self.app.call_from_thread(self._set_terminal_sessions, sessions)
+            self.app.call_from_thread(self._mark_terminal_refresh_success)
+        except Exception:
+            self.app.call_from_thread(self._set_terminal_sessions, None)
+            self.app.call_from_thread(self._mark_terminal_refresh_failure)
+
     async def _set_worktrees(
         self,
         worktrees: list[WorktreeInfo],
@@ -149,13 +165,19 @@ class JoyApp(App):
             worktrees, repo_count=repo_count, branch_filter=branch_filter, mr_data=mr_data
         )
 
+    async def _set_terminal_sessions(self, sessions: list[TerminalSession] | None) -> None:
+        """Push terminal session data to the pane widget (D-15)."""
+        await self.query_one(TerminalPane).set_sessions(sessions)
+
     def _trigger_worktree_refresh(self) -> None:
-        """Timer callback: re-run worktree discovery (D-07)."""
+        """Timer callback: re-run worktree and terminal discovery (D-07, D-15)."""
         self._load_worktrees()
+        self._load_terminal()
 
     def action_refresh_worktrees(self) -> None:
-        """Manual refresh triggered by 'r' keybinding (D-05). No toast (D-06)."""
+        """Manual refresh triggered by 'r' keybinding (D-05, D-15). No toast (D-06)."""
         self._load_worktrees()
+        self._load_terminal()
 
     def _mark_refresh_success(self) -> None:
         """Record successful refresh and update timestamp display."""
@@ -167,6 +189,17 @@ class JoyApp(App):
         """Record failed refresh and update timestamp display with stale warning (REFR-04)."""
         self._refresh_failed = True
         self._update_refresh_label()
+
+    def _mark_terminal_refresh_success(self) -> None:
+        """Record successful terminal refresh and update label."""
+        self._terminal_last_refresh_at = datetime.now(timezone.utc)
+        self._terminal_refresh_failed = False
+        self._update_terminal_refresh_label()
+
+    def _mark_terminal_refresh_failure(self) -> None:
+        """Record failed terminal refresh and update label with stale warning."""
+        self._terminal_refresh_failed = True
+        self._update_terminal_refresh_label()
 
     def _update_refresh_label(self) -> None:
         """Push formatted timestamp to WorktreePane border_title (D-01, D-03)."""
@@ -183,6 +216,23 @@ class JoyApp(App):
         self.query_one(WorktreePane).set_refresh_label(
             timestamp, stale=stale, mr_error=self._mr_fetch_failed
         )
+
+    def _update_terminal_refresh_label(self) -> None:
+        """Push formatted timestamp to TerminalPane border_title (D-16)."""
+        if self._terminal_last_refresh_at is None:
+            if self._terminal_refresh_failed:
+                self.query_one(TerminalPane).set_refresh_label("never", stale=True)
+            return
+        now = datetime.now(timezone.utc)
+        age_seconds = int((now - self._terminal_last_refresh_at).total_seconds())
+        timestamp = self._format_age(age_seconds)
+        stale = self._terminal_refresh_failed or age_seconds > (2 * self._config.refresh_interval)
+        self.query_one(TerminalPane).set_refresh_label(timestamp, stale=stale)
+
+    def _update_all_refresh_labels(self) -> None:
+        """Periodic label update for both worktree and terminal panes."""
+        self._update_refresh_label()
+        self._update_terminal_refresh_label()
 
     @staticmethod
     def _format_age(seconds: int) -> str:
