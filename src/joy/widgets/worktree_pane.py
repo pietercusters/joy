@@ -191,7 +191,10 @@ class WorktreeRow(Static):
             if mr_info.author:
                 parts.append(mr_info.author)
             if mr_info.last_commit_hash:
-                parts.append(f"{mr_info.last_commit_hash} {mr_info.last_commit_msg}")
+                commit_text = mr_info.last_commit_hash
+                if mr_info.last_commit_msg:
+                    commit_text += f" {mr_info.last_commit_msg}"
+                parts.append(commit_text)
             t.append(f"  {'  '.join(parts)}", style="dim")
         else:
             t.append(f"  {display_path}", style="dim")

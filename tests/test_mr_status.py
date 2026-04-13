@@ -21,7 +21,7 @@ GITHUB_PR_JSON = [
         "isDraft": False,
         "author": {"login": "pieter"},
         "commits": [
-            {"commit": {"oid": "abc1234def5678", "messageHeadline": "fix: login redirect"}}
+            {"oid": "abc1234def5678", "messageHeadline": "fix: login redirect"}
         ],
         "statusCheckRollup": [
             {"status": "COMPLETED", "conclusion": "SUCCESS", "name": "build"}
@@ -36,7 +36,7 @@ GITHUB_PR_JSON_MULTI = [
         "isDraft": False,
         "author": {"login": "pieter"},
         "commits": [
-            {"commit": {"oid": "abc1234def5678", "messageHeadline": "fix: login redirect"}}
+            {"oid": "abc1234def5678", "messageHeadline": "fix: login redirect"}
         ],
         "statusCheckRollup": [
             {"status": "COMPLETED", "conclusion": "SUCCESS", "name": "build"}
@@ -48,7 +48,7 @@ GITHUB_PR_JSON_MULTI = [
         "isDraft": False,
         "author": {"login": "other"},
         "commits": [
-            {"commit": {"oid": "zzz9999aaa0000", "messageHeadline": "chore: unrelated"}}
+            {"oid": "zzz9999aaa0000", "messageHeadline": "chore: unrelated"}
         ],
         "statusCheckRollup": [],
     },
@@ -60,6 +60,7 @@ GITLAB_MR_JSON = [
         "source_branch": "feat-auth",
         "draft": True,
         "author": {"username": "pieter"},
+        "sha": "abcdef0123456789",
     }
 ]
 
@@ -383,7 +384,7 @@ class TestFetchGitlabMrs:
         assert info.is_draft is True
         assert info.ci_status == "pass"  # "success" maps to "pass"
         assert info.author == "@pieter"
-        assert info.last_commit_hash == ""
+        assert info.last_commit_hash == "abcdef0"  # sha[:7] from list endpoint
         assert info.last_commit_msg == ""
 
     @patch("joy.mr_status.subprocess.run")
