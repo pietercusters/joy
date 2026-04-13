@@ -144,6 +144,18 @@ class WorktreeInfo:
     has_upstream: bool = True  # True if branch tracks a remote upstream
 
 
+@dataclass
+class MRInfo:
+    """MR/PR enrichment data for a worktree branch. Per Phase 11 D-08."""
+
+    mr_number: int
+    is_draft: bool
+    ci_status: str | None  # "pass" | "fail" | "pending" | None
+    author: str  # "@login" format
+    last_commit_hash: str  # 7-char short hash, or "" if unavailable
+    last_commit_msg: str  # commit headline, or "" if unavailable
+
+
 def detect_forge(remote_url: str) -> str:
     """Detect forge type from remote URL. Returns 'github', 'gitlab', or 'unknown'.
 
