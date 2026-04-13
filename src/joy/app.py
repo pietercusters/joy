@@ -6,7 +6,7 @@ import sys
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal
+from textual.containers import Grid
 from textual.widgets import Footer, Header
 
 from joy.models import Config, ObjectItem, PresetKind, Project
@@ -14,6 +14,8 @@ from joy.screens import NameInputModal, PresetPickerModal, SettingsModal, ValueI
 from joy.widgets.object_row import _success_message, _truncate
 from joy.widgets.project_detail import GROUP_ORDER, ProjectDetail
 from joy.widgets.project_list import JoyListView, ProjectList
+from joy.widgets.terminal_pane import TerminalPane
+from joy.widgets.worktree_pane import WorktreePane
 
 
 class JoyApp(App):
@@ -23,8 +25,25 @@ class JoyApp(App):
     SUB_TITLE = "Projects"
 
     CSS = """
-    #project-list { width: 1fr; }
-    #project-detail { width: 2fr; }
+    #pane-grid {
+        grid-size: 2 2;
+        grid-rows: 1fr 1fr;
+        grid-columns: 1fr 1fr;
+    }
+    #project-list {
+        height: 1fr;
+        border: solid $surface-lighten-2;
+    }
+    #project-list:focus-within {
+        border: solid $accent;
+    }
+    #project-detail {
+        height: 1fr;
+        border: solid $surface-lighten-2;
+    }
+    #project-detail:focus-within {
+        border: solid $accent;
+    }
     """
 
     BINDINGS = [
@@ -38,9 +57,12 @@ class JoyApp(App):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield Horizontal(
+        yield Grid(
             ProjectList(id="project-list"),
             ProjectDetail(id="project-detail"),
+            TerminalPane(id="terminal-pane"),
+            WorktreePane(id="worktrees-pane"),
+            id="pane-grid",
         )
         yield Footer()
 
@@ -67,7 +89,7 @@ class JoyApp(App):
             self.query_one(ProjectList).select_first()
 
     def on_descendant_focus(self, event) -> None:
-        """Update sub_title based on which pane has focus (D-08)."""
+        """Update sub_title based on which pane has focus (D-08, D-13)."""
         node = event.widget
         while node is not None:
             if hasattr(node, "id"):
@@ -76,6 +98,12 @@ class JoyApp(App):
                     return
                 if node.id in ("project-list", "project-listview"):
                     self.sub_title = "Projects"
+                    return
+                if node.id == "terminal-pane":
+                    self.sub_title = "Terminal"
+                    return
+                if node.id == "worktrees-pane":
+                    self.sub_title = "Worktrees"
                     return
             node = node.parent
 

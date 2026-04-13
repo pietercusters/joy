@@ -72,8 +72,8 @@ async def test_stub_panes_show_coming_soon(mock_store):
         from textual.widgets import Static
         terminal_static = terminal.query_one(Static)
         worktrees_static = worktrees.query_one(Static)
-        assert "coming soon" in str(terminal_static.renderable).lower()
-        assert "coming soon" in str(worktrees_static.renderable).lower()
+        assert "coming soon" in str(terminal_static.content).lower()
+        assert "coming soon" in str(worktrees_static.content).lower()
 
 
 # ---------------------------------------------------------------------------
