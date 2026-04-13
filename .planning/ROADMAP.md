@@ -72,7 +72,10 @@ Plans:
   1. App shows four panes in a 2x2 grid: projects (top-left), details (top-right), terminal placeholder (bottom-left), worktree placeholder (bottom-right)
   2. User can cycle focus between all four panes using Tab
   3. All existing project list, detail pane, and keyboard navigation functionality works identically to v1.0
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 08-01-PLAN.md — Stub widgets (TerminalPane, WorktreePane) + failing TDD tests for 4-pane layout
+- [ ] 08-02-PLAN.md — Grid layout refactor in app.py + regression verification
 **UI hint**: yes
 
 ### Phase 9: Worktree Pane
@@ -148,7 +151,7 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 11 -> 12 -> 13
 | 5. Settings, Search & Distribution | v1.0 | 3/3 | ✓ Complete | 2026-04-12 |
 | 6. Models, Config & Store | v1.1 | 2/2 | ✓ Complete | 2026-04-13 |
 | 7. Git Worktree Discovery | v1.1 | 0/2 | Planning complete | - |
-| 8. 4-Pane Layout | v1.1 | 0/0 | Not started | - |
+| 8. 4-Pane Layout | v1.1 | 0/2 | Planning complete | - |
 | 9. Worktree Pane | v1.1 | 0/0 | Not started | - |
 | 10. Background Refresh Engine | v1.1 | 0/0 | Not started | - |
 | 11. MR & CI Status | v1.1 | 0/0 | Not started | - |
