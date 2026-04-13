@@ -62,6 +62,7 @@ class JoyApp(App):
         self._last_refresh_at: datetime | None = None
         self._refresh_failed: bool = False
         self._refresh_timer: object | None = None
+        self._label_timer: object | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -99,6 +100,8 @@ class JoyApp(App):
         self._refresh_timer = self.set_interval(
             self._config.refresh_interval, self._trigger_worktree_refresh
         )
+        if self._label_timer is None:
+            self._label_timer = self.set_interval(5, self._update_refresh_label)
         self.query_one(ProjectList).set_projects(projects)
         if projects:
             self.query_one(ProjectList).select_first()
