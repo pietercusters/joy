@@ -1,5 +1,5 @@
 ---
-status: complete
+status: diagnosed
 phase: 10-background-refresh-engine
 source: 10-01-SUMMARY.md, 10-02-SUMMARY.md
 started: 2026-04-13T00:00:00Z
@@ -62,9 +62,12 @@ blocked: 1
   reason: "User reported: just now is always displayed, never changes"
   severity: major
   test: 4
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "_update_refresh_label() is only called on refresh events (mark_refresh_success/failure). There is no periodic display-update timer. The label is computed once per data refresh (age ≈ 0 → 'just now') and then frozen. Between refreshes the displayed age never ages."
+  artifacts:
+    - path: "src/joy/app.py"
+      issue: "_update_refresh_label only called from _mark_refresh_success/_mark_refresh_failure — no separate periodic label-update timer"
+  missing:
+    - "Add a second set_interval timer (every 5s) in _set_projects that calls _update_refresh_label() without triggering a data refresh"
   debug_session: ""
 
 - truth: "Background auto-refresh fires every ~30s and updates the timestamp in the border title"
@@ -72,7 +75,10 @@ blocked: 1
   reason: "User reported: just now is always displayed, never changes"
   severity: major
   test: 5
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "Same root cause as test 4: auto-refresh timer fires correctly every 30s but each fire resets the label to 'just now' (age=0). Without a display-update ticker, the label never shows elapsed age between fires — it always reads 'just now' right after each data refresh."
+  artifacts:
+    - path: "src/joy/app.py"
+      issue: "No display-update ticker; label frozen at 'just now' between 30s data-refresh cycles"
+  missing:
+    - "Same fix as test 4: periodic _update_refresh_label() call independent of data refresh"
   debug_session: ""
