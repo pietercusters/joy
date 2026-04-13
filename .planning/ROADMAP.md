@@ -74,7 +74,7 @@ Plans:
   3. All existing project list, detail pane, and keyboard navigation functionality works identically to v1.0
 **Plans:** 2 plans
 Plans:
-- [ ] 08-01-PLAN.md — Stub widgets (TerminalPane, WorktreePane) + failing TDD tests for 4-pane layout
+- [x] 08-01-PLAN.md — Stub widgets (TerminalPane, WorktreePane) + failing TDD tests for 4-pane layout
 - [ ] 08-02-PLAN.md — Grid layout refactor in app.py + regression verification
 **UI hint**: yes
 
