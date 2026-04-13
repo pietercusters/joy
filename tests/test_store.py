@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from joy.models import Config, ObjectItem, PresetKind, Project
+from joy.models import Config, ObjectItem, PresetKind, Project, Repo
 
 
 # ---------------------------------------------------------------------------
@@ -310,3 +311,201 @@ def test_config_backward_compat_missing_new_fields(tmp_path: Path) -> None:
     loaded = load_config(path=config_path)
     assert loaded.refresh_interval == 30
     assert loaded.branch_filter == ["main", "testing"]
+
+
+# ---------------------------------------------------------------------------
+# Repo store tests
+# ---------------------------------------------------------------------------
+
+
+class TestRepoStore:
+    """Tests for Repo TOML persistence (load_repos / save_repos)."""
+
+    def test_repo_round_trip_single(self, tmp_path: Path) -> None:
+        """Save a single Repo, load it back, assert all 4 fields match."""
+        from joy.store import load_repos, save_repos
+
+        repos_path = tmp_path / "repos.toml"
+        repo = Repo(
+            name="joy",
+            local_path="/dev/joy",
+            remote_url="git@github.com:user/joy.git",
+            forge="github",
+        )
+        save_repos([repo], path=repos_path)
+        loaded = load_repos(path=repos_path)
+
+        assert len(loaded) == 1
+        r = loaded[0]
+        assert r.name == "joy"
+        assert r.local_path == "/dev/joy"
+        assert r.remote_url == "git@github.com:user/joy.git"
+        assert r.forge == "github"
+
+    def test_repo_round_trip_multiple(self, tmp_path: Path) -> None:
+        """Save 2 repos, load back, both present with correct fields."""
+        from joy.store import load_repos, save_repos
+
+        repos_path = tmp_path / "repos.toml"
+        alpha = Repo(name="alpha", local_path="/dev/alpha")
+        beta = Repo(name="beta", local_path="/dev/beta", remote_url="https://gitlab.com/user/beta.git", forge="gitlab")
+        save_repos([alpha, beta], path=repos_path)
+        loaded = load_repos(path=repos_path)
+
+        assert len(loaded) == 2
+        by_name = {r.name: r for r in loaded}
+        assert "alpha" in by_name
+        assert "beta" in by_name
+        assert by_name["alpha"].local_path == "/dev/alpha"
+        assert by_name["beta"].forge == "gitlab"
+
+    def test_repo_round_trip_defaults(self, tmp_path: Path) -> None:
+        """Repo with only required fields round-trips with correct defaults."""
+        from joy.store import load_repos, save_repos
+
+        repos_path = tmp_path / "repos.toml"
+        repo = Repo(name="bare", local_path="/dev/bare")
+        save_repos([repo], path=repos_path)
+        loaded = load_repos(path=repos_path)
+
+        assert len(loaded) == 1
+        r = loaded[0]
+        assert r.remote_url == ""
+        assert r.forge == "unknown"
+
+    def test_load_repos_missing_file(self, tmp_path: Path) -> None:
+        """load_repos from non-existent path returns empty list."""
+        from joy.store import load_repos
+
+        result = load_repos(path=tmp_path / "nope.toml")
+        assert result == []
+
+    def test_save_repos_creates_directory(self, tmp_path: Path) -> None:
+        """save_repos creates parent directories that do not yet exist."""
+        from joy.store import save_repos
+
+        repos_path = tmp_path / "deep" / "repos.toml"
+        save_repos([Repo(name="r", local_path="/dev/r")], path=repos_path)
+        assert repos_path.exists()
+
+    def test_repo_toml_keyed_schema(self, tmp_path: Path) -> None:
+        """Saved repos.toml uses [repos.<name>] keyed schema, not array-of-tables."""
+        from joy.store import save_repos
+
+        repos_path = tmp_path / "repos.toml"
+        save_repos([Repo(name="joy", local_path="/dev/joy")], path=repos_path)
+        raw = repos_path.read_text(encoding="utf-8")
+        assert "[repos.joy]" in raw
+        assert "[[repos]]" not in raw
+
+    def test_repo_unknown_field_warns(self, tmp_path: Path) -> None:
+        """Unknown fields in repos.toml emit UserWarning and are skipped."""
+        from joy.store import load_repos
+
+        repos_path = tmp_path / "repos.toml"
+        repos_path.write_bytes(
+            b'[repos.test]\nlocal_path = "/dev/test"\nunknown_field = "surprise"\n'
+        )
+        with pytest.warns(UserWarning, match="unknown_field"):
+            loaded = load_repos(path=repos_path)
+        assert len(loaded) == 1
+        assert loaded[0].local_path == "/dev/test"
+        assert not hasattr(loaded[0], "unknown_field")
+
+    def test_save_repos_atomic_write(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """save_repos uses atomic write (os.replace called with .tmp source)."""
+        from joy import store
+
+        repos_path = tmp_path / "repos.toml"
+        replace_calls: list[tuple[str, str]] = []
+        original_replace = os.replace
+
+        def mock_replace(src: str, dst: str) -> None:
+            replace_calls.append((str(src), str(dst)))
+            original_replace(src, dst)
+
+        monkeypatch.setattr(os, "replace", mock_replace)
+        from joy.store import save_repos
+
+        save_repos([Repo(name="r", local_path="/dev/r")], path=repos_path)
+
+        assert len(replace_calls) == 1
+        src, dst = replace_calls[0]
+        assert src.endswith(".tmp")
+        assert dst == str(repos_path)
+        assert repos_path.exists()
+
+
+# ---------------------------------------------------------------------------
+# get_remote_url tests
+# ---------------------------------------------------------------------------
+
+
+class TestGetRemoteUrl:
+    """Tests for get_remote_url() subprocess git integration."""
+
+    def test_get_remote_url_real_git_repo(self, tmp_path: Path) -> None:
+        """Returns origin remote URL from a real initialized git repo."""
+        from joy.store import get_remote_url
+
+        # Initialize a real git repo
+        subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "remote", "add", "origin", "https://github.com/test/repo.git"],
+            cwd=str(tmp_path),
+            check=True,
+            capture_output=True,
+        )
+        url = get_remote_url(str(tmp_path))
+        assert url == "https://github.com/test/repo.git"
+
+    def test_get_remote_url_no_git_repo(self, tmp_path: Path) -> None:
+        """Returns '' when directory exists but has no .git."""
+        from joy.store import get_remote_url
+
+        result = get_remote_url(str(tmp_path))
+        assert result == ""
+
+    def test_get_remote_url_nonexistent_path(self) -> None:
+        """Returns '' for a path that does not exist."""
+        from joy.store import get_remote_url
+
+        result = get_remote_url("/nonexistent/path/abc123")
+        assert result == ""
+
+    def test_get_remote_url_no_remote(self, tmp_path: Path) -> None:
+        """Returns '' when repo exists but has no remote configured."""
+        from joy.store import get_remote_url
+
+        subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True)
+        result = get_remote_url(str(tmp_path))
+        assert result == ""
+
+
+# ---------------------------------------------------------------------------
+# validate_repo_path tests
+# ---------------------------------------------------------------------------
+
+
+class TestValidateRepoPath:
+    """Tests for validate_repo_path() path existence checks."""
+
+    def test_validate_existing_dir(self, tmp_path: Path) -> None:
+        """Returns True for an existing directory."""
+        from joy.store import validate_repo_path
+
+        assert validate_repo_path(str(tmp_path)) is True
+
+    def test_validate_nonexistent(self) -> None:
+        """Returns False for a path that does not exist."""
+        from joy.store import validate_repo_path
+
+        assert validate_repo_path("/nonexistent/abc123") is False
+
+    def test_validate_file_not_dir(self, tmp_path: Path) -> None:
+        """Returns False for a path that points to a file, not a directory."""
+        from joy.store import validate_repo_path
+
+        file_path = tmp_path / "somefile.txt"
+        file_path.write_text("content")
+        assert validate_repo_path(str(file_path)) is False
