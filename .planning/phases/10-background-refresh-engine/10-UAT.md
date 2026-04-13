@@ -1,5 +1,5 @@
 ---
-status: diagnosed
+status: complete
 phase: 10-background-refresh-engine
 source: 10-01-SUMMARY.md, 10-02-SUMMARY.md
 started: 2026-04-13T00:00:00Z
@@ -26,15 +26,13 @@ result: pass
 
 ### 4. Relative Timestamp Format
 expected: After pressing `r`, the timestamp shows "just now". Wait about 20 seconds without refreshing — the timestamp should change from "just now" → "20s ago". After a minute it should show "Xm ago".
-result: issue
-reported: "just now is always displayed, never changes"
-severity: major
+result: pass
+note: "Fixed in 5f55323 — 5s label-update ticker added; re-verified by user"
 
 ### 5. Background Auto-Refresh
 expected: Launch joy and leave it running without pressing anything. After ~30 seconds the Worktrees pane border timestamp should update automatically (without any keypress). The timestamp resets toward "just now".
-result: issue
-reported: "just now is always displayed, never changes"
-severity: major
+result: pass
+note: "Fixed in 5f55323 — same root cause as test 4; re-verified by user"
 
 ### 6. Scroll Position Preserved on Refresh
 expected: If the Worktrees pane has enough worktrees to scroll, scroll down. Press `r` to refresh. After refresh completes, the scroll position should be preserved — not snapped back to the top.
@@ -49,8 +47,8 @@ result: skipped
 ## Summary
 
 total: 7
-passed: 3
-issues: 2
+passed: 5
+issues: 0
 pending: 0
 skipped: 1
 blocked: 1
