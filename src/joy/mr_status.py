@@ -92,11 +92,12 @@ def _fetch_github_mrs(
             continue  # Not a current worktree branch -- skip
         commits = pr.get("commits", [])
         last_commit = commits[-1] if commits else {}
+        author_obj = pr.get("author") or {}
         out[(repo.name, branch)] = MRInfo(
             mr_number=pr["number"],
             is_draft=pr.get("isDraft", False),
             ci_status=_map_gh_ci_status(pr.get("statusCheckRollup", [])),
-            author=f"@{pr['author']['login']}",
+            author=f"@{author_obj.get('login', 'unknown')}",
             last_commit_hash=last_commit.get("oid", "")[:7],
             last_commit_msg=last_commit.get("messageHeadline", ""),
         )
@@ -140,11 +141,12 @@ def _fetch_gitlab_mrs(
         if branch not in active_branches:
             continue
         ci_status = _fetch_glab_ci_status(repo, branch)
+        author_obj = mr.get("author") or {}
         out[(repo.name, branch)] = MRInfo(
             mr_number=mr["iid"],
             is_draft=mr.get("draft", False),
             ci_status=ci_status,
-            author=f"@{mr['author']['username']}",
+            author=f"@{author_obj.get('username', 'unknown')}",
             last_commit_hash=mr.get("sha", "")[:7],
             last_commit_msg="",  # Commit message not available from list endpoint
         )
