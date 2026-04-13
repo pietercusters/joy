@@ -59,7 +59,10 @@ Plans:
   2. Each worktree reports whether it has uncommitted changes (dirty indicator)
   3. Each worktree reports whether its branch has an upstream tracking branch (no-remote indicator)
   4. Worktrees on branches matching configured filter patterns are excluded from results
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 07-01-PLAN.md — WorktreeInfo dataclass in models.py with unit tests
+- [ ] 07-02-PLAN.md — discover_worktrees function via TDD (worktrees.py + tests)
 
 ### Phase 8: 4-Pane Layout
 **Goal**: The app displays a 2x2 grid layout with all four panes visible and focus cycling works across them, without breaking any existing functionality
@@ -144,7 +147,7 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 11 -> 12 -> 13
 | 4. CRUD | v1.0 | 3/3 | ✓ Complete | 2026-04-11 |
 | 5. Settings, Search & Distribution | v1.0 | 3/3 | ✓ Complete | 2026-04-12 |
 | 6. Models, Config & Store | v1.1 | 2/2 | ✓ Complete | 2026-04-13 |
-| 7. Git Worktree Discovery | v1.1 | 0/0 | Not started | - |
+| 7. Git Worktree Discovery | v1.1 | 0/2 | Planning complete | - |
 | 8. 4-Pane Layout | v1.1 | 0/0 | Not started | - |
 | 9. Worktree Pane | v1.1 | 0/0 | Not started | - |
 | 10. Background Refresh Engine | v1.1 | 0/0 | Not started | - |
