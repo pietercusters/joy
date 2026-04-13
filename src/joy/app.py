@@ -55,10 +55,13 @@ class JoyApp(App):
         Binding("r", "refresh_worktrees", "Refresh", priority=True),
     ]
 
-    _config: Config = Config()
-    _last_refresh_at: datetime | None = None
-    _refresh_failed: bool = False
-    _refresh_timer: object | None = None
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._config: Config = Config()
+        self._projects: list[Project] = []
+        self._last_refresh_at: datetime | None = None
+        self._refresh_failed: bool = False
+        self._refresh_timer: object | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -74,9 +77,6 @@ class JoyApp(App):
     def on_mount(self) -> None:
         self.sub_title = _get_version()
         self._load_data()
-        self._refresh_timer = self.set_interval(
-            self._config.refresh_interval, self._trigger_worktree_refresh
-        )
 
     @work(thread=True)
     def _load_data(self) -> None:
@@ -92,6 +92,13 @@ class JoyApp(App):
         self._projects = projects
         if config is not None:
             self._config = config
+        # WR-03: Create/reset timer here so it uses the user's configured interval,
+        # not the default that was in effect when on_mount ran.
+        if self._refresh_timer is not None:
+            self._refresh_timer.stop()
+        self._refresh_timer = self.set_interval(
+            self._config.refresh_interval, self._trigger_worktree_refresh
+        )
         self.query_one(ProjectList).set_projects(projects)
         if projects:
             self.query_one(ProjectList).select_first()
@@ -113,9 +120,9 @@ class JoyApp(App):
         except Exception:
             self.app.call_from_thread(self._mark_refresh_failure)
 
-    def _set_worktrees(self, worktrees: list[WorktreeInfo], repo_count: int, branch_filter: str) -> None:
+    async def _set_worktrees(self, worktrees: list[WorktreeInfo], repo_count: int, branch_filter: str) -> None:
         """Push worktree data to the pane widget (D-01)."""
-        self.query_one(WorktreePane).set_worktrees(
+        await self.query_one(WorktreePane).set_worktrees(
             worktrees, repo_count=repo_count, branch_filter=branch_filter
         )
 
@@ -141,6 +148,9 @@ class JoyApp(App):
     def _update_refresh_label(self) -> None:
         """Push formatted timestamp to WorktreePane border_title (D-01, D-03)."""
         if self._last_refresh_at is None:
+            if self._refresh_failed:
+                # WR-05: No successful refresh yet but one has failed — show stale
+                self.query_one(WorktreePane).set_refresh_label("never", stale=True)
             return  # No successful refresh yet
         now = datetime.now(timezone.utc)
         age_seconds = int((now - self._last_refresh_at).total_seconds())
