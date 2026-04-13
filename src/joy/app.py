@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import datetime, timezone
 
 from textual import work
 from textual.app import App, ComposeResult
@@ -51,9 +52,13 @@ class JoyApp(App):
         Binding("shift+o,O", "open_all_defaults", "Open All", priority=True),
         Binding("n", "new_project", "New", priority=True),
         Binding("s", "settings", "Settings", priority=True),
+        Binding("r", "refresh_worktrees", "Refresh", priority=True),
     ]
 
     _config: Config = Config()
+    _last_refresh_at: datetime | None = None
+    _refresh_failed: bool = False
+    _refresh_timer: object | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -69,6 +74,9 @@ class JoyApp(App):
     def on_mount(self) -> None:
         self.sub_title = _get_version()
         self._load_data()
+        self._refresh_timer = self.set_interval(
+            self._config.refresh_interval, self._trigger_worktree_refresh
+        )
 
     @work(thread=True)
     def _load_data(self) -> None:
@@ -91,21 +99,68 @@ class JoyApp(App):
 
     @work(thread=True)
     def _load_worktrees(self) -> None:
-        """Load worktree data in background thread and push to pane (D-01)."""
+        """Load worktree data in background thread and push to pane (D-01, D-07)."""
         from joy.store import load_repos  # noqa: PLC0415
         from joy.worktrees import discover_worktrees  # noqa: PLC0415
 
-        repos = load_repos()
-        worktrees = discover_worktrees(repos, self._config.branch_filter)
-        repo_count = len(repos)
-        branch_filter = ", ".join(self._config.branch_filter) if self._config.branch_filter else ""
-        self.app.call_from_thread(self._set_worktrees, worktrees, repo_count, branch_filter)
+        try:
+            repos = load_repos()
+            worktrees = discover_worktrees(repos, self._config.branch_filter)
+            repo_count = len(repos)
+            branch_filter = ", ".join(self._config.branch_filter) if self._config.branch_filter else ""
+            self.app.call_from_thread(self._set_worktrees, worktrees, repo_count, branch_filter)
+            self.app.call_from_thread(self._mark_refresh_success)
+        except Exception:
+            self.app.call_from_thread(self._mark_refresh_failure)
 
     def _set_worktrees(self, worktrees: list[WorktreeInfo], repo_count: int, branch_filter: str) -> None:
         """Push worktree data to the pane widget (D-01)."""
         self.query_one(WorktreePane).set_worktrees(
             worktrees, repo_count=repo_count, branch_filter=branch_filter
         )
+
+    def _trigger_worktree_refresh(self) -> None:
+        """Timer callback: re-run worktree discovery (D-07)."""
+        self._load_worktrees()
+
+    def action_refresh_worktrees(self) -> None:
+        """Manual refresh triggered by 'r' keybinding (D-05). No toast (D-06)."""
+        self._load_worktrees()
+
+    def _mark_refresh_success(self) -> None:
+        """Record successful refresh and update timestamp display."""
+        self._last_refresh_at = datetime.now(timezone.utc)
+        self._refresh_failed = False
+        self._update_refresh_label()
+
+    def _mark_refresh_failure(self) -> None:
+        """Record failed refresh and update timestamp display with stale warning (REFR-04)."""
+        self._refresh_failed = True
+        self._update_refresh_label()
+
+    def _update_refresh_label(self) -> None:
+        """Push formatted timestamp to WorktreePane border_title (D-01, D-03)."""
+        if self._last_refresh_at is None:
+            return  # No successful refresh yet
+        now = datetime.now(timezone.utc)
+        age_seconds = int((now - self._last_refresh_at).total_seconds())
+        timestamp = self._format_age(age_seconds)
+        # D-04: stale if age > 2x interval OR refresh failed
+        stale = self._refresh_failed or age_seconds > (2 * self._config.refresh_interval)
+        self.query_one(WorktreePane).set_refresh_label(timestamp, stale=stale)
+
+    @staticmethod
+    def _format_age(seconds: int) -> str:
+        """Format age in seconds to human-readable relative string (D-02)."""
+        if seconds < 5:
+            return "just now"
+        if seconds < 60:
+            return f"{seconds}s ago"
+        minutes = seconds // 60
+        if minutes < 60:
+            return f"{minutes}m ago"
+        hours = minutes // 60
+        return f"{hours}h ago"
 
     def on_descendant_focus(self, event) -> None:
         """Update sub_title based on which pane has focus (D-08, D-13)."""
