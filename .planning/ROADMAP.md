@@ -116,7 +116,11 @@ Plans:
   1. Worktree rows show open MR/PR number and status badge when a merge request exists for that branch
   2. Worktree rows show CI pipeline status (pass/fail/pending) when available
   3. MR author and last commit (short hash + message) shown on second line of worktree row when MR data is available
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 11-01-PLAN.md — MRInfo dataclass + mr_status.py fetch module (TDD: GitHub/GitLab CLI integration)
+- [ ] 11-02-PLAN.md — WorktreeRow MR rendering + WorktreePane wiring + app.py integration (TDD)
+- [ ] 11-03-PLAN.md — Visual verification checkpoint (human-verify)
 **UI hint**: yes
 
 ### Phase 12: iTerm2 Integration & Terminal Pane
@@ -161,6 +165,6 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 11 -> 12 -> 13
 | 8. 4-Pane Layout | v1.1 | 0/2 | Planning complete | - |
 | 9. Worktree Pane | v1.1 | 0/3 | Planning complete | - |
 | 10. Background Refresh Engine | v1.1 | 2/2 | Complete   | 2026-04-13 |
-| 11. MR & CI Status | v1.1 | 0/0 | Not started | - |
+| 11. MR & CI Status | v1.1 | 0/3 | Planning complete | - |
 | 12. iTerm2 Integration & Terminal Pane | v1.1 | 0/0 | Not started | - |
 | 13. Project Workflow, Settings & Docs | v1.1 | 0/0 | Not started | - |
