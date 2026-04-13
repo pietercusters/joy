@@ -45,7 +45,10 @@ Full details: `.planning/milestones/v1.0-ROADMAP.md`
   3. App auto-detects forge type (GitHub vs GitLab) from remote URL
   4. App validates that a repo's local path exists before saving
   5. Config.toml supports refresh_interval and branch_filter settings that survive round-trip read/write
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 06-01-PLAN.md — Repo model, detect_forge, Config extension (models.py + tests)
+- [ ] 06-02-PLAN.md — Repo store CRUD, get_remote_url, validate_repo_path (store.py + tests)
 
 ### Phase 7: Git Worktree Discovery
 **Goal**: A standalone module can discover all active worktrees for registered repos with dirty and remote-tracking status, handling all git edge cases
@@ -140,7 +143,7 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 11 -> 12 -> 13
 | 3. Activation | v1.0 | 3/3 | Complete | 2026-04-11 |
 | 4. CRUD | v1.0 | 3/3 | Complete | 2026-04-11 |
 | 5. Settings, Search & Distribution | v1.0 | 3/3 | Complete | 2026-04-12 |
-| 6. Models, Config & Store | v1.1 | 0/0 | Not started | - |
+| 6. Models, Config & Store | v1.1 | 0/2 | Planned | - |
 | 7. Git Worktree Discovery | v1.1 | 0/0 | Not started | - |
 | 8. 4-Pane Layout | v1.1 | 0/0 | Not started | - |
 | 9. Worktree Pane | v1.1 | 0/0 | Not started | - |
