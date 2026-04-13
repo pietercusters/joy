@@ -219,6 +219,7 @@ class WorktreePane(Widget, can_focus=True):
             branch_filter: Comma-separated filter string for the empty-state hint (D-16).
         """
         scroll = self.query_one("#worktree-scroll", _WorktreeScroll)
+        saved_scroll_y = scroll.scroll_y
         scroll.remove_children()
         self._loaded = True
 
@@ -239,6 +240,7 @@ class WorktreePane(Widget, can_focus=True):
                         classes="empty-state",
                     )
                 )
+            scroll.call_after_refresh(lambda: scroll.scroll_to(y=saved_scroll_y, animate=False))
             return
 
         # Group worktrees by repo_name — repos with no worktrees are naturally hidden (D-10)
@@ -256,6 +258,20 @@ class WorktreePane(Widget, can_focus=True):
                 display_path = abbreviate_home(wt.path)
                 display_path = middle_truncate(display_path, available_width)
                 scroll.mount(WorktreeRow(wt, display_path=display_path))
+
+        scroll.call_after_refresh(lambda: scroll.scroll_to(y=saved_scroll_y, animate=False))
+
+    def set_refresh_label(self, timestamp: str, *, stale: bool = False) -> None:
+        """Update border_title with refresh timestamp. Stale adds warning icon.
+
+        Args:
+            timestamp: Human-readable time string (e.g., "2m ago", "14:32").
+            stale: If True, prefix timestamp with warning icon (U+26A0).
+        """
+        if stale:
+            self.border_title = f"Worktrees  \u26a0 {timestamp}"
+        else:
+            self.border_title = f"Worktrees  {timestamp}"
 
     def _get_available_width(self) -> int:
         """Return usable content width for path truncation (Pitfall 3 mitigation)."""
