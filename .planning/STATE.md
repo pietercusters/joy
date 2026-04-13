@@ -1,36 +1,34 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: executing
-stopped_at: Phase 5 UI-SPEC approved
-last_updated: "2026-04-12T05:02:09.679Z"
-last_activity: 2026-04-12
+milestone: v1.1
+milestone_name: Workspace Intelligence
+status: defining
+stopped_at: —
+last_updated: "2026-04-13T00:00:00.000Z"
+last_activity: 2026-04-13
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 15
-  completed_plans: 15
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-10)
+See: .planning/PROJECT.md (updated 2026-04-13)
 
 **Core value:** Every artifact for the active project, openable instantly from one keyboard-driven interface.
-**Current focus:** Phase 05 — settings-search-distribution
+**Current focus:** Milestone v1.1 started — defining requirements
 
 ## Current Position
 
-Phase: 05
-Plan: Not started
-Status: Executing Phase 05
-Last activity: 2026-04-12
-
-Progress: ████████████░░░░░░░░ 60%
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-13 — Milestone v1.1 started
 
 ## Performance Metrics
 
