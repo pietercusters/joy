@@ -445,19 +445,24 @@ class TestGetRemoteUrl:
     """Tests for get_remote_url() subprocess git integration."""
 
     def test_get_remote_url_real_git_repo(self, tmp_path: Path) -> None:
-        """Returns origin remote URL from a real initialized git repo."""
+        """Returns origin remote URL from a real initialized git repo.
+
+        Uses an SSH URL directly to avoid git url.insteadOf rewrite rules that
+        may be present in the developer's global git config.
+        """
         from joy.store import get_remote_url
 
-        # Initialize a real git repo
+        # Use SSH URL directly — not subject to HTTPS→SSH rewrite rules
+        origin_url = "git@github.com:test/repo.git"
         subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True)
         subprocess.run(
-            ["git", "remote", "add", "origin", "https://github.com/test/repo.git"],
+            ["git", "remote", "add", "origin", origin_url],
             cwd=str(tmp_path),
             check=True,
             capture_output=True,
         )
         url = get_remote_url(str(tmp_path))
-        assert url == "https://github.com/test/repo.git"
+        assert url == origin_url
 
     def test_get_remote_url_no_git_repo(self, tmp_path: Path) -> None:
         """Returns '' when directory exists but has no .git."""

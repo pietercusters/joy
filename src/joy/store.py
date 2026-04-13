@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import tempfile
 import tomllib
 import warnings
@@ -10,11 +11,12 @@ from pathlib import Path
 
 import tomli_w
 
-from joy.models import Config, ObjectItem, PresetKind, Project
+from joy.models import Config, ObjectItem, PresetKind, Project, Repo
 
 JOY_DIR = Path.home() / ".joy"
 PROJECTS_PATH = JOY_DIR / "projects.toml"
 CONFIG_PATH = JOY_DIR / "config.toml"
+REPOS_PATH = JOY_DIR / "repos.toml"
 
 
 def _atomic_write(path: Path, data: bytes) -> None:
@@ -119,3 +121,82 @@ def save_config(config: Config, *, path: Path = CONFIG_PATH) -> None:
     """Atomically write config to TOML file."""
     content = tomli_w.dumps(config.to_dict()).encode("utf-8")
     _atomic_write(path=path, data=content)
+
+
+def _repos_to_toml(repos: list[Repo]) -> dict:
+    """Convert repo list to TOML-serializable dict using keyed schema (D-02).
+
+    name is the TOML table key — it is NOT stored as a field inside the table.
+    """
+    result: dict = {"repos": {}}
+    for repo in repos:
+        d = repo.to_dict()
+        d.pop("name", None)  # name is the key, not a field inside the table
+        result["repos"][repo.name] = d
+    return result
+
+
+def _toml_to_repos(data: dict) -> list[Repo]:
+    """Convert parsed TOML dict to repo list."""
+    repos = []
+    known_fields = {"local_path", "remote_url", "forge"}
+    for name, repo_data in data.get("repos", {}).items():
+        for key in repo_data:
+            if key not in known_fields:
+                warnings.warn(
+                    f"Unknown field {key!r} in repo {name!r} — skipping field",
+                    UserWarning,
+                    stacklevel=2,
+                )
+        repos.append(
+            Repo(
+                name=name,
+                local_path=repo_data.get("local_path", ""),
+                remote_url=repo_data.get("remote_url", ""),
+                forge=repo_data.get("forge", "unknown"),
+            )
+        )
+    return repos
+
+
+def load_repos(*, path: Path = REPOS_PATH) -> list[Repo]:
+    """Load repos from TOML file. Returns empty list if file missing."""
+    if not path.exists():
+        return []
+    with open(path, "rb") as f:
+        data = tomllib.load(f)
+    return _toml_to_repos(data)
+
+
+def save_repos(repos: list[Repo], *, path: Path = REPOS_PATH) -> None:
+    """Atomically write repos to TOML file."""
+    data = _repos_to_toml(repos)
+    content = tomli_w.dumps(data).encode("utf-8")
+    _atomic_write(path=path, data=content)
+
+
+def get_remote_url(local_path: str) -> str:
+    """Get git remote origin URL from a local repo path.
+
+    Per D-07: returns empty string on any error (non-zero exit, timeout, path not found).
+    Uses list-form subprocess (never shell=True) per T-06-03.
+    Never raises.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=local_path,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+        return ""
+    except (subprocess.TimeoutExpired, OSError):
+        return ""
+
+
+def validate_repo_path(local_path: str) -> bool:
+    """Check that local_path is an existing directory. Per D-08."""
+    return Path(local_path).is_dir()
