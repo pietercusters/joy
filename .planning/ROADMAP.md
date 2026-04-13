@@ -61,8 +61,8 @@ Plans:
   4. Worktrees on branches matching configured filter patterns are excluded from results
 **Plans:** 2 plans
 Plans:
-- [ ] 07-01-PLAN.md — WorktreeInfo dataclass in models.py with unit tests
-- [ ] 07-02-PLAN.md — discover_worktrees function via TDD (worktrees.py + tests)
+- [x] 07-01-PLAN.md — WorktreeInfo dataclass in models.py with unit tests
+- [x] 07-02-PLAN.md — discover_worktrees function via TDD (worktrees.py + tests)
 
 ### Phase 8: 4-Pane Layout
 **Goal**: The app displays a 2x2 grid layout with all four panes visible and focus cycling works across them, without breaking any existing functionality
