@@ -313,19 +313,21 @@ class WorktreePane(Widget, can_focus=True):
 
     def set_refresh_label(self, timestamp: str, *, stale: bool = False, mr_error: bool = False) -> None:
         """Update border_title with refresh timestamp. Stale adds warning icon.
-        mr_error adds MR fetch failure note per D-10.
+        mr_error adds MR fetch failure note per D-10. Both indicators shown when
+        both are active simultaneously.
 
         Args:
             timestamp: Human-readable time string (e.g., "2m ago", "14:32").
             stale: If True, prefix timestamp with warning icon (U+26A0).
             mr_error: If True, show MR fetch failure warning (D-10).
         """
+        parts = ["Worktrees"]
+        if stale or mr_error:
+            parts.append("\u26a0")
         if mr_error:
-            self.border_title = f"Worktrees  \u26a0 mr fetch failed  {timestamp}"
-        elif stale:
-            self.border_title = f"Worktrees  \u26a0 {timestamp}"
-        else:
-            self.border_title = f"Worktrees  {timestamp}"
+            parts.append("mr fetch failed")
+        parts.append(timestamp)
+        self.border_title = "  ".join(parts)
 
     def _get_available_width(self) -> int:
         """Return usable content width for path truncation (Pitfall 3 mitigation)."""
