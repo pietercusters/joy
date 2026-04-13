@@ -103,7 +103,10 @@ Plans:
   3. A last-refresh timestamp is visible in the UI at all times
   4. When a refresh fails, panes show stale data with an age indicator rather than going blank
   5. Background refresh does not reset cursor position in any pane
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 10-01-PLAN.md — Scroll preservation + border_title refresh label API on WorktreePane
+- [ ] 10-02-PLAN.md — Timer, r binding, timestamp push, and stale detection in JoyApp
 
 ### Phase 11: MR & CI Status
 **Goal**: Users see open MR/PR status and CI pipeline results per worktree row, auto-detected from GitHub or GitLab
@@ -157,7 +160,7 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 11 -> 12 -> 13
 | 7. Git Worktree Discovery | v1.1 | 0/2 | Planning complete | - |
 | 8. 4-Pane Layout | v1.1 | 0/2 | Planning complete | - |
 | 9. Worktree Pane | v1.1 | 0/3 | Planning complete | - |
-| 10. Background Refresh Engine | v1.1 | 0/0 | Not started | - |
+| 10. Background Refresh Engine | v1.1 | 0/2 | Planning complete | - |
 | 11. MR & CI Status | v1.1 | 0/0 | Not started | - |
 | 12. iTerm2 Integration & Terminal Pane | v1.1 | 0/0 | Not started | - |
 | 13. Project Workflow, Settings & Docs | v1.1 | 0/0 | Not started | - |
