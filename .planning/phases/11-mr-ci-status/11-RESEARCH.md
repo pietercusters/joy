@@ -717,17 +717,19 @@ Claims A2-A4 are `[ASSUMED]` based on GitLab REST API documentation and glab CLI
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **GitLab last commit data**
    - What we know: `glab mr list` does not include commit info; `glab mr view {iid} --output json` (single-MR endpoint) may include commits
    - What's unclear: Whether the extra O(N) glab calls per-MR are acceptable given the refresh latency budget
    - Recommendation: Skip last commit for GitLab in Wave 1; leave `last_commit_hash`/`last_commit_msg` as empty strings. Can be added in a follow-up.
+   - **RESOLVED:** Plan 01 Task 2 implements `_fetch_gitlab_mrs()` with `last_commit_hash=""` and `last_commit_msg=""` (empty strings). O(N) per-MR calls not taken.
 
 2. **ICON_CI_PENDING vs ICON_DIRTY glyph collision**
    - What we know: Both use `\uf111` (nf-fa-circle). They appear in different positions on line 1.
    - What's unclear: Whether users find the identical glyph confusing at a glance
    - Recommendation: Use `\uf111` for both initially (positional context disambiguates). Switch CI pending to `\uf192` (dot-circle-o) if visual UAT reveals confusion.
+   - **RESOLVED:** Plan 02 Task 2 uses `ICON_CI_PENDING = "\uf192"` (nf-fa-dot_circle_o), distinct from `ICON_DIRTY = "\uf111"`, eliminating any glyph collision.
 
 ---
 
