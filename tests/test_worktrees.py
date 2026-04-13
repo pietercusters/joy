@@ -18,7 +18,9 @@ from joy.worktrees import discover_worktrees
 def _init_git_repo(path: Path) -> None:
     """Initialize a git repo with an initial commit at the given path."""
     path.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["git", "init"], cwd=path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "init", "-b", "main"], cwd=path, capture_output=True, check=True
+    )
     subprocess.run(
         ["git", "config", "user.email", "test@test.com"],
         cwd=path,
@@ -97,7 +99,7 @@ class TestDiscoverWorktrees:
         assert len(result) == 1
         wt = result[0]
         assert wt.repo_name == "myrepo"
-        assert wt.branch == "main" or wt.branch == "master"
+        assert wt.branch == "main"
         assert wt.path == str(repo_dir)
 
     def test_single_repo_multiple_worktrees(self, tmp_path: Path) -> None:
