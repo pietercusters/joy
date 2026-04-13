@@ -106,3 +106,34 @@ class Config:
             "terminal": self.terminal,
             "default_open_kinds": self.default_open_kinds,
         }
+
+
+@dataclass
+class Repo:
+    """A registered git repository."""
+
+    name: str
+    local_path: str
+    remote_url: str = ""
+    forge: str = "unknown"
+
+    def to_dict(self) -> dict:
+        """Serialize to a TOML-compatible dict."""
+        return {
+            "name": self.name,
+            "local_path": self.local_path,
+            "remote_url": self.remote_url,
+            "forge": self.forge,
+        }
+
+
+def detect_forge(remote_url: str) -> str:
+    """Detect forge type from remote URL. Returns 'github', 'gitlab', or 'unknown'.
+
+    Per D-06: simple substring match only.
+    """
+    if "github.com" in remote_url:
+        return "github"
+    if "gitlab.com" in remote_url:
+        return "gitlab"
+    return "unknown"

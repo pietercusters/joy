@@ -1,770 +1,920 @@
-# Architecture Research: joy v1.1 Workspace Intelligence
+# Architecture Research: joy
 
 **Project:** joy -- keyboard-driven Python TUI for managing coding project artifacts
-**Researched:** 2026-04-13
-**Overall confidence:** HIGH (layout, background polling), MEDIUM (iTerm2 Python API integration)
+**Researched:** 2026-04-10
+**Overall confidence:** HIGH
 
 ---
 
-## Executive Summary
+## Component Overview
 
-v1.1 transforms joy from a static artifact launcher into a live workspace dashboard. This requires three architectural additions: (1) a 2x2 CSS grid layout replacing the current Horizontal container, (2) a background data layer using Textual's `set_interval` + async workers for periodic git/CLI fetching, and (3) an iTerm2 Python API connection running within Textual's asyncio event loop via `Connection.async_create()`. The existing v1.0 components (ProjectList, ProjectDetail, models, store, operations) remain unchanged -- new code layers alongside them.
+joy has five major components. Each has a single responsibility and communicates through well-defined interfaces.
 
----
+| Component | Responsibility | Depends On |
+|-----------|---------------|------------|
+| **Data Model** (`models.py`) | Dataclasses for Project, ObjectItem, Config. Pure data, no I/O. | Nothing |
+| **Store** (`store.py`) | Read/write `~/.joy/` TOML files. Serialize/deserialize models. | Data Model |
+| **Operations** (`operations.py`) | Type-dispatched actions: open URL, copy to clipboard, launch IDE, etc. | Data Model, subprocess |
+| **Widgets** (`widgets/`) | Custom Textual widgets: ProjectList, ProjectDetail, ObjectRow. | Data Model |
+| **App + Screens** (`app.py`, `screens/`) | Textual App, MainScreen, SettingsScreen, modals. Wires everything together. | All above |
 
-## 1. Layout Changes: 2x2 Grid
+**Data flows in one direction:** Store loads data into Models, Models feed Widgets, user actions on Widgets trigger Operations, Operations may update Models, Store persists changes.
 
-### Current Layout (v1.0)
-
-```python
-# app.py compose()
-yield Header()
-yield Horizontal(
-    ProjectList(id="project-list"),      # width: 1fr
-    ProjectDetail(id="project-detail"),  # width: 2fr
-)
-yield Footer()
+```
+Store --reads/writes--> Models <--renders-- Widgets
+                           ^                    |
+                           |                    v
+                       Operations <--triggers-- User Input
 ```
 
-CSS is inline in the `CSS` class variable. No `.tcss` file exists.
+---
 
-### Recommended Approach: CSS Grid on a Container Widget
+## Data Model
 
-**Use Textual's CSS Grid layout** on a container that wraps all four panes. Do NOT use nested Horizontal/Vertical containers -- CSS grid handles the 2x2 structure cleanly with fewer DOM nodes and better control over proportions.
+Use plain Python dataclasses. Pydantic adds startup time and is overkill for this data shape. Dataclasses give type hints, `__eq__`, `__repr__`, and `asdict()` for free.
+
+### Core Types
 
 ```python
-from textual.containers import Container
+# models.py
+from dataclasses import dataclass, field
+from enum import Enum
+from datetime import date
+
+
+class ObjectType(str, Enum):
+    """All supported object types. The str mixin makes TOML serialization trivial."""
+    STRING = "string"
+    URL = "url"
+    OBSIDIAN = "obsidian"
+    FILE = "file"
+    WORKTREE = "worktree"
+    ITERM = "iterm"
+
+
+class PresetKind(str, Enum):
+    """Pre-defined object kinds that map to an ObjectType + default behavior."""
+    MR = "mr"              # ObjectType.URL, browser
+    BRANCH = "branch"      # ObjectType.STRING, clipboard
+    TICKET = "ticket"      # ObjectType.URL, Notion desktop
+    THREAD = "thread"      # ObjectType.URL, Slack desktop
+    FILE = "file"          # ObjectType.FILE, editor
+    NOTE = "note"          # ObjectType.OBSIDIAN, Obsidian
+    WORKTREE = "worktree"  # ObjectType.WORKTREE, IDE
+    AGENTS = "agents"      # ObjectType.ITERM, iTerm2
+    URL = "url"            # ObjectType.URL, browser
+
+
+# Maps preset kinds to their underlying type
+PRESET_TYPE_MAP: dict[PresetKind, ObjectType] = {
+    PresetKind.MR: ObjectType.URL,
+    PresetKind.BRANCH: ObjectType.STRING,
+    PresetKind.TICKET: ObjectType.URL,
+    PresetKind.THREAD: ObjectType.URL,
+    PresetKind.FILE: ObjectType.FILE,
+    PresetKind.NOTE: ObjectType.OBSIDIAN,
+    PresetKind.WORKTREE: ObjectType.WORKTREE,
+    PresetKind.AGENTS: ObjectType.ITERM,
+    PresetKind.URL: ObjectType.URL,
+}
+
+
+@dataclass
+class ObjectItem:
+    """A single artifact within a project."""
+    kind: PresetKind          # e.g., "mr", "branch", "ticket"
+    value: str                # The actual data: URL, path, branch name, etc.
+    label: str = ""           # Optional display label (defaults to value if empty)
+    open_by_default: bool = False
+
+    @property
+    def object_type(self) -> ObjectType:
+        return PRESET_TYPE_MAP[self.kind]
+
+    @property
+    def display_label(self) -> str:
+        return self.label or self.value
+
+
+@dataclass
+class Project:
+    """A project with its list of artifacts."""
+    name: str
+    objects: list[ObjectItem] = field(default_factory=list)
+    created: date = field(default_factory=date.today)
+
+    @property
+    def default_objects(self) -> list[ObjectItem]:
+        """Objects marked for open-by-default."""
+        return [obj for obj in self.objects if obj.open_by_default]
+
+
+@dataclass
+class Config:
+    """Global configuration."""
+    ide: str = "PyCharm"           # Application name for `open -a`
+    editor: str = "Sublime Text"   # Application name for `open -a`
+    obsidian_vault: str = ""       # Vault name (not path) for obsidian:// URIs
+    terminal: str = "iTerm2"       # Terminal app (future-proofing)
+    default_open_kinds: list[str] = field(
+        default_factory=lambda: ["worktree", "agents"]
+    )
+```
+
+### Why This Design
+
+**Two-level type system (PresetKind + ObjectType):** PresetKind is what users see and interact with ("mr", "ticket", "branch"). ObjectType is what the operations layer dispatches on (URL, STRING, FILE). This separation means:
+- Adding a new preset kind (e.g., "design" for Figma URLs) only requires adding an enum value and a mapping entry -- no new operation code.
+- The operations layer stays small: 6 handlers for 6 ObjectTypes, not 9+ for every preset kind.
+- Users don't need to know about ObjectType; they pick from the preset list.
+
+**Dataclasses not Pydantic:** joy's data is simple and trusted (we write it ourselves). Pydantic's validation overhead and import time are unnecessary. If validation becomes needed later, adding `__post_init__` to dataclasses is straightforward.
+
+---
+
+## ~/.joy/ Directory Layout
+
+```
+~/.joy/
+  config.toml        # Global settings
+  projects.toml      # All project data in one file
+```
+
+### config.toml
+
+```toml
+# Global settings for joy
+
+ide = "PyCharm"
+editor = "Sublime Text"
+obsidian_vault = "wiki"
+terminal = "iTerm2"
+
+# Object kinds to mark as open_by_default when creating a new project
+default_open_kinds = ["worktree", "agents"]
+```
+
+### projects.toml
+
+```toml
+[[project]]
+name = "joy"
+created = 2026-04-10
+
+[[project.object]]
+kind = "worktree"
+value = "/Users/pieter/Github/joy"
+label = ""
+open_by_default = true
+
+[[project.object]]
+kind = "mr"
+value = "https://gitlab.com/user/joy/-/merge_requests/1"
+label = "Main MR"
+open_by_default = true
+
+[[project.object]]
+kind = "branch"
+value = "feature/tui-layout"
+label = ""
+open_by_default = true
+
+[[project.object]]
+kind = "note"
+value = "Projects/joy"
+label = "Project notes"
+open_by_default = false
+
+[[project]]
+name = "other-project"
+created = 2026-03-15
+
+[[project.object]]
+kind = "ticket"
+value = "https://notion.so/ticket-123"
+label = "PROJ-123"
+open_by_default = true
+```
+
+### Rationale: Single File, Not Directory-Per-Project
+
+- **Data volume is tiny.** Dozens of projects, each with ~5-15 objects. A single `projects.toml` will be <10KB even with 50 projects.
+- **Atomic operations.** Writing one file is simpler and safer than coordinating across multiple files. No partial-state issues.
+- **Easy backup.** Copy two files, done.
+- **TOML's `[[array_of_tables]]` syntax** handles the project-list-with-nested-objects shape cleanly.
+- **When to reconsider:** If projects.toml grows past 100KB or users want per-project version control. Neither is likely for a personal tool.
+
+### Store Implementation Pattern
+
+```python
+# store.py
+import tomllib
+import tomli_w
+from pathlib import Path
+from models import Project, ObjectItem, Config
+
+JOY_DIR = Path.home() / ".joy"
+CONFIG_PATH = JOY_DIR / "config.toml"
+PROJECTS_PATH = JOY_DIR / "projects.toml"
+
+
+def ensure_joy_dir() -> None:
+    """Create ~/.joy/ if it doesn't exist."""
+    JOY_DIR.mkdir(exist_ok=True)
+
+
+def load_config() -> Config:
+    """Load global config, returning defaults if file missing."""
+    if not CONFIG_PATH.exists():
+        return Config()
+    with open(CONFIG_PATH, "rb") as f:
+        data = tomllib.load(f)
+    return Config(**data)
+
+
+def save_config(config: Config) -> None:
+    """Write global config to TOML."""
+    ensure_joy_dir()
+    from dataclasses import asdict
+    with open(CONFIG_PATH, "wb") as f:
+        tomli_w.dump(asdict(config), f)
+
+
+def load_projects() -> list[Project]:
+    """Load all projects from TOML."""
+    if not PROJECTS_PATH.exists():
+        return []
+    with open(PROJECTS_PATH, "rb") as f:
+        data = tomllib.load(f)
+    projects = []
+    for p in data.get("project", []):
+        objects = [
+            ObjectItem(**obj) for obj in p.get("object", [])
+        ]
+        projects.append(Project(
+            name=p["name"],
+            objects=objects,
+            created=p.get("created", date.today()),
+        ))
+    return projects
+
+
+def save_projects(projects: list[Project]) -> None:
+    """Write all projects to TOML."""
+    ensure_joy_dir()
+    from dataclasses import asdict
+    data = {"project": []}
+    for p in projects:
+        pd = {"name": p.name, "created": p.created}
+        pd["object"] = [asdict(obj) for obj in p.objects]
+        data["project"].append(pd)
+    with open(PROJECTS_PATH, "wb") as f:
+        tomli_w.dump(data, f)
+```
+
+**Key decisions:**
+- Functions, not a class. There is no state to manage -- read file, return data. Write data, done.
+- Load returns full list, save writes full list. The data is small enough that incremental updates add complexity without benefit.
+- `ensure_joy_dir()` creates `~/.joy/` on first write so users don't need to run a setup command.
+
+---
+
+## Textual App Structure
+
+### File Layout
+
+```
+src/joy/
+    __init__.py
+    app.py              # JoyApp class, main() entry point
+    models.py           # Dataclasses: Project, ObjectItem, Config
+    store.py            # TOML read/write functions
+    operations.py       # Type-dispatched open/copy/launch actions
+    screens/
+        __init__.py
+        main.py         # MainScreen (two-pane layout)
+        settings.py     # SettingsScreen (global config editor)
+    widgets/
+        __init__.py
+        project_list.py # Left pane: project list with keyboard nav
+        project_detail.py # Right pane: object list for selected project
+        object_row.py   # Single object row with icon + label + status
+    styles/
+        app.tcss        # Global styles
+        main.tcss       # MainScreen styles
+        settings.tcss   # SettingsScreen styles
+```
+
+### Widget Hierarchy
+
+```
+JoyApp
+  +-- MainScreen
+  |     +-- Header (optional, or custom TitleBar)
+  |     +-- Horizontal
+  |     |     +-- ProjectList (left pane, docked)
+  |     |     |     +-- ListView
+  |     |     |           +-- ListItem (per project)
+  |     |     +-- ProjectDetail (right pane)
+  |     |           +-- VerticalScroll
+  |     |                 +-- ObjectRow (per object)
+  |     +-- Footer
+  |
+  +-- SettingsScreen (pushed on top when activated)
+  |     +-- Config form widgets
+  |
+  +-- ConfirmModal (pushed for delete confirmations)
+  +-- ObjectFormModal (pushed for add/edit object)
+  +-- ProjectFormModal (pushed for new project)
+```
+
+### App Class
+
+```python
+# app.py
+from textual.app import App
+from screens.main import MainScreen
+
 
 class JoyApp(App):
-    CSS = """
-    #pane-grid {
-        layout: grid;
-        grid-size: 2 2;
-        grid-columns: 1fr 2fr;
-        grid-rows: 2fr 1fr;
-        grid-gutter: 1;
+    """Keyboard-driven project artifact manager."""
+
+    TITLE = "joy"
+    CSS_PATH = "styles/app.tcss"
+
+    # App-level bindings (available everywhere)
+    BINDINGS = [
+        ("q", "quit", "Quit"),
+        ("?", "help", "Help"),
+    ]
+
+    SCREENS = {
+        "main": MainScreen,
     }
-    """
+
+    def on_mount(self) -> None:
+        self.push_screen("main")
+
+
+def main() -> None:
+    app = JoyApp()
+    app.run()
+```
+
+### MainScreen: The Two-Pane Layout
+
+```python
+# screens/main.py
+from textual.screen import Screen
+from textual.app import ComposeResult
+from textual.containers import Horizontal
+from textual.widgets import Header, Footer
+from widgets.project_list import ProjectList
+from widgets.project_detail import ProjectDetail
+
+
+class MainScreen(Screen):
+    CSS_PATH = "main.tcss"  # Relative to app CSS_PATH
+
+    # Screen-level bindings
+    BINDINGS = [
+        ("a", "add_object", "Add"),
+        ("e", "edit_object", "Edit"),
+        ("d", "delete_object", "Delete"),
+        ("o", "open_object", "Open"),
+        ("O", "open_defaults", "Open All"),
+        ("space", "toggle_default", "Toggle Default"),
+        ("n", "new_project", "New Project"),
+        ("s", "settings", "Settings"),
+    ]
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield Container(
-            ProjectList(id="project-list"),        # top-left
-            ProjectDetail(id="project-detail"),    # top-right
-            TerminalPane(id="terminal-pane"),       # bottom-left
-            WorktreePane(id="worktree-pane"),       # bottom-right
-            id="pane-grid",
-        )
+        with Horizontal():
+            yield ProjectList(id="project-list")
+            yield ProjectDetail(id="project-detail")
         yield Footer()
 ```
 
-**Why CSS Grid over alternatives:**
+### CSS for Two-Pane Layout
 
-| Approach | Verdict | Reason |
-|----------|---------|--------|
-| CSS Grid (`layout: grid`) | **Winner** | Native 2x2 with `grid-size: 2 2`. Column/row sizing via `grid-columns`/`grid-rows`. Single container, 4 children. Clean. |
-| Nested Horizontal/Vertical | No | Requires `Vertical(Horizontal(A, B), Horizontal(C, D))` -- more DOM nodes, harder to control sizing ratios between rows. |
-| Dock layout | No | Dock is for fixed position (top/bottom/left/right). Cannot express a 2x2 grid. |
+```css
+/* styles/main.tcss */
+#project-list {
+    dock: left;
+    width: 30;
+    height: 100%;
+    border-right: solid $primary-background;
+}
 
-**Grid sizing rationale:**
-- `grid-columns: 1fr 2fr` -- preserves v1.0's existing width ratio (project list is narrower)
-- `grid-rows: 2fr 1fr` -- top row (projects + detail) is the primary workspace; bottom row (terminals + worktrees) is auxiliary/glanceable
-- `grid-gutter: 1` -- single line separator between panes for visual clarity
-
-**Child ordering:** Textual CSS Grid fills cells left-to-right, top-to-bottom. The `compose()` yield order determines placement: first child = top-left, second = top-right, third = bottom-left, fourth = bottom-right.
-
-### Confidence: HIGH
-Verified via Textual official grid docs. `grid-size`, `grid-columns`, `grid-rows` are documented with `fr` unit support. This is the standard Textual pattern for multi-pane layouts.
-
----
-
-## 2. Background Data Layer
-
-### Problem
-
-v1.0 has no background data fetching. All data is loaded once from TOML on startup (`_load_data`). v1.1 needs periodic polling of:
-1. **Git worktrees** -- `git worktree list --porcelain` per registered repo
-2. **Worktree dirty status** -- `git status --porcelain` per discovered worktree
-3. **Branch remote tracking** -- `git for-each-ref --format='%(upstream)' refs/heads/<branch>` per worktree
-4. **iTerm2 sessions** -- async queries via Python API (see Section 3)
-
-### Recommended Pattern: `set_interval` + Async Worker
-
-**Use `set_interval` on the App to trigger a periodic refresh, which dispatches an `@work(thread=True)` worker for git subprocess calls.**
-
-```python
-class JoyApp(App):
-    _refresh_timer: Timer | None = None
-
-    def on_mount(self) -> None:
-        self._load_data()
-        # Start background refresh engine (30s default, configurable)
-        interval = self._config.refresh_interval  # new config field
-        self._refresh_timer = self.set_interval(interval, self._refresh_workspace)
-
-    def _refresh_workspace(self) -> None:
-        """Periodic refresh callback -- dispatches worker."""
-        self._fetch_worktrees_bg()
-        self._fetch_terminals_bg()  # iTerm2 refresh (see Section 3)
-
-    @work(thread=True, exclusive=True, exit_on_error=False)
-    def _fetch_worktrees_bg(self) -> None:
-        """Discover worktrees across all registered repos in a background thread."""
-        from joy.workspace import discover_worktrees  # new module
-        worktrees = discover_worktrees(self._config.repos)
-        self.app.call_from_thread(self._update_worktrees, worktrees)
-
-    def _update_worktrees(self, worktrees: list[WorktreeInfo]) -> None:
-        """Push fetched worktree data to the pane (main thread)."""
-        self.query_one(WorktreePane).set_worktrees(worktrees)
+#project-detail {
+    width: 1fr;
+    height: 100%;
+    overflow-y: auto;
+}
 ```
 
-**Why this pattern:**
+**Why dock instead of grid:** Docking the project list to the left is simpler, keeps it fixed during scrolling, and matches the mental model of a sidebar. Grid layout would work but adds unnecessary complexity for a two-column split.
 
-| Pattern | Verdict | Reason |
-|---------|---------|--------|
-| `set_interval` + `@work(thread=True)` | **Winner** | `set_interval` handles timing. Thread worker handles blocking subprocess calls. `exclusive=True` cancels stale fetches. `call_from_thread` safely pushes results to UI. |
-| `@work` with `while True` + `asyncio.sleep` | No | Async workers cannot run blocking subprocess calls without thread pool. Mixing `await asyncio.sleep` with `subprocess.run` is wrong. |
-| `set_interval` calling sync code directly | No | `set_interval` callbacks run on the main thread. Subprocess calls would block the UI. Must dispatch to worker. |
-| Standalone `asyncio.create_task` | No | Bypasses Textual's worker lifecycle management. Workers auto-cancel on widget removal. Raw tasks do not. |
-
-**`exclusive=True` is critical:** If a refresh takes longer than the interval (e.g., network latency on `gh`/`glab` CLI), the next trigger would start a second concurrent worker. `exclusive=True` cancels the previous worker before starting the new one, preventing resource buildup.
-
-**Manual refresh (`r` keybinding):** The same `_refresh_workspace` method handles both periodic and manual refresh. The `r` binding simply calls it directly, and `exclusive=True` ensures any in-flight worker is cancelled.
-
-### Timer Lifecycle
-
-The `set_interval` returns a `Timer` object supporting `pause()`, `resume()`, `reset()`, and `stop()`. Use this for:
-- Pausing refresh when a modal is open (save cycles)
-- Resuming on modal dismiss
-- Adjusting interval if user changes settings
-
-### Git Subprocess Strategy
-
-All git operations are **blocking subprocess calls** (`subprocess.run`), which is why they run in `@work(thread=True)` workers:
+### Custom Widget: ProjectList
 
 ```python
-# workspace.py (new module)
-def discover_worktrees(repos: list[RepoConfig]) -> list[WorktreeInfo]:
-    """Discover all worktrees across registered repos."""
-    results = []
-    for repo in repos:
-        raw = subprocess.run(
-            ["git", "-C", repo.local_path, "worktree", "list", "--porcelain"],
-            capture_output=True, text=True, timeout=10
-        )
-        worktrees = _parse_worktree_porcelain(raw.stdout)
-        for wt in worktrees:
-            wt.dirty = _check_dirty(wt.path)
-            wt.has_remote = _check_remote_tracking(wt.path, wt.branch)
-            wt.repo_name = repo.name
-        results.extend(worktrees)
-    return results
+# widgets/project_list.py
+from textual.widgets import ListView, ListItem, Label
+from textual.widget import Widget
+from textual.app import ComposeResult
+from textual.message import Message
+from models import Project
 
-def _check_dirty(worktree_path: str) -> bool:
-    """Check if worktree has uncommitted changes."""
-    result = subprocess.run(
-        ["git", "-C", worktree_path, "status", "--porcelain"],
-        capture_output=True, text=True, timeout=5
-    )
-    return bool(result.stdout.strip())
 
-def _check_remote_tracking(worktree_path: str, branch: str) -> bool:
-    """Check if branch has a remote tracking branch."""
-    result = subprocess.run(
-        ["git", "-C", worktree_path, "for-each-ref",
-         f"--format=%(upstream)", f"refs/heads/{branch}"],
-        capture_output=True, text=True, timeout=5
-    )
-    return bool(result.stdout.strip())
+class ProjectList(Widget, can_focus=True):
+    """Left pane: list of projects."""
+
+    class ProjectHighlighted(Message):
+        """Sent when user moves highlight to a project."""
+        def __init__(self, project: Project) -> None:
+            self.project = project
+            super().__init__()
+
+    class ProjectSelected(Message):
+        """Sent when user presses enter on a project."""
+        def __init__(self, project: Project) -> None:
+            self.project = project
+            super().__init__()
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._projects: list[Project] = []
+
+    def compose(self) -> ComposeResult:
+        yield ListView(id="project-listview")
+
+    def set_projects(self, projects: list[Project]) -> None:
+        """Populate the list with projects."""
+        self._projects = projects
+        listview = self.query_one("#project-listview", ListView)
+        listview.clear()
+        for project in projects:
+            listview.append(ListItem(Label(project.name)))
+
+    def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
+        """Bubble a ProjectHighlighted message when highlight changes."""
+        if event.index is not None and event.index < len(self._projects):
+            self.post_message(self.ProjectHighlighted(self._projects[event.index]))
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        """Bubble a ProjectSelected message when enter is pressed."""
+        if event.index is not None and event.index < len(self._projects):
+            self.post_message(self.ProjectSelected(self._projects[event.index]))
 ```
 
-**Timeouts are mandatory.** Network-mounted filesystems or large repos can hang git commands. 10s for `worktree list`, 5s for status checks.
-
-### Confidence: HIGH
-`set_interval` and `@work(thread=True)` are both documented Textual 8.x patterns. The thread worker + `call_from_thread` bridge is the official pattern for blocking I/O in Textual apps.
-
----
-
-## 3. iTerm2 Python API Integration
-
-### The Challenge
-
-The `iterm2` Python package (v2.15, released 2026-04-12) uses **asyncio websockets** to communicate with iTerm2. Textual itself runs on asyncio. The key question: can both coexist on the same event loop?
-
-### Answer: Yes, via `Connection.async_create()`
-
-The iTerm2 `Connection` class provides two usage modes:
-
-1. **`run_until_complete()` / `run_forever()`** -- creates its own `asyncio.new_event_loop()`. **Cannot use** -- would conflict with Textual's loop.
-2. **`Connection.async_create()`** -- "constructs a new connection and returns it without creating an asyncio event loop." Uses `asyncio.get_running_loop()` to attach to the current loop. **This is what we need.**
-
-### Recommended Pattern: Async Worker for Connection
+### Custom Widget: ProjectDetail
 
 ```python
-class JoyApp(App):
-    _iterm_connection: iterm2.Connection | None = None
+# widgets/project_detail.py
+from textual.widget import Widget
+from textual.app import ComposeResult
+from textual.containers import VerticalScroll
+from textual.reactive import reactive
+from models import Project
+from widgets.object_row import ObjectRow
 
-    @work(exclusive=True, exit_on_error=False)
-    async def _connect_iterm2(self) -> None:
-        """Establish iTerm2 Python API connection within Textual's event loop."""
-        import iterm2
-        try:
-            connection = await iterm2.Connection.async_create()
-            self._iterm_connection = connection
-        except Exception:
-            self._iterm_connection = None
-            self.notify("iTerm2 connection failed", severity="warning")
 
-    @work(exclusive=True, exit_on_error=False)
-    async def _fetch_terminals_bg(self) -> None:
-        """Query iTerm2 for current session state."""
-        if self._iterm_connection is None:
-            return
-        import iterm2
-        try:
-            app = await iterm2.async_get_app(self._iterm_connection)
-            sessions = _extract_session_info(app)
-            self.call_from_thread(self._update_terminals, sessions)
-        except Exception:
-            # Connection may have dropped -- attempt reconnect
-            self._iterm_connection = None
-            self._connect_iterm2()
-```
+class ProjectDetail(Widget, can_focus=True):
+    """Right pane: shows objects for the selected project."""
 
-**Important:** `_fetch_terminals_bg` uses an **async worker** (no `thread=True`), not a thread worker. The iTerm2 API is async-native and must run on the asyncio loop, not in a thread. Textual's async workers run as `asyncio.Task` objects on the same loop as the app.
+    project: reactive[Project | None] = reactive(None, recompose=True)
 
-However, `call_from_thread` is only for thread workers. For async workers, you can directly mutate the UI since you're already on the main thread:
+    BINDINGS = [
+        ("up", "cursor_up", "Up"),
+        ("down", "cursor_down", "Down"),
+    ]
 
-```python
-    @work(exclusive=True, exit_on_error=False)
-    async def _fetch_terminals_bg(self) -> None:
-        """Query iTerm2 for current session state."""
-        if self._iterm_connection is None:
-            return
-        import iterm2
-        try:
-            app = await iterm2.async_get_app(self._iterm_connection)
-            sessions = _extract_session_info(app)
-            # Async workers run on the main thread -- safe to update UI directly
-            self.query_one(TerminalPane).set_sessions(sessions)
-        except Exception:
-            self._iterm_connection = None
-            self._connect_iterm2()
-```
-
-### iTerm2 Session Variables Available
-
-The Python API exposes session variables via `session.async_get_variable(name)`:
-
-| Variable | Description | Requires Shell Integration |
-|----------|-------------|---------------------------|
-| `jobName` | Foreground process name (e.g., "vim", "python") | No |
-| `commandLine` | Full command line of foreground job | No |
-| `jobPid` | PID of foreground job | No |
-| `path` | Current working directory | Yes (without SSH) |
-| `name` | Session name as shown in tab bar | No |
-| `autoName` | Auto-generated session name | No |
-| `hostname` | Current hostname | Yes |
-| `username` | Current username | Yes |
-| `lastCommand` | Last command run | Yes |
-
-**Claude busy/waiting detection strategy:**
-- Check `jobName` -- if it contains "claude" or "anthropic", the session is running a Claude agent
-- Check `commandLine` for patterns like `claude`, `cursor`, known agent process names
-- A session showing a shell prompt (jobName = "zsh"/"bash") with no long-running command is "idle"
-
-### iTerm2 API Dependency Impact
-
-Adding `iterm2` to `pyproject.toml` brings in:
-- `websockets` (async websocket client)
-- `protobuf` (Google protobuf for message serialization)
-
-This is a meaningful dependency increase. Mitigation: **make iTerm2 integration optional.** If the `iterm2` package is not installed, the TerminalPane shows a helpful message ("Install iterm2 package for terminal integration") and the refresh engine skips terminal fetching.
-
-```python
-try:
-    import iterm2
-    HAS_ITERM2 = True
-except ImportError:
-    HAS_ITERM2 = False
-```
-
-**iTerm2 API server must be enabled:** Users must enable "Enable Python API" in iTerm2 > Settings > General > Magic. Document this in README.
-
-### Connection Lifecycle
-
-1. **On app mount:** Attempt `_connect_iterm2()` (fire-and-forget async worker)
-2. **On each refresh cycle:** If connection exists, query sessions. If query fails, set connection to None.
-3. **On next refresh after failure:** Re-attempt connection.
-4. **On app exit:** Connection is garbage collected. No explicit cleanup needed (websocket closes).
-
-### Confidence: MEDIUM
-`Connection.async_create()` is documented for REPL usage but not explicitly for "embedding in another asyncio framework." The pattern is sound (it just calls `asyncio.get_running_loop()`), but there could be edge cases with Textual's asyncio management. Recommend early prototyping of the iTerm2 connection before building the full pane.
-
----
-
-## 4. Reactive Data Flow
-
-### Problem
-
-Fetched data (worktrees, terminal sessions) must update pane widgets without full re-render of the entire app. Three patterns are available in Textual.
-
-### Recommended: Direct Widget Method Calls (Same as v1.0)
-
-v1.0 already established the pattern: `ProjectList.set_projects(projects)` clears and rebuilds the list. This works. Use the same pattern for the new panes.
-
-```python
-class WorktreePane(Widget):
-    def set_worktrees(self, worktrees: list[WorktreeInfo]) -> None:
-        """Update displayed worktrees. Called from refresh callback."""
-        scroll = self.query_one("#worktree-scroll")
-        scroll.remove_children()
-        for wt in worktrees:
-            scroll.mount(WorktreeRow(wt))
-
-class TerminalPane(Widget):
-    def set_sessions(self, sessions: list[SessionInfo]) -> None:
-        """Update displayed terminal sessions. Called from refresh callback."""
-        scroll = self.query_one("#terminal-scroll")
-        scroll.remove_children()
-        for session in sessions:
-            scroll.mount(TerminalRow(session))
-```
-
-**Why NOT reactive attributes:**
-- Reactive attributes trigger `render()` on the widget. But the panes contain child widgets (rows), not rendered text. Reactive recompose (`recompose=True`) would work but destroys and recreates all children -- equivalent to `remove_children()` + `mount()` but with more magic.
-- Direct method calls are explicit, debuggable, and match v1.0 patterns. Consistency matters more than elegance.
-
-**Why NOT `post_message`:**
-- Messages bubble up the DOM tree. The data flow here is top-down (app pushes data to panes), not bottom-up (pane notifies app). Direct method calls are the correct pattern for parent-to-child data flow in Textual. The Textual docs explicitly state: "To update a child widget you get a reference to it and use it like any other Python object."
-
-**Why NOT data binding:**
-- Data binding connects reactive attributes between parent and child. The data here comes from a worker callback, not a reactive attribute chain. Binding would require storing worktrees/sessions as a reactive on the App, which adds indirection for no benefit.
-
-### Incremental Updates (Optimization for Later)
-
-The initial implementation should do full clear + rebuild on each refresh (30s interval makes this imperceptible). If profiling shows the rebuild is noticeable, switch to a diffing approach:
-
-```python
-def set_worktrees(self, worktrees: list[WorktreeInfo]) -> None:
-    existing = {row.worktree.path: row for row in self._rows}
-    new_paths = {wt.path for wt in worktrees}
-
-    # Remove stale
-    for path, row in existing.items():
-        if path not in new_paths:
-            row.remove()
-
-    # Update existing or add new
-    for wt in worktrees:
-        if wt.path in existing:
-            existing[wt.path].update_info(wt)  # in-place update
+    def compose(self) -> ComposeResult:
+        if self.project is None:
+            yield VerticalScroll(id="detail-empty")
         else:
-            self._scroll.mount(WorktreeRow(wt))
+            with VerticalScroll(id="detail-scroll"):
+                for i, obj in enumerate(self.project.objects):
+                    yield ObjectRow(obj, index=i)
 ```
 
-This is premature for v1.1. Implement only if needed.
+---
 
-### Last-Updated Indicator
+## Object Type System
 
-The app should show when data was last refreshed. Use a reactive attribute on the pane or a simple Static widget:
+### Pattern: functools.singledispatch
+
+Use `singledispatch` from the standard library. It is the Pythonic way to dispatch behavior based on type, avoids giant if/elif chains, and is extensible without modifying existing code.
+
+However, since we dispatch on an enum value (not a Python type), we use a simple dictionary registry instead -- this is cleaner than singledispatch for string/enum dispatch.
 
 ```python
-class WorktreePane(Widget):
-    last_updated: reactive[str] = reactive("")
+# operations.py
+import subprocess
+import webbrowser
+from typing import Callable
+from models import ObjectItem, ObjectType, Config
 
-    def set_worktrees(self, worktrees: list[WorktreeInfo]) -> None:
-        # ... rebuild rows ...
-        from datetime import datetime
-        self.last_updated = datetime.now().strftime("%H:%M:%S")
+# Type alias for an opener function
+Opener = Callable[[ObjectItem, Config], None]
 
-    def watch_last_updated(self, value: str) -> None:
-        self.query_one("#last-updated", Static).update(f"Updated: {value}")
+# Registry: ObjectType -> opener function
+_OPENERS: dict[ObjectType, Opener] = {}
+
+
+def opener(obj_type: ObjectType):
+    """Decorator to register an opener for an ObjectType."""
+    def decorator(fn: Opener) -> Opener:
+        _OPENERS[obj_type] = fn
+        return fn
+    return decorator
+
+
+def open_object(item: ObjectItem, config: Config) -> None:
+    """Open an object using its type-specific handler."""
+    handler = _OPENERS.get(item.object_type)
+    if handler is None:
+        raise ValueError(f"No opener registered for {item.object_type}")
+    handler(item, config)
+
+
+# --- Registered openers ---
+
+@opener(ObjectType.URL)
+def _open_url(item: ObjectItem, config: Config) -> None:
+    """Open a URL in the default browser or registered app."""
+    subprocess.run(["open", item.value], check=True)
+
+
+@opener(ObjectType.STRING)
+def _copy_string(item: ObjectItem, config: Config) -> None:
+    """Copy a string to the clipboard."""
+    subprocess.run(
+        ["pbcopy"], input=item.value.encode("utf-8"), check=True
+    )
+
+
+@opener(ObjectType.FILE)
+def _open_file(item: ObjectItem, config: Config) -> None:
+    """Open a file in the configured editor."""
+    subprocess.run(["open", "-a", config.editor, item.value], check=True)
+
+
+@opener(ObjectType.WORKTREE)
+def _open_worktree(item: ObjectItem, config: Config) -> None:
+    """Open a git worktree directory in the configured IDE."""
+    subprocess.run(["open", "-a", config.ide, item.value], check=True)
+
+
+@opener(ObjectType.OBSIDIAN)
+def _open_obsidian(item: ObjectItem, config: Config) -> None:
+    """Open a file in Obsidian via URI scheme."""
+    from urllib.parse import quote
+    vault = config.obsidian_vault
+    file_path = quote(item.value)
+    uri = f"obsidian://open?vault={vault}&file={file_path}"
+    subprocess.run(["open", uri], check=True)
+
+
+@opener(ObjectType.ITERM)
+def _open_iterm(item: ObjectItem, config: Config) -> None:
+    """Create or activate a named iTerm2 window."""
+    name = item.value
+    script = f'''
+    tell application "iTerm2"
+        activate
+        set targetWindow to missing value
+        repeat with w in windows
+            if name of w is "{name}" then
+                set targetWindow to w
+                exit repeat
+            end if
+        end repeat
+        if targetWindow is missing value then
+            set targetWindow to (create window with default profile)
+            tell current session of targetWindow
+                set name to "{name}"
+            end tell
+        end if
+        select targetWindow
+    end tell
+    '''
+    subprocess.run(["osascript", "-e", script], check=True)
 ```
 
-### Confidence: HIGH
-Direct widget method calls for parent-to-child data flow is the established Textual pattern, documented and used throughout v1.0.
+### Why This Pattern
 
----
+- **Simple dict registry vs. class hierarchy:** Each ObjectType needs a single function (open/activate). A full class hierarchy (AbstractOpener -> URLOpener -> etc.) is over-engineered for functions that are 3-5 lines each.
+- **Decorator registration:** The `@opener(ObjectType.URL)` pattern keeps the registration co-located with the implementation. No separate registration step needed.
+- **Extensible:** Adding a new ObjectType means: (1) add enum value, (2) write a 3-line function with `@opener` decorator. No other code changes.
+- **Testable:** Each opener function is independently testable. The registry can be inspected or mocked.
+- **No imports needed in callers:** `open_object(item, config)` is the only public API. The caller doesn't need to know about specific opener implementations.
 
-## 5. Data Model Changes
-
-### New Models (models.py additions)
+### Open All Defaults
 
 ```python
-@dataclass
-class RepoConfig:
-    """A registered repository in the repo registry."""
-    name: str              # deduced or user-provided
-    local_path: str        # absolute path to repo root
-    remote_url: str = ""   # optional, for gh/glab detection
-    branch_filter: str = "" # regex pattern to filter branches (e.g., "^feature/")
-
-@dataclass
-class WorktreeInfo:
-    """Discovered worktree state (not persisted, in-memory only)."""
-    path: str              # absolute worktree path
-    branch: str            # branch name (or "detached")
-    head: str              # HEAD commit SHA
-    repo_name: str         # from RepoConfig
-    dirty: bool = False    # has uncommitted changes
-    has_remote: bool = True  # branch tracks a remote
-    is_bare: bool = False
-    is_detached: bool = False
-
-@dataclass
-class SessionInfo:
-    """iTerm2 terminal session state (not persisted, in-memory only)."""
-    session_id: str
-    name: str              # session name / window name
-    job_name: str = ""     # foreground process (e.g., "vim", "zsh")
-    command_line: str = "" # full command line
-    working_dir: str = ""  # current directory (requires shell integration)
-    is_claude: bool = False  # detected Claude/AI agent session
-    window_id: str = ""
-    tab_id: str = ""
+def open_defaults(project: Project, config: Config) -> None:
+    """Open all objects marked as open_by_default, in display order."""
+    for obj in project.objects:
+        if obj.open_by_default:
+            open_object(obj, config)
 ```
 
-### Config Changes (config.toml)
+### Subprocess Calls and the UI
 
-```toml
-# Existing fields (unchanged)
-ide = "PyCharm"
-editor = "Sublime Text"
-obsidian_vault = ""
-terminal = "iTerm2"
-default_open_kinds = ["worktree", "agents"]
-
-# New v1.1 fields
-refresh_interval = 30  # seconds, minimum 10
-
-# Repo registry
-[[repos]]
-name = "joy"
-local_path = "/Users/pieter/Github/joy"
-remote_url = "https://github.com/pietercusters/joy"
-branch_filter = ""
-
-[[repos]]
-name = "other-project"
-local_path = "/Users/pieter/Github/other"
-remote_url = ""
-branch_filter = "^(main|feature/)"
-```
-
-**Config dataclass update:**
+**subprocess.run() blocks.** For most operations (open URL, copy to clipboard), this is fine -- they complete in milliseconds. For iTerm2 AppleScript, which may take 100-500ms, use a Textual thread worker:
 
 ```python
-@dataclass
-class Config:
-    ide: str = "PyCharm"
-    editor: str = "Sublime Text"
-    obsidian_vault: str = ""
-    terminal: str = "iTerm2"
-    default_open_kinds: list[str] = field(default_factory=lambda: ["worktree", "agents"])
-    # New v1.1 fields
-    refresh_interval: int = 30
-    repos: list[RepoConfig] = field(default_factory=list)
+# In the screen or widget that triggers operations
+from textual import work
+
+@work(thread=True)
+def perform_open(self, item: ObjectItem, config: Config) -> None:
+    """Run open_object in a thread to avoid blocking the UI."""
+    open_object(item, config)
 ```
 
-### Storage Strategy
-
-| Data | Storage | Rationale |
-|------|---------|-----------|
-| Repo registry (`repos`) | `~/.joy/config.toml` | User-configured, persisted across sessions |
-| Worktree discoveries | In-memory only | Ephemeral, changes every 30s, derived from git state |
-| Terminal sessions | In-memory only | Ephemeral, changes every 30s, derived from iTerm2 state |
-| Projects + objects | `~/.joy/projects.toml` (unchanged) | Unchanged from v1.0 |
-
-**No new files needed for caching.** Worktree and terminal data is cheap to rediscover (subprocess calls take <1s for reasonable repo counts). Persisting it would add complexity for no benefit.
-
-### TOML Schema for Repos (Array of Tables)
-
-TOML's `[[repos]]` syntax (array of tables) maps naturally to `list[RepoConfig]`. `tomllib` parses this into a list of dicts. `tomli_w` writes it back. No schema changes needed.
-
-### Confidence: HIGH
-TOML array-of-tables is well-documented. In-memory-only for ephemeral data is the correct call for <10 repos.
+Use `thread=True` because `subprocess.run` is synchronous. The `@work` decorator ensures the UI remains responsive.
 
 ---
 
-## 6. New Components Map
+## Keyboard Binding Strategy
 
-### New Files
+### Binding Hierarchy
 
-| File | Responsibility |
-|------|---------------|
-| `src/joy/widgets/worktree_pane.py` | WorktreePane widget: displays discovered worktrees with status indicators |
-| `src/joy/widgets/worktree_row.py` | WorktreeRow widget: two-line row (branch + path, status indicators) |
-| `src/joy/widgets/terminal_pane.py` | TerminalPane widget: displays iTerm2 sessions |
-| `src/joy/widgets/terminal_row.py` | TerminalRow widget: session name + foreground process + directory |
-| `src/joy/workspace.py` | Git worktree discovery: subprocess calls, porcelain parsing, dirty/remote checks |
-| `src/joy/terminal.py` | iTerm2 API bridge: connection management, session querying, Claude detection |
+Textual resolves key bindings by searching from the focused widget upward through the DOM to the App. joy should use this hierarchy deliberately:
 
-### Modified Files
+| Level | Bindings | Purpose |
+|-------|----------|---------|
+| **App** | `q` (quit), `?` (help) | Always available, everywhere |
+| **MainScreen** | `a` (add), `e` (edit), `d` (delete), `n` (new project), `s` (settings) | Available when main screen is active |
+| **ProjectDetail** | `o` (open), `O` (open all), `space` (toggle default), arrow keys | Object-level operations, only when detail pane is focused |
+| **ProjectList** | Arrow keys, `enter` | Navigation, only when list pane is focused |
+| **Modals** | `enter` (confirm), `escape` (cancel) | Modal-specific, block everything below |
 
-| File | Change |
-|------|--------|
-| `src/joy/app.py` | CSS Grid layout, `set_interval` timer, refresh dispatch, iTerm2 connection lifecycle, `r` keybinding |
-| `src/joy/models.py` | Add `RepoConfig`, `WorktreeInfo`, `SessionInfo` dataclasses. Extend `Config` with `refresh_interval` and `repos` |
-| `src/joy/store.py` | Handle `repos` array-of-tables in config load/save. Handle `refresh_interval`. |
-| `src/joy/screens/settings.py` | Add repo registry UI (add/edit/remove repos), refresh interval setting |
-| `pyproject.toml` | Add `iterm2` as optional dependency |
+### Focus Management Between Panes
 
-### Unchanged Files
-
-| File | Why Unchanged |
-|------|--------------|
-| `src/joy/widgets/project_list.py` | Project list behavior is unchanged. Grouping by repo is a display concern, not a data model change. |
-| `src/joy/widgets/project_detail.py` | Object detail pane is unchanged. |
-| `src/joy/widgets/object_row.py` | Individual object rows unchanged. |
-| `src/joy/operations.py` | Object open operations unchanged. |
-| `src/joy/screens/confirmation.py` | Confirmation modal unchanged. |
-| `src/joy/screens/name_input.py` | Name input modal unchanged. |
-| `src/joy/screens/preset_picker.py` | Preset picker unchanged. |
-| `src/joy/screens/value_input.py` | Value input modal unchanged. |
-
----
-
-## 7. Data Flow Diagram (v1.1)
-
-```
-                    set_interval (30s)
-                          |
-                    _refresh_workspace()
-                     /              \
-                    v                v
-    @work(thread=True)      @work(async)
-    _fetch_worktrees_bg     _fetch_terminals_bg
-    |                        |
-    | subprocess.run         | await iterm2 API
-    | git worktree list      | async_get_app()
-    | git status --porcelain | session variables
-    | git for-each-ref       |
-    |                        |
-    v                        v
-    call_from_thread()       direct UI update (async worker = main thread)
-    |                        |
-    v                        v
-    WorktreePane             TerminalPane
-    .set_worktrees()         .set_sessions()
-    |                        |
-    v                        v
-    remove_children()        remove_children()
-    mount(WorktreeRow...)    mount(TerminalRow...)
-
-
-    Store --reads/writes--> Config (with repos)
-                              |
-                              v
-                        workspace.py (uses repos for git discovery)
-                        terminal.py (uses iTerm2 API)
-```
-
----
-
-## 8. Focus and Keyboard Navigation
-
-### Pane Focus Order
-
-Tab/Shift+Tab should cycle through focusable panes. The natural order:
-
-1. ProjectList (top-left) -- default focus on startup
-2. ProjectDetail (top-right)
-3. TerminalPane (bottom-left)
-4. WorktreePane (bottom-right)
-
-### Pane-Specific Bindings
-
-| Pane | Key | Action |
-|------|-----|--------|
-| All panes | `r` | Manual refresh (priority binding on App) |
-| WorktreePane | `Enter` | Open selected worktree in configured IDE |
-| WorktreePane | `n` | Create new project from selected worktree |
-| WorktreePane | `j/k` | Navigate worktree rows |
-| TerminalPane | `Enter` | Focus selected iTerm2 session (bring to front) |
-| TerminalPane | `j/k` | Navigate session rows |
-
-### Sub-Title Update
-
-The existing `on_descendant_focus` handler needs extension for the two new panes:
+The two panes need clear focus semantics:
 
 ```python
-def on_descendant_focus(self, event) -> None:
-    node = event.widget
-    while node is not None:
-        if hasattr(node, "id"):
-            if node.id == "project-detail":
-                self.sub_title = "Detail"
-                return
-            if node.id in ("project-list", "project-listview"):
-                self.sub_title = "Projects"
-                return
-            if node.id == "terminal-pane":
-                self.sub_title = "Terminals"
-                return
-            if node.id == "worktree-pane":
-                self.sub_title = "Worktrees"
-                return
-        node = node.parent
+# In MainScreen
+BINDINGS = [
+    ("h", "focus_list", "Focus List"),     # vim-style
+    ("l", "focus_detail", "Focus Detail"), # vim-style
+    ("left", "focus_list", "Focus List"),
+    ("right", "focus_detail", "Focus Detail"),
+    ("tab", "toggle_focus", "Switch Pane"),
+]
+
+def action_focus_list(self) -> None:
+    self.query_one("#project-list").focus()
+
+def action_focus_detail(self) -> None:
+    self.query_one("#project-detail").focus()
+
+def action_toggle_focus(self) -> None:
+    if self.query_one("#project-list").has_focus:
+        self.query_one("#project-detail").focus()
+    else:
+        self.query_one("#project-list").focus()
+```
+
+**Tab switches panes, not individual widgets.** Override the default Tab behavior (which cycles through all focusable widgets) to only toggle between the two panes. This keeps navigation predictable.
+
+### Modal Screens for Destructive Actions
+
+Use Textual's `ModalScreen` for confirmations and forms. ModalScreen blocks all input to the screen below:
+
+```python
+from textual.screen import ModalScreen
+
+class ConfirmDeleteModal(ModalScreen[bool]):
+    """Confirm before deleting a project or object."""
+
+    BINDINGS = [
+        ("y", "confirm", "Yes"),
+        ("n", "cancel", "No"),
+        ("escape", "cancel", "Cancel"),
+    ]
+
+    def __init__(self, message: str) -> None:
+        self.message = message
+        super().__init__()
+
+    def action_confirm(self) -> None:
+        self.dismiss(True)
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
+```
+
+Called from the screen:
+
+```python
+async def action_delete_object(self) -> None:
+    confirmed = await self.app.push_screen_wait(
+        ConfirmDeleteModal("Delete this object?")
+    )
+    if confirmed:
+        # perform deletion
+        ...
 ```
 
 ---
 
-## 9. Build Order
+## Separation Between UI and Data/Operations
 
-Dependencies between components determine what must be built first.
+### The Rule
+
+**Widgets and Screens never import `store` or `operations` directly.** They communicate through messages and the App/Screen acts as the mediator.
+
+```
+User presses 'o'
+  -> ProjectDetail binding fires action_open_object
+  -> ProjectDetail posts OpenObjectRequested message (bubbles up)
+  -> MainScreen handles message, calls operations.open_object()
+  -> MainScreen notifies user (toast/status)
+```
+
+This keeps widgets reusable and testable without TOML files or subprocess calls.
+
+### Message Flow Example
+
+```python
+# In ProjectDetail widget
+class OpenObjectRequested(Message):
+    def __init__(self, item: ObjectItem) -> None:
+        self.item = item
+        super().__init__()
+
+def action_open_object(self) -> None:
+    selected = self._get_selected_object()
+    if selected:
+        self.post_message(self.OpenObjectRequested(selected))
+
+
+# In MainScreen
+@on(ProjectDetail.OpenObjectRequested)
+@work(thread=True)
+def handle_open_object(self, message: ProjectDetail.OpenObjectRequested) -> None:
+    config = store.load_config()
+    operations.open_object(message.item, config)
+```
+
+### Where State Lives
+
+- **Source of truth:** The TOML files in `~/.joy/`.
+- **In-memory state:** The MainScreen holds `projects: list[Project]` and `config: Config` loaded on mount. Modifications update both the in-memory list and persist via `store.save_projects()`.
+- **Widgets receive data, don't own it.** ProjectList and ProjectDetail receive data through method calls or reactive attributes, not by loading it themselves.
+
+```python
+# MainScreen manages the data lifecycle
+class MainScreen(Screen):
+    def on_mount(self) -> None:
+        self._config = store.load_config()
+        self._projects = store.load_projects()
+        self.query_one(ProjectList).set_projects(self._projects)
+        if self._projects:
+            self._select_project(self._projects[0])
+
+    def _select_project(self, project: Project) -> None:
+        detail = self.query_one(ProjectDetail)
+        detail.project = project
+
+    def _persist(self) -> None:
+        store.save_projects(self._projects)
+```
+
+---
+
+## Global Config vs. Per-Project Settings
+
+### Clear Separation
+
+| Setting | Location | Scope | Example |
+|---------|----------|-------|---------|
+| IDE | `config.toml` | Global | `ide = "PyCharm"` |
+| Editor | `config.toml` | Global | `editor = "Sublime Text"` |
+| Obsidian vault | `config.toml` | Global | `obsidian_vault = "wiki"` |
+| Terminal | `config.toml` | Global | `terminal = "iTerm2"` |
+| Default open kinds | `config.toml` | Global | `default_open_kinds = ["worktree", "agents"]` |
+| Object list | `projects.toml` | Per-project | `[[project.object]]` entries |
+| Open-by-default flags | `projects.toml` | Per-project | `open_by_default = true` per object |
+| Project name, created | `projects.toml` | Per-project | `name = "joy"`, `created = 2026-04-10` |
+
+### No Per-Project Config Overrides in v1
+
+The PROJECT.md mentions "global default, overridable per project" for default open kinds. Implement this as:
+- **On project creation:** The `default_open_kinds` from config.toml determines which object kinds get `open_by_default = true` initially.
+- **After creation:** Each project's `open_by_default` flags are independent. No per-project config file.
+
+This avoids a per-project config layer (which adds complexity). The user simply toggles `open_by_default` per object with the `space` key.
+
+### Settings Screen
+
+A dedicated `SettingsScreen` for editing global config. Pushed on top of MainScreen, popped when done. Uses standard Textual Input/Select widgets.
+
+```python
+class SettingsScreen(Screen):
+    BINDINGS = [
+        ("escape", "app.pop_screen", "Back"),
+        ("enter", "save", "Save"),
+    ]
+    # Input fields for each config value
+    # On save: update Config dataclass, call store.save_config()
+```
+
+---
+
+## Build Order
+
+Implementation should follow dependency order. Each phase builds on the previous and produces something testable.
 
 ### Phase 1: Foundation (No UI)
+1. **`models.py`** -- Dataclasses for Project, ObjectItem, Config, enums
+2. **`store.py`** -- TOML read/write functions
+3. **`operations.py`** -- Type-dispatched openers
+4. **Unit tests** for all three
 
-**Build: Data model + Config + Store updates**
+_Testable without any TUI code. Verify data round-trips through TOML correctly. Verify each opener calls the right subprocess command._
 
-- Add `RepoConfig`, `WorktreeInfo`, `SessionInfo` to `models.py`
-- Extend `Config` with `refresh_interval` and `repos`
-- Update `store.py` to load/save the new config fields
-- Write tests for TOML round-trip with `[[repos]]`
+### Phase 2: Basic TUI Shell
+5. **`app.py`** -- JoyApp with MainScreen
+6. **`widgets/project_list.py`** -- ProjectList with ListView
+7. **`widgets/project_detail.py`** -- ProjectDetail showing objects
+8. **`widgets/object_row.py`** -- ObjectRow rendering a single object
+9. **`styles/`** -- CSS for two-pane layout
 
-**Rationale:** Everything else depends on these models. Zero UI risk. Can be tested in isolation.
+_Renders projects and objects. Navigation works. No mutations yet._
 
-### Phase 2: Git Worktree Discovery (No UI)
+### Phase 3: Operations Integration
+10. Wire `o` (open object) and `O` (open all defaults) to operations.py
+11. Wire `space` (toggle open_by_default) with persist
+12. Clipboard copy notification (toast)
 
-**Build: `workspace.py` module**
+_The core value proposition works: see projects, open artifacts._
 
-- `discover_worktrees(repos)` -- parse `git worktree list --porcelain`
-- `_check_dirty(path)` -- `git status --porcelain`
-- `_check_remote_tracking(path, branch)` -- `git for-each-ref`
-- `_parse_worktree_porcelain(output)` -- porcelain format parser
-- Unit tests with mocked subprocess
+### Phase 4: CRUD
+13. **Add object** -- ObjectFormModal
+14. **Edit object** -- Reuse ObjectFormModal
+15. **Delete object** -- ConfirmDeleteModal
+16. **New project** -- ProjectFormModal
+17. **Delete project** -- ConfirmDeleteModal
 
-**Rationale:** Pure data-fetching logic. No Textual dependency. Testable with fixture data. Unblocks WorktreePane.
+_Full create/read/update/delete for projects and objects._
 
-### Phase 3: Layout Change (Structural)
+### Phase 5: Polish
+18. **Settings screen**
+19. **Icons per object type** (Textual supports Unicode emoji/icons)
+20. **Visual polish** -- borders, colors, spacing
+21. **Error handling** -- missing config, invalid TOML, subprocess failures
 
-**Build: 2x2 CSS Grid layout**
-
-- Change `app.py` compose to yield grid container with 4 children
-- Create stub `WorktreePane` and `TerminalPane` (empty widgets with placeholder text)
-- Verify layout renders correctly, focus cycling works, existing ProjectList + ProjectDetail behavior is unchanged
-
-**Rationale:** The layout change touches the app's compose method. Doing this with stubs means any regressions in existing behavior are caught before new logic is added. This is the highest-risk structural change.
-
-### Phase 4: WorktreePane (First New Pane)
-
-**Build: `worktree_pane.py`, `worktree_row.py`**
-
-- WorktreePane with `set_worktrees()`, cursor navigation (j/k), Enter to open in IDE
-- WorktreeRow with two-line display: branch name (line 1), path + status indicators (line 2)
-- Dirty indicator, no-remote indicator
-- Branch filter pattern support (regex against `RepoConfig.branch_filter`)
-
-**Rationale:** WorktreePane depends on Phase 1 (models) and Phase 2 (discovery). It's simpler than TerminalPane (no async API, no external connection). Build the simpler pane first to establish patterns.
-
-### Phase 5: Background Refresh Engine
-
-**Build: `set_interval` + worker dispatch in `app.py`**
-
-- Wire `set_interval` to `_refresh_workspace()`
-- Wire `_fetch_worktrees_bg()` thread worker to WorktreePane
-- `r` keybinding for manual refresh
-- Last-updated indicator on panes
-- Timer pause/resume around modals
-
-**Rationale:** Depends on WorktreePane existing (Phase 4) to verify the refresh actually updates the UI. Cannot be tested without a real pane to push data to.
-
-### Phase 6: iTerm2 Integration
-
-**Build: `terminal.py` module, iTerm2 connection in app**
-
-- `Connection.async_create()` on mount
-- Session querying via async worker
-- Claude detection heuristic (jobName/commandLine matching)
-- Graceful degradation when iterm2 package not installed
-- Connection recovery on failure
-
-**Rationale:** Highest-risk component (MEDIUM confidence on async integration). By building it last, the rest of the app works even if iTerm2 integration needs iteration. The TerminalPane stub from Phase 3 shows "No iTerm2 connection" until this phase completes.
-
-### Phase 7: TerminalPane (Second New Pane)
-
-**Build: `terminal_pane.py`, `terminal_row.py`**
-
-- TerminalPane with `set_sessions()`, cursor navigation, Enter to focus session
-- TerminalRow showing session name, foreground process, working directory, Claude indicator
-- Wire to refresh engine
-
-**Rationale:** Depends on Phase 6 (iTerm2 data) and Phase 5 (refresh engine). Cannot be meaningfully built without the data source.
-
-### Phase 8: Settings + New Project from Worktree
-
-**Build: Settings modal updates, worktree-to-project flow**
-
-- Repo registry in settings modal (add/edit/remove)
-- Refresh interval setting
-- "New project from worktree" in new project modal -- pick a discovered worktree to pre-fill fields
-- Project list grouping by repo + "Other" bucket
-
-**Rationale:** Polish and integration features that depend on everything else working. Lowest risk, highest dependency count.
-
-### Build Order Summary
+### Dependency Graph
 
 ```
-Phase 1: Models + Config + Store
+models.py        (no deps)
     |
-Phase 2: workspace.py (git discovery)
+    +-- store.py        (depends on models)
+    +-- operations.py   (depends on models)
     |
-Phase 3: 2x2 Layout (stubs)
-    |
-Phase 4: WorktreePane (full)
-    |
-Phase 5: Refresh Engine
-    |         \
-Phase 6: terminal.py (iTerm2 API)
-    |
-Phase 7: TerminalPane (full)
-    |
-Phase 8: Settings + Project-from-Worktree
+    +-- widgets/*       (depends on models)
+    |       |
+    |       +-- screens/*   (depends on widgets, store, operations)
+    |               |
+    |               +-- app.py   (depends on screens)
 ```
 
 ---
 
-## 10. Risk Assessment
+## Key Findings
 
-| Risk | Severity | Mitigation |
-|------|----------|------------|
-| iTerm2 `Connection.async_create()` conflicts with Textual's event loop | Medium | Prototype in isolation first. Fall back to subprocess + osascript if async API fails. |
-| iTerm2 Python API server not enabled by user | Low | Detect on connection failure, show clear error message with setup instructions. |
-| `iterm2` package not installed | Low | Optional dependency with graceful degradation. TerminalPane shows install instructions. |
-| Git subprocess calls hang on network mounts | Medium | Mandatory timeouts (5-10s) on all subprocess.run calls. Worker `exclusive=True` prevents buildup. |
-| Layout change breaks existing ProjectList/ProjectDetail | Low | Phase 3 uses stubs so breakage is caught before new logic is added. Full test suite runs after layout change. |
-| Refresh engine causes UI stutter | Low | Thread workers for blocking I/O, async workers for iTerm2. Main thread only does DOM updates. 30s interval means updates are infrequent. |
-| Too many worktrees across repos makes pane unusable | Low | Branch filter patterns per repo. Users configure which branches to show. |
+1. **Textual's compose + message-bubbling architecture maps perfectly to joy's needs.** The two-pane layout uses dock-left for the project list and `1fr` width for the detail pane. ListView handles project navigation with built-in keyboard bindings. Custom messages bubble from widgets to screens, keeping the wiring clean. This is not a forced fit -- Textual was designed for exactly this kind of app.
+
+2. **The two-level type system (PresetKind + ObjectType) is the critical design insight.** PresetKind is user-facing (9 values: mr, branch, ticket, etc.), ObjectType is operation-facing (6 values: URL, STRING, FILE, etc.). This decoupling means adding new preset kinds (e.g., "design" for Figma URLs) requires zero new operation code -- just an enum entry and a mapping. The operations layer stays at 6 handlers forever.
+
+3. **Dict-based registry for type dispatch, not class hierarchy.** Each opener is a 3-5 line function. A class hierarchy (AbstractOpener, URLOpener, etc.) would be over-engineered for functions this simple. The `@opener(ObjectType.URL)` decorator pattern keeps registration co-located with implementation and makes the system trivially extensible.
+
+4. **Strict UI/data separation: Widgets post messages, Screens handle operations.** Widgets never import `store` or `operations`. They post messages like `OpenObjectRequested` that bubble to the Screen, which calls operations and persists changes. This keeps widgets testable without I/O and follows Textual's intended architecture.
+
+5. **Two TOML files are the right choice over directory-per-project or a database.** The data volume is tiny (dozens of projects, <10KB total). A single `projects.toml` with `[[project]]` array-of-tables is human-readable, atomically writable, and trivially parseable. Split config.toml from projects.toml because they change at different rates and have different schemas.
 
 ---
 
 ## Sources
 
-### Textual (HIGH confidence)
-- Grid layout: https://textual.textualize.io/styles/grid/
-- Grid size: https://textual.textualize.io/styles/grid/grid_size/
-- Grid rows: https://textual.textualize.io/styles/grid/grid_rows/
-- Grid columns: https://textual.textualize.io/styles/grid/grid_columns/
-- Layout guide: https://textual.textualize.io/guide/layout/
-- Design a layout: https://textual.textualize.io/how-to/design-a-layout/
-- Workers: https://textual.textualize.io/guide/workers/
-- Reactivity: https://textual.textualize.io/guide/reactivity/
-- Timer API: https://textual.textualize.io/api/timer/
-- Events and messages: https://textual.textualize.io/guide/events/
-
-### iTerm2 Python API (MEDIUM confidence)
-- Connection class: https://iterm2.com/python-api/connection.html
-- Connection source: https://github.com/gnachman/iTerm2/blob/master/api/library/python/iterm2/iterm2/connection.py
-- Session API: https://iterm2.com/python-api/session.html
-- App API: https://iterm2.com/python-api/app.html
-- Variables reference: https://iterm2.com/3.3/documentation-variables.html
-- Variables Python API: https://iterm2.com/python-api/variables.html
-- Scripting fundamentals: https://iterm2.com/documentation-scripting-fundamentals.html
-- PyPI: https://pypi.org/project/iterm2/
-
-### Git (HIGH confidence)
-- git-worktree: https://git-scm.com/docs/git-worktree
-- git-status: https://git-scm.com/docs/git-status
-- git-for-each-ref: https://git-scm.com/docs/git-for-each-ref
+- Textual App guide: https://textual.textualize.io/guide/app/
+- Textual Screens guide: https://textual.textualize.io/guide/screens/
+- Textual Input/Bindings guide: https://textual.textualize.io/guide/input/
+- Textual Widgets guide: https://textual.textualize.io/guide/widgets/
+- Textual Layout guide: https://textual.textualize.io/guide/layout/
+- Textual Events/Messages guide: https://textual.textualize.io/guide/events/
+- Textual Reactivity guide: https://textual.textualize.io/guide/reactivity/
+- Textual Actions guide: https://textual.textualize.io/guide/actions/
+- Textual Workers guide: https://textual.textualize.io/guide/workers/
+- Textual ListView widget: https://textual.textualize.io/widgets/list_view/
+- Textual OptionList widget: https://textual.textualize.io/widgets/option_list/
+- Anatomy of a Textual UI (blog): https://textual.textualize.io/blog/2024/09/15/anatomy-of-a-textual-user-interface/
+- Python tomllib docs: https://docs.python.org/3/library/tomllib.html
+- PEP 443 singledispatch: https://peps.python.org/pep-0443/
+- Python Registry Pattern: https://dev.to/dentedlogic/stop-writing-giant-if-else-chains-master-the-python-registry-pattern-ldm

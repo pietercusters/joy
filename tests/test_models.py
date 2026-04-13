@@ -10,6 +10,8 @@ from joy.models import (
     ObjectType,
     PresetKind,
     Project,
+    Repo,
+    detect_forge,
 )
 
 
@@ -259,3 +261,88 @@ class TestConfig:
         result = config.to_dict()
         assert result["ide"] == "VSCode"
         assert result["obsidian_vault"] == "/vault"
+
+
+class TestRepo:
+    """Tests for the Repo dataclass."""
+
+    def test_repo_creation_minimal(self) -> None:
+        repo = Repo(name="joy", local_path="/Users/dev/joy")
+        assert repo.name == "joy"
+        assert repo.local_path == "/Users/dev/joy"
+        assert repo.remote_url == ""
+        assert repo.forge == "unknown"
+
+    def test_repo_creation_full(self) -> None:
+        repo = Repo(
+            name="joy",
+            local_path="/Users/dev/joy",
+            remote_url="git@github.com:user/joy.git",
+            forge="github",
+        )
+        assert repo.name == "joy"
+        assert repo.local_path == "/Users/dev/joy"
+        assert repo.remote_url == "git@github.com:user/joy.git"
+        assert repo.forge == "github"
+
+    def test_repo_to_dict(self) -> None:
+        repo = Repo(name="joy", local_path="/Users/dev/joy")
+        result = repo.to_dict()
+        assert result == {
+            "name": "joy",
+            "local_path": "/Users/dev/joy",
+            "remote_url": "",
+            "forge": "unknown",
+        }
+
+    def test_repo_to_dict_full(self) -> None:
+        repo = Repo(
+            name="joy",
+            local_path="/Users/dev/joy",
+            remote_url="git@github.com:user/joy.git",
+            forge="github",
+        )
+        result = repo.to_dict()
+        assert result == {
+            "name": "joy",
+            "local_path": "/Users/dev/joy",
+            "remote_url": "git@github.com:user/joy.git",
+            "forge": "github",
+        }
+
+    def test_repo_equality(self) -> None:
+        repo1 = Repo(name="joy", local_path="/Users/dev/joy")
+        repo2 = Repo(name="joy", local_path="/Users/dev/joy")
+        assert repo1 == repo2
+
+    def test_repo_forge_is_str_not_enum(self) -> None:
+        repo = Repo(name="joy", local_path="/Users/dev/joy", forge="github")
+        assert isinstance(repo.forge, str)
+        # forge must NOT be an Enum subclass
+        from enum import Enum
+        assert not isinstance(repo.forge, Enum)
+
+
+class TestDetectForge:
+    """Tests for the detect_forge pure function."""
+
+    def test_github_ssh(self) -> None:
+        assert detect_forge("git@github.com:user/repo.git") == "github"
+
+    def test_github_https(self) -> None:
+        assert detect_forge("https://github.com/user/repo") == "github"
+
+    def test_gitlab_ssh(self) -> None:
+        assert detect_forge("git@gitlab.com:user/repo.git") == "gitlab"
+
+    def test_gitlab_https(self) -> None:
+        assert detect_forge("https://gitlab.com/user/repo") == "gitlab"
+
+    def test_unknown_host(self) -> None:
+        assert detect_forge("https://bitbucket.org/user/repo") == "unknown"
+
+    def test_empty_string(self) -> None:
+        assert detect_forge("") == "unknown"
+
+    def test_no_dot_com_substring(self) -> None:
+        assert detect_forge("https://notgithub.example.com/repo") == "unknown"

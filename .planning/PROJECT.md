@@ -10,20 +10,6 @@ v1.0 shipped: full CRUD, settings modal, project filter, `--version` CLI flag, a
 
 Every artifact for the active project, openable instantly from one interface — no hunting through tabs, terminals, or bookmarks.
 
-## Current Milestone: v1.1 Workspace Intelligence
-
-**Goal:** Transform joy from a project artifact launcher into a real-time workspace dashboard — live git, MR, and terminal state visible at a glance without leaving the TUI.
-
-**Target features:**
-- Repo registry in settings (local path, remote URL, deduced name)
-- Projects pane grouped by repo with "Other" bucket
-- 4-pane layout (2x2): existing top row + new worktree pane (bottom-right) and terminal pane (bottom-left)
-- Worktree pane: auto-discovered from repo list, two-line rows, dirty/no-remote indicators, configurable branch filter, 30s refresh
-- Terminal pane: iTerm2 Python API, Claude busy/waiting detection, foreground process + working directory, Enter to focus
-- Background refresh engine: 30s default (configurable), last-updated indicator, `r` for manual refresh
-- New project from worktree: pick discovered worktree in new project modal to pre-fill fields
-- Mixed GitHub/GitLab support: auto-detected from remote URL via `gh`/`glab` CLI
-
 ## Requirements
 
 ### Validated
@@ -53,14 +39,7 @@ Every artifact for the active project, openable instantly from one interface —
 
 ### Active
 
-- [ ] Repo registry in settings (local path, remote URL, name)
-- [ ] Projects pane grouped by repo + "Other" bucket
-- [ ] 4-pane layout (2x2) with worktree pane and terminal pane
-- [ ] Worktree pane: auto-discovered, two-line rows, dirty/no-remote indicators, configurable branch filter
-- [ ] Terminal pane: iTerm2 Python API, Claude detection, foreground process + directory, Enter to focus
-- [ ] Background refresh engine (30s default, configurable, last-updated indicator, `r` keybinding)
-- [ ] New project from worktree option in new project modal
-- [ ] Mixed GitHub/GitLab support via `gh`/`glab` CLI
+*(Next milestone requirements go here — use `/gsd-new-milestone` to define)*
 
 ### Out of Scope
 
