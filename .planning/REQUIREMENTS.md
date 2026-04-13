@@ -161,51 +161,49 @@ Requirements for the Workspace Intelligence milestone.
 
 ## Traceability
 
-*Populated by roadmapper during roadmap creation.*
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| REPO-01 | — | Pending |
-| REPO-02 | — | Pending |
-| REPO-03 | — | Pending |
-| REPO-04 | — | Pending |
-| REPO-05 | — | Pending |
-| REPO-06 | — | Pending |
-| PANE-01 | — | Pending |
-| PANE-02 | — | Pending |
-| WKTR-01 | — | Pending |
-| WKTR-02 | — | Pending |
-| WKTR-03 | — | Pending |
-| WKTR-04 | — | Pending |
-| WKTR-05 | — | Pending |
-| WKTR-06 | — | Pending |
-| WKTR-07 | — | Pending |
-| WKTR-08 | — | Pending |
-| WKTR-09 | — | Pending |
-| WKTR-10 | — | Pending |
-| TERM-01 | — | Pending |
-| TERM-02 | — | Pending |
-| TERM-03 | — | Pending |
-| TERM-04 | — | Pending |
-| TERM-05 | — | Pending |
-| TERM-06 | — | Pending |
-| REFR-01 | — | Pending |
-| REFR-02 | — | Pending |
-| REFR-03 | — | Pending |
-| REFR-04 | — | Pending |
-| REFR-05 | — | Pending |
-| SETT-07 | — | Pending |
-| SETT-08 | — | Pending |
-| FLOW-01 | — | Pending |
-| FLOW-02 | — | Pending |
-| FLOW-03 | — | Pending |
-| DOC-01 | — | Pending |
+| REPO-01 | Phase 6 | Pending |
+| REPO-02 | Phase 6 | Pending |
+| REPO-03 | Phase 6 | Pending |
+| REPO-04 | Phase 6 | Pending |
+| REPO-05 | Phase 6 | Pending |
+| REPO-06 | Phase 6 | Pending |
+| SETT-07 | Phase 6 | Pending |
+| SETT-08 | Phase 6 | Pending |
+| WKTR-01 | Phase 7 | Pending |
+| WKTR-04 | Phase 7 | Pending |
+| WKTR-05 | Phase 7 | Pending |
+| WKTR-06 | Phase 7 | Pending |
+| PANE-01 | Phase 8 | Pending |
+| PANE-02 | Phase 8 | Pending |
+| WKTR-02 | Phase 9 | Pending |
+| WKTR-03 | Phase 9 | Pending |
+| WKTR-10 | Phase 9 | Pending |
+| REFR-01 | Phase 10 | Pending |
+| REFR-02 | Phase 10 | Pending |
+| REFR-03 | Phase 10 | Pending |
+| REFR-04 | Phase 10 | Pending |
+| REFR-05 | Phase 10 | Pending |
+| WKTR-07 | Phase 11 | Pending |
+| WKTR-08 | Phase 11 | Pending |
+| WKTR-09 | Phase 11 | Pending |
+| TERM-01 | Phase 12 | Pending |
+| TERM-02 | Phase 12 | Pending |
+| TERM-03 | Phase 12 | Pending |
+| TERM-04 | Phase 12 | Pending |
+| TERM-05 | Phase 12 | Pending |
+| TERM-06 | Phase 12 | Pending |
+| FLOW-01 | Phase 13 | Pending |
+| FLOW-02 | Phase 13 | Pending |
+| FLOW-03 | Phase 13 | Pending |
+| DOC-01 | Phase 13 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 35 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 35
+- Mapped to phases: 35
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-10*
-*Last updated: 2026-04-13 after v1.1 milestone start*
+*Last updated: 2026-04-13 after v1.1 roadmap creation*
