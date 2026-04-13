@@ -132,7 +132,11 @@ Plans:
   2. Claude agent sessions are grouped at the top with a busy/waiting indicator
   3. User can navigate sessions with j/k and press Enter to focus that iTerm2 window
   4. When iTerm2 Python API is inaccessible, the pane shows a graceful "unavailable" message instead of crashing
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 12-01-PLAN.md — TerminalSession model, fetch_sessions module, iterm2 dependency, tests
+- [ ] 12-02-PLAN.md — Full TerminalPane widget with SessionRow, grouping, cursor navigation, tests
+- [ ] 12-03-PLAN.md — App.py integration: _load_terminal worker, refresh wiring, visual verification
 **UI hint**: yes
 
 ### Phase 13: Project Workflow, Settings & Docs
@@ -166,5 +170,5 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 11 -> 12 -> 13
 | 9. Worktree Pane | v1.1 | 0/3 | Planning complete | - |
 | 10. Background Refresh Engine | v1.1 | 2/2 | Complete   | 2026-04-13 |
 | 11. MR & CI Status | v1.1 | 3/3 | Complete   | 2026-04-13 |
-| 12. iTerm2 Integration & Terminal Pane | v1.1 | 0/0 | Not started | - |
+| 12. iTerm2 Integration & Terminal Pane | v1.1 | 0/3 | Planning complete | - |
 | 13. Project Workflow, Settings & Docs | v1.1 | 0/0 | Not started | - |
