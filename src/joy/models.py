@@ -133,6 +133,17 @@ class Repo:
         }
 
 
+@dataclass
+class WorktreeInfo:
+    """A discovered git worktree with status indicators."""
+
+    repo_name: str  # Name of the parent Repo this worktree belongs to
+    branch: str  # Branch name, or "HEAD" for detached HEAD
+    path: str  # Absolute filesystem path to the worktree
+    is_dirty: bool = False  # True if worktree has uncommitted changes
+    has_upstream: bool = True  # True if branch tracks a remote upstream
+
+
 def detect_forge(remote_url: str) -> str:
     """Detect forge type from remote URL. Returns 'github', 'gitlab', or 'unknown'.
 
