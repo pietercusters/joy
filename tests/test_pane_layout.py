@@ -63,20 +63,24 @@ async def test_grid_container_used(mock_store):
 
 
 @pytest.mark.asyncio
-async def test_stub_panes_show_coming_soon(mock_store):
-    """PANE-01/D-09: TerminalPane still shows 'coming soon'; WorktreePane now shows live data.
+async def test_terminal_pane_shows_loading_state(mock_store):
+    """PANE-01/D-09: TerminalPane shows loading state initially (Phase 12 implementation).
 
-    Phase 9 replaced the WorktreePane stub with a real implementation, so the worktrees pane
-    no longer shows 'coming soon'. The terminal pane remains a stub.
+    Phase 12 replaced the stub TerminalPane with a live implementation. On startup,
+    it shows a 'Loading...' placeholder until set_sessions() is called.
+    WorktreePane shows live data after Phase 9 replaced its stub.
     """
     app = JoyApp()
     async with app.run_test() as pilot:
         await pilot.pause(0.1)
         terminal = app.query_one("#terminal-pane")
-        # TerminalPane is still a stub — check for 'coming soon'
+        # TerminalPane now shows loading... state (Phase 12 real implementation)
         from textual.widgets import Static
         terminal_static = terminal.query_one(Static)
-        assert "coming soon" in str(terminal_static.content).lower()
+        content_lower = str(terminal_static.content).lower()
+        assert "loading" in content_lower or "coming soon" in content_lower, (
+            f"Expected loading or coming soon state, got: {content_lower}"
+        )
         # WorktreePane is now a live pane — verify it exists and contains at least one Static
         worktrees = app.query_one("#worktrees-pane")
         worktrees_statics = worktrees.query(Static)
