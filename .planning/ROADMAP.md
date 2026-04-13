@@ -29,7 +29,7 @@ Full details: `.planning/milestones/v1.0-ROADMAP.md`
 - [ ] **Phase 8: 4-Pane Layout** — Restructure from 2-pane to 2x2 grid with stub panes and Tab focus cycling
 - [ ] **Phase 9: Worktree Pane** — Full worktree display with two-line rows, grouping by repo, and status indicators
 - [x] **Phase 10: Background Refresh Engine** — Polling loop, manual refresh, timestamp display, and cursor preservation (completed 2026-04-13)
-- [ ] **Phase 11: MR & CI Status** — GitHub/GitLab CLI integration for PR/MR status and CI pipeline indicators
+- [x] **Phase 11: MR & CI Status** — GitHub/GitLab CLI integration for PR/MR status and CI pipeline indicators (completed 2026-04-13)
 - [ ] **Phase 12: iTerm2 Integration & Terminal Pane** — iTerm2 Python API connection, session enumeration, Claude detection, and terminal pane UI
 - [ ] **Phase 13: Project Workflow, Settings & Docs** — Repo registry UI, project grouping by repo, new-project-from-worktree, README updates
 
@@ -116,11 +116,11 @@ Plans:
   1. Worktree rows show open MR/PR number and status badge when a merge request exists for that branch
   2. Worktree rows show CI pipeline status (pass/fail/pending) when available
   3. MR author and last commit (short hash + message) shown on second line of worktree row when MR data is available
-**Plans:** 3 plans
+**Plans:** 3/3 plans complete
 Plans:
-- [ ] 11-01-PLAN.md — MRInfo dataclass + mr_status.py fetch module (TDD: GitHub/GitLab CLI integration)
-- [ ] 11-02-PLAN.md — WorktreeRow MR rendering + WorktreePane wiring + app.py integration (TDD)
-- [ ] 11-03-PLAN.md — Visual verification checkpoint (human-verify)
+- [x] 11-01-PLAN.md — MRInfo dataclass + mr_status.py fetch module (TDD: GitHub/GitLab CLI integration)
+- [x] 11-02-PLAN.md — WorktreeRow MR rendering + WorktreePane wiring + app.py integration (TDD)
+- [x] 11-03-PLAN.md — Visual verification checkpoint (human-verify)
 **UI hint**: yes
 
 ### Phase 12: iTerm2 Integration & Terminal Pane
@@ -165,6 +165,6 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 11 -> 12 -> 13
 | 8. 4-Pane Layout | v1.1 | 0/2 | Planning complete | - |
 | 9. Worktree Pane | v1.1 | 0/3 | Planning complete | - |
 | 10. Background Refresh Engine | v1.1 | 2/2 | Complete   | 2026-04-13 |
-| 11. MR & CI Status | v1.1 | 0/3 | Planning complete | - |
+| 11. MR & CI Status | v1.1 | 3/3 | Complete   | 2026-04-13 |
 | 12. iTerm2 Integration & Terminal Pane | v1.1 | 0/0 | Not started | - |
 | 13. Project Workflow, Settings & Docs | v1.1 | 0/0 | Not started | - |
