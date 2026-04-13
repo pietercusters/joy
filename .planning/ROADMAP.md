@@ -86,7 +86,11 @@ Plans:
   1. Worktrees are grouped under repo section headers; repos with no active worktrees are hidden
   2. Each worktree row shows branch name and dirty/no-remote indicators on line 1, abbreviated path on line 2
   3. Worktree pane is read-only — no selection cursor, no keyboard interaction beyond scrolling
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 09-01-PLAN.md — Wave 0 test scaffolding (test_worktree_pane.py with all unit + integration tests)
+- [ ] 09-02-PLAN.md — WorktreePane implementation + app-level data loading worker
+- [ ] 09-03-PLAN.md — Visual verification checkpoint (human-verify)
 **UI hint**: yes
 
 ### Phase 10: Background Refresh Engine
@@ -152,7 +156,7 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 11 -> 12 -> 13
 | 6. Models, Config & Store | v1.1 | 2/2 | ✓ Complete | 2026-04-13 |
 | 7. Git Worktree Discovery | v1.1 | 0/2 | Planning complete | - |
 | 8. 4-Pane Layout | v1.1 | 0/2 | Planning complete | - |
-| 9. Worktree Pane | v1.1 | 0/0 | Not started | - |
+| 9. Worktree Pane | v1.1 | 0/3 | Planning complete | - |
 | 10. Background Refresh Engine | v1.1 | 0/0 | Not started | - |
 | 11. MR & CI Status | v1.1 | 0/0 | Not started | - |
 | 12. iTerm2 Integration & Terminal Pane | v1.1 | 0/0 | Not started | - |
