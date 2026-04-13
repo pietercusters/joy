@@ -49,7 +49,7 @@ def _list_worktrees(repo_path: str) -> list[tuple[str, str]]:
             elif line == "bare":
                 is_bare = True
         if path and not is_bare:
-            worktrees.append((path, branch))
+            worktrees.append((path, branch or "HEAD"))
     return worktrees
 
 
