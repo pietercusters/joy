@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.2
-milestone_name: Cross-Pane Intelligence
-status: planning
-stopped_at: Phase 14 context gathered (discuss mode)
-last_updated: "2026-04-14T18:59:36.046Z"
-last_activity: 2026-04-14 — Roadmap created for v1.2 Cross-Pane Intelligence
+milestone: v1.1
+milestone_name: Workspace Intelligence
+status: complete
+stopped_at: v1.1 milestone archived
+last_updated: "2026-04-14T14:00:00.000Z"
+last_activity: 2026-04-14
 progress:
-  total_phases: 3
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_phases: 8
+  completed_phases: 8
+  total_plans: 19
+  completed_plans: 19
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,26 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-14)
 
 **Core value:** Every artifact for the active project, openable instantly from one keyboard-driven interface.
-**Current focus:** Phase 14 — Relationship Foundation & Badges
+**Current focus:** Planning next milestone (v1.2)
 
 ## Current Position
 
-Phase: 14 of 16 (Relationship Foundation & Badges)
-Plan: 0 of ? in current phase
-Status: Ready to plan
-Last activity: 2026-04-14 — Roadmap created for v1.2 Cross-Pane Intelligence
+Phase: —
+Plan: —
+Status: v1.1 Workspace Intelligence shipped ✅
+Last activity: 2026-04-14 - Completed quick task 260414-rim: rename on e, 1-space indent, default branch display, branch filter editor
 
-Progress: [░░░░░░░░░░] 0% (v1.2 starting)
+Progress: ████████████████████ 100% (8/8 phases)
+
+## Milestone Summary
+
+v1.1 Workspace Intelligence shipped 2026-04-14:
+- 8 phases (6-13), 19 plans
+- Live worktree pane with MR/CI badges
+- iTerm2 terminal pane with Claude agent detection
+- Background auto-refresh engine
+- Repo registry with project grouping
+- 276 fast tests, 3,606 src LOC + 5,883 test LOC
 
 ## Accumulated Context
 
@@ -38,22 +48,11 @@ Progress: [░░░░░░░░░░] 0% (v1.2 starting)
 
 Decisions are logged in PROJECT.md Key Decisions table.
 
-Key decisions carried from v1.1:
-
+Key decisions from v1.1:
 - list-form subprocess for all external calls (security)
 - cursor/_rows/--highlight pattern for all scrollable panes
 - lazy import + catch-all for iTerm2 graceful fallback
 - pytest.mark.slow for TUI/integration tests
-
-Key decisions for v1.2:
-
-- Branch is king: branch objects on a project never change automatically
-- MR and Worktree objects follow the branch (auto-add/remove/move)
-- Agents are marked stale (not deleted) when session disappears
-- Projects without a repo field are excluded from live sync
-- main branch is protected; all work on feature branch, single PR at milestone end
-- Cursor preservation (FOUND-03, FOUND-04) ships in Phase 14 as prerequisite for sync
-- Badge counts bundled with foundation (Phase 14) for early visible proof of resolver
 
 ### Pending Todos
 
@@ -61,12 +60,21 @@ None.
 
 ### Blockers/Concerns
 
-- [Research CP-1]: Sync loop prevention via boolean guard must be first implementation step in Phase 15
-- [Research CP-2]: "Workers discover, main thread mutates" rule must be enforced in Phase 16 to prevent TOML corruption
-- [Research IP-1]: Synthetic repo object in ProjectDetail must not confuse resolver — use data model, not rendered rows
+None — clean milestone close.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260411-ivh | Fix three UAT bugs: project list selection after delete, detail pane focus dimming, Slack thread URL navigation | 2026-04-11 | 9f5e006 | [260411-ivh-fix-three-uat-bugs-project-list-selectio](./quick/260411-ivh-fix-three-uat-bugs-project-list-selectio/) |
+| 260414-c4g | Mark slow TUI/filter tests with pytest.mark.slow, exclude by default — suite drops from ~264s to 25.84s | 2026-04-14 | cf15821 | [260414-c4g-the-unit-test-suite-take-too-long-to-run](./quick/260414-c4g-the-unit-test-suite-take-too-long-to-run/) |
+| 260414-nrt | Details pane redesign: columnar layout, repo field, whitespace, legend popup | 2026-04-14 | 9d13330 | [260414-nrt-details-pane-redesign-columnar-layout-re](./quick/260414-nrt-details-pane-redesign-columnar-layout-re/) |
+| 260414-pob | Details pane fixes: open icon restored, legend toggle, semantic grouping, repo as object, indent all panes | 2026-04-14 | b39bf2d | [260414-pob-details-pane-fixes-and-improvements-open](./quick/260414-pob-details-pane-fixes-and-improvements-open/) |
+| 260414-qk4 | bug: in the Worktree overview, when there's an MR available we should go to the MR when clicking Enter. If not, we should go to the worktree. | 2026-04-14 | 7ae1811 | [260414-qk4-bug-in-the-worktree-overview-when-there-](./quick/260414-qk4-bug-in-the-worktree-overview-when-there-/) |
+| 260414-rim | Few small requests: rename on e, 1-space indent, default branch display, branch filter editor | 2026-04-14 | 04f9c72 | [260414-rim-few-small-requests-rename-project-on-e-k](./quick/260414-rim-few-small-requests-rename-project-on-e-k/) |
 
 ## Session Continuity
 
-Last session: 2026-04-14T18:59:36.042Z
-Stopped at: Phase 14 context gathered (discuss mode)
-Resume file: .planning/phases/14-relationship-foundation-badges/14-CONTEXT.md
+Last session: 2026-04-14
+Stopped at: Completed 260414-rim quick task (rename, indent, dim branches, branch filter editor)
+Resume file: run `/gsd-new-milestone` to start v1.2 planning

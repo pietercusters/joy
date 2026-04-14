@@ -1,402 +1,501 @@
-# Domain Pitfalls: v1.2 Cross-Pane Intelligence
+# Pitfalls Research: joy
 
-**Domain:** Cross-pane selection sync and live data propagation in an existing Textual 8.x TUI
-**Researched:** 2026-04-14
-**Confidence:** HIGH (pitfalls derived from actual codebase analysis + Textual docs + thread-safety fundamentals)
+**Domain:** Python TUI project artifact manager (Textual, macOS-only, keyboard-driven)
+**Researched:** 2026-04-10
 
 ---
 
 ## Critical Pitfalls
 
-Mistakes that cause infinite loops, data corruption, or require significant rework.
+Mistakes that cause rewrites, broken UX, or unusable shipped product.
 
-### CP-1: Sync Loop — Pane A Syncs Pane B, Pane B Triggers Sync Back to A
+### CP-1: Blocking the Textual Event Loop
 
-**What goes wrong:** Selecting a project in ProjectList fires a sync message to WorktreePane and TerminalPane. WorktreePane receives the message, moves its cursor to the matching worktree, and posts its own "cursor moved" message. That message arrives back at the sync coordinator, which interprets it as a user-initiated cursor move in WorktreePane and tries to sync ProjectList back to a matching project. Infinite loop.
+**What goes wrong:** Any synchronous/blocking call inside an event handler, `on_mount`, or message handler freezes the entire TUI. The screen goes unresponsive -- no key input, no rendering, no feedback. Even a 200ms file read or subprocess call is noticeable.
 
-**Why it happens:** Joy's four panes all use the same `_update_highlight()` pattern that could trigger messages. The existing `ProjectList.ProjectHighlighted` message is already used to update ProjectDetail. Adding cross-pane sync means every pane becomes both a sync source and a sync target. Without distinguishing user-initiated cursor moves from programmatic cursor moves, every sync action triggers another sync action.
+**Why it happens:** Textual runs on asyncio. Coroutines only yield at `await` points. If you call `subprocess.run()`, `open().read()`, or `time.sleep()` inside a handler, the event loop is blocked until it returns. This is the single most common Textual mistake.
 
-**Consequences:** The app freezes in a tight message loop. CPU spins at 100%. The only escape is Ctrl+C. Even if the loop terminates (e.g., because the cursor is already at the target), it still causes unnecessary work on every cursor move.
+**Consequences:** UI appears frozen or dead. Users think the app crashed. Especially bad for joy because `o` (activate object) launches subprocesses (`open`, `osascript`) and those calls MUST be non-blocking.
 
 **Prevention:**
-- **Use a guard flag.** Set `self._syncing = True` before programmatic cursor moves, check it before emitting sync messages: `if self._syncing: return`. Clear after the operation. This is the simplest approach and matches how joy already uses generation counters for render deduplication.
-- **Distinguish message sources.** Add an `is_user_initiated: bool` field to cursor-move messages. Only user-initiated moves trigger sync. Programmatic moves (from sync) carry `is_user_initiated=False` and are ignored by the sync coordinator.
-- **Use Textual's `prevent()` context manager.** Wrap programmatic cursor updates in `with self.prevent(CursorMoved):` to suppress the message entirely during sync operations. This is the most idiomatic Textual approach.
-- **Do NOT use reactive attributes for cursor position.** Reactives trigger watchers automatically, making loop prevention harder. The existing `_cursor: int` plain attribute pattern in all four panes is correct. Keep it.
+- Use `@work(thread=True)` decorator or `self.run_worker()` for any I/O or subprocess call
+- Use `asyncio.create_subprocess_exec()` instead of `subprocess.run()` for launching URLs/apps
+- Never use `time.sleep()` -- use `await asyncio.sleep()` or `self.set_timer()`
+- Use `app.call_from_thread()` when a threaded worker needs to update the UI
 
-**Detection:** Test: select project, observe that worktree pane cursor moves to matching worktree, and the project pane cursor does NOT move again. If the cursor "bounces" or the app freezes, the loop exists.
+**Detection:** App freezes momentarily when opening URLs, files, or iTerm2 windows. Profile with `python -X importtime` for import-time issues.
 
-**Phase:** Must be solved in the first phase of v1.2, before any sync logic ships. The guard flag or prevent() pattern must be the first thing implemented.
+**Phase:** Phase 1 (core TUI) -- establish the pattern from day one. Every object activation handler must be async.
 
-**Confidence:** HIGH -- this is a well-known pattern in reactive UI systems. Textual's `prevent()` context manager exists specifically for this. The existing codebase already has the `ProjectHighlighted` message flowing from ProjectList to JoyApp; adding bidirectional flow without guards will immediately loop.
+**Confidence:** HIGH -- documented in official Textual docs, confirmed by multiple sources.
 
 ---
 
-### CP-2: Concurrent TOML Mutations from Overlapping Workers
+### CP-2: Slow Startup from Eager Imports
 
-**What goes wrong:** Two `@work(thread=True)` workers run simultaneously -- one from a user action (e.g., `_save_projects_bg` after adding an object) and one from live data propagation (e.g., auto-adding a detected MR). Both read `self.app._projects`, mutate it, and call `save_projects()`. The second writer overwrites the first writer's changes because both started from the same snapshot.
+**What goes wrong:** The TUI takes 500ms+ to show first paint. For a "snappy developer tool," anything over 300ms feels sluggish. Textual + Rich alone import in ~130-230ms. Add httpx, pydantic, or any heavy library and you easily hit 500ms+.
 
-**Why it happens:** Joy's current architecture has a single shared `self._projects: list[Project]` on JoyApp. Multiple `@work(thread=True)` methods can access this list concurrently. The existing code already has this potential issue with `_save_projects_bg` and `_save_toggle` both writing projects, but in practice users don't trigger both simultaneously. v1.2's live data propagation adds automatic mutations that WILL overlap with user actions.
+**Why it happens:** Python evaluates all top-level imports eagerly. Textual and Rich have substantial import trees. Any additional dependency (TOML writer, AppleScript helpers, etc.) compounds the problem.
 
-**Current risk surface in the codebase:**
-- `_save_projects_bg()` -- called after new project, add object, rename, delete, assign repo
-- `_save_toggle()` -- called from ProjectDetail after toggle/edit/delete object
-- NEW in v1.2: auto-add MR, auto-remove worktree, auto-mark agent stale -- all background mutations
-
-**Consequences:** Data loss. A user adds an object, then a background refresh auto-adds an MR. The MR write uses the pre-add snapshot and overwrites the user's new object. The user's object silently disappears.
+**Consequences:** Users perceive the tool as slow. For a tool meant to be launched dozens of times daily, even 200ms extra startup is painful.
 
 **Prevention:**
-- **Serialize all TOML mutations through the main thread.** Never mutate `_projects` from a worker thread. Workers discover data (e.g., "MR #42 found for project X"), then `call_from_thread` a main-thread method that performs the actual mutation and save. Since Textual's main thread is single-threaded (asyncio event loop), mutations are serialized.
-- **Add a `threading.Lock` to `save_projects()`.** This prevents two concurrent writes from interleaving, but does NOT prevent the read-snapshot problem. The lock must guard both the mutation and the write, not just the write.
-- **Preferred pattern:** Worker discovers data -> `call_from_thread(self._apply_discovered_mr, project_name, mr_data)` -> main thread method mutates `_projects` and calls `_save_projects_bg()`. This matches the existing `_set_worktrees` pattern where workers push data to the main thread.
+- Profile imports early: `python -X importtime -c "from joy.app import JoyApp" 2>&1 | head -30`
+- Move non-essential imports inside functions (e.g., TOML writing only when saving, AppleScript only when activating agents)
+- Use Textual's `Lazy` widget for the detail pane content -- only render visible content on startup
+- Avoid libraries that auto-detect and import optional deps (httpx does this with click/rich)
+- Keep `__init__.py` files minimal -- no imports that trigger dependency chains
+- Target: first paint under 350ms
 
-**Detection:** Add an MR object to a project while a background refresh is running. If the MR appears but the user's recent addition disappears, the race exists.
+**Detection:** Run `time joy` from shell. If it's over 400ms to first paint, investigate.
 
-**Phase:** Must be the foundational pattern for all live data propagation. Establish the "workers discover, main thread mutates" rule before implementing any auto-add/remove feature.
+**Phase:** Phase 1 -- measure from the very first prototype. Much harder to fix retroactively.
 
-**Confidence:** HIGH -- the existing `_save_projects_bg` is already a `@work(thread=True)` that accesses shared state. The pattern is safe today only because user actions don't overlap with background writes. v1.2 breaks that assumption.
+**Confidence:** HIGH -- Posting (a real Textual app) documented a 40% improvement (580ms to 360ms) using exactly these techniques. Source: https://darren.codes/posts/python-startup-time/
 
 ---
 
-### CP-3: "Branch is King" Invariant Accidentally Mutates Branch Objects
+### CP-3: Fire-and-Forget Async Tasks (The Heisenbug)
 
-**What goes wrong:** The live data propagation system detects that a worktree's branch matches a different project and tries to "move" the worktree object. The move logic incorrectly also moves or modifies the branch object, or creates a new branch object on the target project, violating the rule that branch objects are user-managed and never auto-touched.
+**What goes wrong:** You create an asyncio task with `asyncio.create_task()` but don't store a reference. The garbage collector destroys the task before it completes. The operation silently fails -- no error, no warning, no traceback.
 
-**Why it happens:** Projects have both `branch` objects (user-created, storing the branch name as a string) and `worktree` objects (storing the filesystem path). The branch name is the matching key. When "branch is king" triggers a worktree ownership transfer, the naive implementation might:
-1. Move all objects matching the branch name, not just the worktree object
-2. Create a new branch object on the target project (the user didn't ask for this)
-3. Delete the branch object from the source project (destroying user data)
+**Why it happens:** Unlike threads, asyncio tasks have no lifecycle protection. If no reference exists, GC collects them. This is intermittent and timing-dependent, making it extremely hard to debug.
 
-**Consequences:** User-curated branch objects (which may have labels, open_by_default settings) are silently moved, duplicated, or deleted. The user loses their careful configuration.
+**Consequences:** Object activations randomly fail to open. iTerm2 windows sometimes don't create. URLs sometimes don't open. The randomness makes it look like a system issue, not a code bug.
 
 **Prevention:**
-- **Filter by `PresetKind` explicitly.** Auto-propagation code must ONLY touch objects where `item.kind == PresetKind.WORKTREE` (for worktree moves) or `item.kind == PresetKind.MR` (for MR auto-add). Never touch `PresetKind.BRANCH`, `PresetKind.AGENTS`, or any other kind.
-- **Whitelist, not blacklist.** The propagation system should have an explicit set of kinds it is allowed to create/modify/delete: `ALLOWED_AUTO_KINDS = {PresetKind.WORKTREE, PresetKind.MR}`. Anything not in this set is never touched.
-- **Unit test the invariant.** Create a test that sets up a project with branch + worktree objects, triggers a branch-ownership change, and asserts that the branch object is untouched on both source and target projects.
+- Always store task references: `self._tasks.add(task); task.add_done_callback(self._tasks.discard)`
+- Use Textual's `@work` decorator instead of raw `create_task()` -- it manages task lifecycle
+- Use `asyncio.TaskGroup` (Python 3.11+) for grouped operations
+- Never use bare `asyncio.create_task()` without storing the result
 
-**Detection:** After a worktree ownership transfer, check that branch objects on both source and target projects are identical to their pre-transfer state.
+**Detection:** Operations that "sometimes work" are the classic symptom. Add logging to task completion callbacks.
 
-**Phase:** Must be codified as a design constraint before implementing worktree ownership transfer. The `ALLOWED_AUTO_KINDS` constant should be defined in the first v1.2 phase.
+**Phase:** Phase 1 -- use `@work` from the start and never use raw `create_task`.
 
-**Confidence:** HIGH -- derived directly from the codebase. `PresetKind.BRANCH` (value: "branch", type: STRING) and `PresetKind.WORKTREE` (value: "worktree", type: WORKTREE) are distinct kinds. The risk is in matching logic that uses branch name strings rather than object kind.
+**Confidence:** HIGH -- documented by Textual's creator: https://textual.textualize.io/blog/2023/02/11/the-heisenbug-lurking-in-your-async-code/
 
 ---
 
-### CP-4: Cursor Position Lost During Background Refresh DOM Rebuilds
+### CP-4: Non-Atomic Config File Writes Causing Data Loss
 
-**What goes wrong:** A background refresh completes and calls `set_worktrees()` or `set_sessions()`, which does `await scroll.remove_children()` followed by mounting new rows. The cursor resets to 0 (first row). If the user was looking at row 15 in the worktree pane, they are suddenly snapped back to row 0.
+**What goes wrong:** Power loss, crash, or keyboard interrupt during a TOML write leaves `~/.joy/projects.toml` as a zero-byte or half-written file. Next startup fails with a parse error or silently loads empty data. All project configurations lost.
 
-**Why it happens:** This is ALREADY happening in the current codebase, but it is partially mitigated. The WorktreePane and TerminalPane save and restore `scroll_y` position, but they reset `self._cursor = 0` on every rebuild. The existing code in `set_worktrees()`:
-```python
-self._cursor = 0 if new_rows else -1
-```
-This means every 30-second refresh resets the cursor to the first row. Scroll position is preserved (via `saved_scroll_y`), but the highlight jumps to row 0.
+**Why it happens:** Naive `open("file", "w").write(data)` truncates the file before writing. If the process dies between truncation and write completion, the file is corrupted.
 
-**Consequences:** User is browsing worktrees, every 30 seconds the highlight jumps to the top. Mildly annoying in v1.1. In v1.2 with cross-pane sync, this cursor reset would trigger a sync cascade: cursor resets to row 0 -> sync fires -> project pane jumps to the project matching row 0's branch. Catastrophic UX.
+**Consequences:** Total data loss for all project configurations. For a personal tool that stores workflow state, this is catastrophic.
 
 **Prevention:**
-- **Match cursor by identity, not index.** Before rebuild, save the current row's identity (e.g., `(repo_name, branch)` for worktrees, `session_id` for terminals). After rebuild, find the row with the same identity and set cursor there. Fall back to 0 if the item no longer exists.
-- **The pattern already exists in ProjectList.** The `action_rename_project` method does exactly this: saves `project`, rebuilds, then iterates `_rows` to find the same project object. Replicate this pattern in WorktreePane and TerminalPane.
-- **Suppress sync messages during refresh-triggered cursor updates.** Even with identity matching, the cursor technically "moves" (from -1 during rebuild back to the matched index). Use the sync guard flag from CP-1 to prevent this from triggering cross-pane sync.
+- Write to a temp file in the same directory, then `os.replace()` (atomic on POSIX)
+- Pattern: `write to ~/.joy/.projects.toml.tmp` then `os.replace(tmp, target)`
+- Use the `safer` library if you want a drop-in replacement for `open()`
+- Keep a `.bak` copy before writes: `shutil.copy2(target, target + ".bak")`
+- On startup, if main file is corrupt/missing, check for `.bak` and recover
 
-**Detection:** Focus the worktree pane, move cursor to a non-first row, wait for auto-refresh (30s). If the highlight jumps to row 0, the bug exists.
+**Detection:** Corrupt config file on startup. Add a try/except around TOML parsing with recovery logic.
 
-**Phase:** Must be fixed BEFORE cross-pane sync is enabled. Otherwise every background refresh triggers a sync cascade. This is a prerequisite for v1.2, not a v1.2 feature itself.
+**Phase:** Phase 2 (data storage) -- implement atomic writes from the first file operation.
 
-**Confidence:** HIGH -- directly observed in the codebase. `set_worktrees()` line 361: `self._cursor = 0 if new_rows else -1`. The scroll position IS preserved (line 364: `scroll_to(y=saved_scroll_y)`), but the cursor is not.
+**Confidence:** HIGH -- well-established pattern. The `atomicwrites` library is deprecated; use `safer` or manual temp+rename.
 
 ---
 
-## Moderate Pitfalls
+## Common Mistakes
 
-### MP-1: Matching Ambiguity -- Multiple Projects Share the Same Branch Name
+Frequently made errors in Textual TUI development that degrade quality.
 
-**What goes wrong:** The cross-pane sync resolver finds a worktree with branch `feature-auth`. Two projects both have a branch object with value `feature-auth`. The resolver picks one arbitrarily, and the sync highlights the wrong project.
+### CM-1: Textual Widget Lifecycle Confusion (compose vs on_mount timing)
 
-**Why it happens:** Branch names are not globally unique. Two repos can both have a `feature-auth` branch. Projects are grouped by repo, so the repo context should disambiguate. But the resolver might match on branch name alone.
+**What goes wrong:** Accessing child widgets or DOM in the wrong lifecycle phase. Trying to query children immediately after `mount()` -- they aren't ready yet. Trying to set reactive attributes in `__init__` before the widget is mounted -- watchers that query DOM crash.
 
-**Consequences:** Selecting a worktree syncs to the wrong project. User is confused about which project is actually associated with the worktree.
+**Why it happens:** Textual guarantees mount completion by the *next* message handler, not immediately. `compose()` yields widgets, but they're not in the DOM until after compose returns.
+
+**Consequences:** AttributeError or NoMatches exceptions during initialization. Widgets appear blank or in wrong state.
 
 **Prevention:**
-- **Always match on (repo_name, branch) pair, never branch alone.** A worktree knows its `repo_name`. A project knows its `repo` field. The resolver must require both to match.
-- **Projects without a `repo` field are excluded from sync.** This is already in the v1.2 requirements: "Projects without repo field excluded from live sync." Enforce this strictly.
-- **If multiple projects share the same repo AND the same branch name, prefer the one with a worktree object for that branch.** If still ambiguous, prefer the first match and log a warning (visible in debug mode, not a toast).
+- Data loading and widget population goes in `on_mount()`, not `__init__()` or `compose()`
+- Use `self.call_after_refresh()` if you need to act after layout is complete
+- For reactive attributes in `__init__`, use `self.set_reactive(MyWidget.my_attr, value)` instead of direct assignment
+- Never query child widgets inside `compose()` -- they don't exist yet
 
-**Detection:** Create two projects with different repos, both having a branch named `main`. Select the `main` worktree for repo A. Verify the sync highlights the correct project (the one assigned to repo A, not repo B).
+**Detection:** Exceptions during app startup containing "NoMatches" or "not mounted."
 
-**Phase:** Part of the relationship resolver implementation. Must be designed before the resolver is coded.
+**Phase:** Phase 1 -- understand the lifecycle before building any widgets.
 
-**Confidence:** HIGH -- the data model supports this. `Project.repo` exists (added in v1.1). `WorktreeInfo.repo_name` exists. The matching key is `(project.repo, object.value)` == `(worktree.repo_name, worktree.branch)`.
+**Confidence:** HIGH -- documented in Textual official docs and GitHub issues.
 
 ---
 
-### MP-2: Agent Stale Marking Overwrites Other Object Data
+### CM-2: Textual CSS Sizing and Layout Traps
 
-**What goes wrong:** The stale-marking system adds or modifies a field on agent objects in TOML. A naive implementation adds a `stale: true` field to the ObjectItem. But ObjectItem's `to_dict()` doesn't include `stale`, so the next save drops it. Or worse, the stale flag is stored as a parallel data structure that gets out of sync with the main objects list.
+**What goes wrong:** Widgets render at wrong sizes, overflow their containers, or collapse to zero height. The two-pane layout (project list + detail) either doesn't split correctly or one pane dominates.
 
-**Why it happens:** The current `ObjectItem` dataclass has exactly four fields: `kind`, `value`, `label`, `open_by_default`. Adding `stale` requires changing the data model, which affects TOML serialization, deserialization, and all existing code that creates ObjectItems.
+**Why it happens:** Textual CSS is inspired by web CSS but has significant differences. Common traps:
+- Default `box-sizing` is `border-box` (border/padding reduces content area)
+- `height: auto` auto-detects from content but can collapse to 0 if content is empty
+- Forgetting to set explicit widths on the two panes (use `width: 1fr` and `width: 2fr` for a 1:2 split)
+- Button/Input widgets have default padding/border that make them taller than expected
 
-**Consequences:** Stale flags don't persist across restarts. Or stale flags corrupt existing object data. Or a parallel stale tracking dict diverges from the objects list after adds/deletes.
+**Consequences:** Broken layout. Detail pane either takes all space or collapses. Scrolling doesn't work in panes.
 
 **Prevention:**
-- **Add `stale: bool = False` to the ObjectItem dataclass.** Update `to_dict()` to include it only when True (to avoid polluting existing TOML). Update `_toml_to_projects()` to read it with `obj.get("stale", False)`. This is the cleanest approach -- the flag travels with the object through all code paths.
-- **Do NOT use a separate tracking dict.** A `stale_agents: dict[str, bool]` would need to be kept in sync with adds, deletes, renames, and project transfers. It will inevitably diverge.
-- **Only write `stale` to TOML when True.** This keeps the TOML clean for non-stale objects and is backward-compatible (old code that doesn't know about `stale` will just ignore it, and `to_dict()` for non-stale objects produces identical output).
+- Use `fr` units for the two-pane split: left pane `width: 1fr`, right pane `width: 2fr`
+- Set `height: 1fr` on containers that should fill available space
+- Use Textual's DevTools (`textual run --dev`) to inspect widget dimensions live
+- Set `overflow-y: auto` on the detail pane for scrolling
+- Remove default widget border/padding when building compact layouts: `border: none; padding: 0;`
 
-**Detection:** Mark an agent stale, restart joy, verify it's still marked stale. Delete the agent, add a new one with the same name, verify it's not stale.
+**Detection:** Visual inspection. Run with `textual run --dev` for live CSS debugging.
 
-**Phase:** Part of agent stale detection. Should be implemented as a model change before the detection logic.
+**Phase:** Phase 1 -- get the two-pane layout right in the first milestone.
 
-**Confidence:** HIGH -- derived from the actual ObjectItem dataclass in `models.py`. The current four-field structure requires extension.
+**Confidence:** HIGH -- documented in Textual layout guide and confirmed by GitHub issues.
 
 ---
 
-### MP-3: Worktree Ownership Transfer is Not Atomic
+### CM-3: Key Binding Conflicts with Terminal Emulators
 
-**What goes wrong:** Moving a worktree object from project A to project B involves: (1) find the object in A, (2) remove it from A, (3) add it to B, (4) save. If the save fails between step 2 and step 3 (or if there's a crash), the object is lost from A but never added to B.
+**What goes wrong:** Keyboard shortcuts that work in one terminal don't work in another. Ctrl+key combinations are intercepted by the terminal, tmux, or iTerm2 before reaching the Textual app. Arrow keys stop working in certain contexts.
 
-**Why it happens:** The current `save_projects()` writes all projects atomically (temp file + `os.replace`). So as long as steps 2 and 3 both happen before the save, the save itself is atomic. The real risk is: what if step 2 succeeds but step 3 raises an exception (e.g., project B was deleted between discovery and application)?
+**Why it happens:** Textual can only receive keys that the terminal emulator forwards. iTerm2, Terminal.app, and tmux all intercept certain key combinations. Ctrl+C, Ctrl+Z, and many Ctrl+letter combos are claimed by the terminal. Even Escape can have timing issues (terminal escape sequences).
 
-**Consequences:** A worktree object disappears from both projects. The user has to manually re-add it.
+**Consequences:** Core navigation breaks for users with different terminal configurations.
 
 **Prevention:**
-- **Perform both mutation steps in a single method, then save once.** The mutation is: `a.objects.remove(obj)` + `b.objects.append(obj)`. Both operations are in-memory list operations that won't raise unless the object/project doesn't exist. Wrap in try/except and only save if both succeeded.
-- **Check that both source and target projects still exist before mutating.** Between discovery (worker thread) and application (main thread via `call_from_thread`), a project might have been deleted. The apply method must verify both projects are still in `_projects`.
-- **If target project doesn't exist, leave the object where it is.** A worktree in the "wrong" project is better than a lost worktree. Log a warning.
-- **The existing `_atomic_write` in store.py handles the filesystem atomicity.** The risk is purely in the in-memory mutation logic.
+- Stick to simple, safe bindings: single letters (`o`, `a`, `e`, `d`), Enter, Escape, Tab, arrow keys
+- Avoid Ctrl+key for primary operations (fine for secondary shortcuts)
+- Test in both iTerm2 and Terminal.app
+- Use Textual's binding priority system for critical bindings: `Binding("o", "activate", priority=True)`
+- Document that joy is designed for iTerm2 but should work in most terminals
 
-**Detection:** Trigger a worktree ownership transfer while simultaneously deleting the target project. The worktree object should remain in the source project, not vanish.
+**Detection:** Test all keybindings in iTerm2 specifically, since that's the target terminal.
 
-**Phase:** Part of worktree ownership transfer implementation.
+**Phase:** Phase 1 -- design the keymap once and test early.
 
-**Confidence:** HIGH -- the `_atomic_write` pattern already handles filesystem atomicity. This pitfall is about in-memory mutation ordering, which is straightforward to get right if you're aware of it.
+**Confidence:** HIGH -- confirmed by Textual FAQ, Posting project docs, and GitHub issues.
 
 ---
 
-### MP-4: @work(thread=True) Worker Overlap During Rapid Refresh
+### CM-4: Using `webbrowser.open()` Instead of `subprocess.run(["open", ...])`
 
-**What goes wrong:** User presses `r` (manual refresh) while an auto-refresh is already in progress. Two `_load_worktrees()` workers run simultaneously. Both call `discover_worktrees()` and `fetch_mr_data()` (expensive subprocess calls). Both call `call_from_thread(self._set_worktrees, ...)`. The first to arrive renders correctly, but the second arrives moments later and overwrites it -- possibly with stale data if the git state changed between the two reads.
+**What goes wrong:** `webbrowser.open()` doesn't reliably handle custom URL schemes (`notion://`, `obsidian://`, `slack://`). It may open in the wrong app, fail silently, or not handle `file://` paths.
 
-**Why it happens:** The current `_load_worktrees` uses `@work(thread=True)` but does NOT use `exclusive=True`. Looking at the code: `_load_worktrees`, `_load_terminal`, `_save_projects_bg`, `_save_config_bg`, `_reload_repos` -- none use `exclusive=True` or worker groups.
+**Why it happens:** `webbrowser.open()` is designed for HTTP URLs and browser control. Custom URL schemes require macOS's `open` command which delegates to the OS URL handler.
 
-**Consequences:** Wasted work (two full git scans + MR fetches). Possible flickering as the pane renders twice. Possible out-of-order updates if the first worker's subprocess calls take longer than the second's (second arrives first, then first overwrites with older data).
+**Consequences:** Notion links open in browser instead of Notion app. Obsidian URIs fail. Slack deep links don't work.
 
 **Prevention:**
-- **Add `exclusive=True` to `_load_worktrees` and `_load_terminal`.** This tells Textual to cancel the previous worker before starting a new one. The cancelled worker's `call_from_thread` calls are never executed (Textual checks `worker.is_cancelled`).
-- **Use worker groups for fine-grained control:** `@work(thread=True, exclusive=True, group="worktree-refresh")`. This ensures only one worktree refresh runs at a time, without affecting terminal refresh workers.
-- **For save workers, `exclusive=True` is risky.** If a save is cancelled, data is lost. Save workers should use a lock instead, or queue saves (debounce: only save once after all mutations in a batch complete).
+- Always use `subprocess.run(["open", url])` or `asyncio.create_subprocess_exec("open", url)` on macOS
+- For app-specific URLs: `subprocess.run(["open", "-a", "Notion", url])` to force the correct app
+- For Obsidian: `subprocess.run(["open", f"obsidian://open?vault={vault}&file={file}"])`
+- URL-encode paths properly: use `urllib.parse.quote()` for file paths with spaces/special chars
 
-**Detection:** Rapidly press `r` multiple times. Check that only one refresh completes (not multiple sequential renders). Add logging to `_set_worktrees` to count invocations.
+**Detection:** URLs opening in browser instead of the native app.
 
-**Phase:** Should be applied to existing refresh workers as a prerequisite for v1.2. With sync enabled, out-of-order updates would trigger incorrect sync cascades.
+**Phase:** Phase 2 (object operations) -- this is the core of joy's activate functionality.
 
-**Confidence:** HIGH -- directly observed: `_load_worktrees` at line 119 of app.py uses `@work(thread=True)` without `exclusive=True`. Textual's `exclusive` parameter is documented specifically for this use case.
+**Confidence:** HIGH -- macOS `open` command behavior is well-documented. `webbrowser` limitations confirmed by Python docs.
 
 ---
 
-### MP-5: Cross-Pane Sync Toggle State Persists Across Context Changes
+### CM-5: TOML Read/Write Library Mismatch
 
-**What goes wrong:** User turns sync off (because they want to browse worktrees independently), then forgets sync is off. Later, they expect selecting a project to sync worktrees, but it doesn't. Or conversely: user turns sync on, expects it to stay on across app restarts, but the toggle resets.
+**What goes wrong:** Using `tomllib` (stdlib, read-only) for reading but a different library for writing, leading to subtle formatting differences, lost comments, or round-trip corruption.
 
-**Why it happens:** The sync toggle needs a clear UX contract: is it persistent (saved to config) or ephemeral (reset on restart)? Is it a global toggle or per-pane? The v1.2 requirements just say "sync on/off toggle via keyboard shortcut" without specifying persistence.
+**Why it happens:** Python's stdlib `tomllib` (3.11+) only reads TOML. For writing, you need a separate library. `tomli-w` is minimal and doesn't preserve style. `tomlkit` preserves style but is heavier.
 
-**Consequences:** User confusion about why sync "stopped working" or "won't turn off."
+**Consequences:** Config files lose comments or formatting on save. Users who manually edit `~/.joy/config.toml` find their formatting destroyed.
 
 **Prevention:**
-- **Make sync ON by default, ephemeral (not persisted).** This matches the expected workflow: sync is the normal mode, turning it off is a temporary override for independent browsing.
-- **Show sync state in the UI.** Add a visible indicator -- a character in the header, border, or footer that shows whether sync is active. The existing border_title pattern (used for refresh timestamps) is a natural home.
-- **If persisted, add to Config.** Add `sync_enabled: bool = True` to Config and save/load it. But this adds complexity for minimal value in a personal tool.
+- Use `tomlkit` for both reading and writing -- it preserves comments and formatting during round-trips
+- If startup time matters (it does for joy), lazy-import tomlkit: import inside the save function, not at module level
+- Alternative: use `tomllib` for reading (fast, stdlib) and `tomli-w` for writing (fast), but accept that manual formatting will be lost on save
+- Recommendation for joy: `tomllib` for reading (already in stdlib, zero import cost), `tomli-w` for writing (lightweight). Accept lost formatting since users rarely hand-edit these files.
 
-**Detection:** Turn sync off, restart app, verify sync is back on (if ephemeral) or still off (if persistent). Either is fine as long as it's intentional and visible.
+**Detection:** Save a config, inspect the file, check if comments/formatting survived.
 
-**Phase:** Design decision for the sync toggle implementation.
+**Phase:** Phase 2 (data storage) -- decide the library pair before writing any persistence code.
 
-**Confidence:** MEDIUM -- this is a UX design question, not a technical pitfall. But getting it wrong causes ongoing user confusion.
+**Confidence:** HIGH -- confirmed by Real Python TOML guide and library comparisons.
 
 ---
 
-## Minor Pitfalls
+### CM-6: Focus Traps in Keyboard-Only Navigation
 
-### MN-1: Badge Count Flicker During Refresh
+**What goes wrong:** Focus gets stuck in a widget (e.g., an input field, a modal, or a sub-list) with no obvious way to escape. The user presses Escape or Tab and nothing happens. They're trapped.
 
-**What goes wrong:** Badge counts on project rows (e.g., "2 worktrees, 1 agent") show stale counts during a refresh cycle. The worktree data arrives first, badges update to show worktree counts, then terminal data arrives and badges update again. Users see numbers changing rapidly.
+**Why it happens:** Textual's focus chain follows DOM order. If a widget consumes Escape or Tab without propagating, focus is trapped. Modals that don't handle dismiss properly are the most common cause.
 
-**Why it happens:** `_load_worktrees()` and `_load_terminal()` are independent workers that complete at different times. Each triggers a badge recalculation. The badges flicker as each data source arrives.
+**Consequences:** User has to Ctrl+C to quit. For a keyboard-only tool, this is a critical UX failure.
 
 **Prevention:**
-- **Debounce badge updates.** After receiving new data from either source, wait a short period (100-200ms) before recalculating badges. If the other source arrives within that window, calculate once.
-- **Or accept the flicker.** For a 30-second refresh cycle, a brief flicker is acceptable. The "final" state is correct within a few hundred milliseconds.
-- **Do NOT block one worker waiting for the other.** That defeats the purpose of parallel loading.
+- Always handle Escape to dismiss/unfocus: every modal, input, and dialog must respond to Escape
+- Test the complete focus cycle: Tab through all widgets, Escape from every state
+- Use `self.app.pop_screen()` for screen-based navigation -- built-in Escape handling
+- Implement `action_focus_next` and `action_focus_previous` for Tab/Shift+Tab navigation
+- The project list and detail pane should be the only two focusable regions in the main view
 
-**Phase:** Badge count implementation.
+**Detection:** Manual testing: try to Tab/Escape from every interactive element.
 
-**Confidence:** MEDIUM -- depends on how fast the two workers complete. If terminal fetching is slow (iTerm2 Python API), the gap may be noticeable.
+**Phase:** Phase 1 -- design focus management into the navigation model.
+
+**Confidence:** MEDIUM -- based on general TUI UX patterns and Textual focus documentation.
 
 ---
 
-### MN-2: Stale MR Objects After Branch Force-Push or Rename
+## iTerm2 Integration Risks
 
-**What goes wrong:** Live propagation auto-added an MR object for branch `feature-x`. The user force-pushes to a new branch name or the MR is closed. The auto-added MR object lingers in the project with a stale URL.
+Specific risks for the `agents` object type that creates/activates named iTerm2 windows.
 
-**Why it happens:** Auto-add is easy. Auto-remove is harder. How do you know an MR object should be removed? The MR might be closed but the user wants to keep the link for reference. Or the user might have manually added the MR object (not auto-added), and auto-remove would delete their intentional data.
+### IR-1: AppleScript Is Deprecated, but Python API Has Higher Complexity
+
+**What goes wrong:** AppleScript for iTerm2 is in "maintenance mode" and no longer receiving improvements. The official recommendation is to use the iTerm2 Python API. However, the Python API requires iTerm2 to be running and has its own complexity.
+
+**Why it happens:** iTerm2's Python API is more powerful but requires:
+- iTerm2 must be running (can't launch it via the API)
+- Scripts must connect to a running iTerm2 instance via its IPC mechanism
+- The API is async-only with `async_`-prefixed methods
+- Installing the `iterm2` Python package adds a dependency
+
+**Consequences:** Extra complexity. If iTerm2 isn't running, the API can't connect. The `iterm2` package adds import time even when not used.
 
 **Prevention:**
-- **Tag auto-added objects.** Add a flag (e.g., `auto_managed: bool = False`) to ObjectItem. Auto-added MRs have `auto_managed=True`. Only auto-managed objects are candidates for auto-removal.
-- **Alternatively, use a naming convention.** Auto-added MR labels start with a prefix like `[auto]`. But this is fragile -- users might remove the prefix.
-- **Safest approach: auto-add, never auto-remove MRs.** Let users manually delete stale MRs. This is simpler and avoids the "who owns this object" ambiguity. Auto-removal should only apply to worktree objects (which are tied to filesystem state that's definitively observable).
+- Use AppleScript via `osascript` for joy's simple use case (create window, set name, activate). It's simpler and sufficient.
+- AppleScript being in "maintenance mode" doesn't mean it's broken -- it just won't get new features. joy's needs are basic.
+- Fall back gracefully: if `osascript` fails, show an error in the TUI rather than crashing
+- Lazy-import the iTerm2 helper module -- never import at top level
+- Launch iTerm2 first if not running: `subprocess.run(["open", "-a", "iTerm"])` then wait briefly before AppleScript
 
-**Phase:** MR auto-add implementation.
+**Detection:** Test with iTerm2 not running. Test with multiple iTerm2 windows already open.
 
-**Confidence:** MEDIUM -- design trade-off. The safest default is to auto-add but not auto-remove MR objects.
+**Phase:** Phase 3 (agents object type) -- this is a later feature, not critical path.
+
+**Confidence:** MEDIUM -- AppleScript still works, but the iTerm2 team explicitly recommends the Python API. For joy's simple needs, AppleScript is pragmatic.
 
 ---
 
-### MN-3: Sync Flicker When Multiple Panes Match the Same Entity
+### IR-2: Race Condition in AppleScript Session Targeting
 
-**What goes wrong:** User selects a project. Sync resolver finds matching worktree and matching agent. Both panes update their cursors simultaneously. The sync events arrive in unpredictable order, causing brief visual inconsistency.
+**What goes wrong:** AppleScript sends text or commands to the wrong iTerm2 session/window if the target session was closed or if another session was activated between the "find window" and "write to session" steps.
+
+**Why it happens:** There's a documented iTerm2 bug (GitLab issue #5462): if an initial session gets killed and another session is already open, AppleScript writes text to the wrong session. AppleScript commands are not atomic.
+
+**Consequences:** Commands intended for one project's agent window end up in another window. Data leaks between projects.
 
 **Prevention:**
-- **Batch sync updates.** When a source pane triggers sync, compute ALL target cursor positions first, then apply them in a single `call_after_refresh` batch. This ensures all panes update in the same render frame.
-- **Use `self.app.batch_update()` context manager** (if available in Textual 8.x) or schedule all updates via `call_after_refresh` with a single callback that updates all panes.
+- Always identify windows by name, not by index or "current window"
+- After creating/finding a window, immediately set and verify its name property
+- Use a unique naming convention: `joy: <project-name>` to minimize collision risk
+- Add a brief delay (200-500ms) between creating a window and sending commands to it
+- If the target window can't be found by name, create a new one rather than falling back to "current"
 
-**Phase:** Cross-pane sync implementation.
+**Detection:** Test rapid open/close of iTerm2 windows while joy is activating agents.
 
-**Confidence:** MEDIUM -- visual flicker depends on render timing. May not be noticeable in practice.
+**Phase:** Phase 3 (agents) -- build and test carefully with race conditions in mind.
+
+**Confidence:** MEDIUM -- the specific bug is documented, but joy's use case (create/activate by name) is simpler than the documented failure mode (write to session).
 
 ---
 
-## Integration Pitfalls Specific to This System
+### IR-3: iTerm2 Window Naming is Session-Level, Not Window-Level
 
-### IP-1: ProjectDetail's Synthetic Repo Object Confuses the Sync Resolver
+**What goes wrong:** iTerm2's AppleScript API sets names on sessions, not windows. A window's "title" is derived from its active session's name. If the window has multiple tabs, the name may not display as expected.
 
-**What goes wrong:** ProjectDetail's `_render_project` method (line 137-139 of project_detail.py) synthesizes a repo ObjectItem if `project.repo` is set:
-```python
-if self._project.repo:
-    repo_item = ObjectItem(kind=PresetKind.REPO, value=self._project.repo, label="")
-    grouped.setdefault(PresetKind.REPO, []).append(repo_item)
-```
-This synthetic object exists in the UI but NOT in `project.objects`. If the sync resolver iterates `project.objects` to find matches, it won't find the repo object. If it iterates the rendered rows, it will find a "phantom" object that doesn't exist in the data model.
+**Why it happens:** iTerm2's hierarchy is: Application > Window > Tab > Session. The "name" property exists on sessions. Window titles are computed from the active tab's active session name, plus iTerm2's title bar configuration.
+
+**Consequences:** Finding a window "by name" requires iterating windows, checking their sessions' names. If the user creates additional tabs in a joy-managed window, the naming may break.
 
 **Prevention:**
-- **The sync resolver must use `project.objects` (the data model), not rendered rows.** The renderer adds display-only elements (group headers, spacers, the synthetic repo item). The resolver must ignore these.
-- **Alternatively, if the resolver needs to match by branch, it should look at `project.repo` directly,** not at the objects list. The repo field is the canonical source for which repo a project belongs to.
+- Set the session name immediately after creation
+- When searching for existing windows, iterate all windows and check their first session's name
+- Use a prefix pattern (`joy:projectname`) that's unlikely to collide with user-set session names
+- Accept that if a user renames the session manually, joy won't find it -- document this behavior
 
-**Phase:** Relationship resolver design.
+**Detection:** Create a joy agent window, manually add tabs to it, then try to reactivate from joy.
 
-**Confidence:** HIGH -- directly observed in the codebase. The synthetic repo object is a display concern that must not leak into the data-matching layer.
+**Phase:** Phase 3 (agents).
+
+**Confidence:** MEDIUM -- based on iTerm2 API documentation for Window and Session objects.
 
 ---
 
-### IP-2: _render_generation Counter Race with Sync-Triggered Re-renders
+## Packaging and Distribution Risks
 
-**What goes wrong:** ProjectDetail uses `_render_generation` to deduplicate rapid re-renders. A sync-triggered `set_project()` increments the generation. If a user-triggered `set_project()` fires in the same tick (e.g., user moves cursor while sync is updating), the generation increments again, and the sync render is correctly discarded. But now the user's render also increments the generation, and if sync fires AGAIN (because the user's cursor move triggered a new sync), we get a cascade of incrementing generations where some renders are discarded and the cursor ends up in an unexpected position.
+Edge cases with `uv tool install git+...` distribution model.
+
+### PD-1: Entry Point Not Found After Install
+
+**What goes wrong:** `uv tool install git+https://github.com/user/joy` succeeds but running `joy` gives "command not found."
+
+**Why it happens:** The `[project.scripts]` section in `pyproject.toml` is misconfigured or the entry point function doesn't exist. Common mistakes:
+- Typo in the module path: `joy = "joy.app:main"` where `main` doesn't exist in `joy/app.py`
+- Missing `__init__.py` in the package directory
+- The `[build-system]` section is missing or misconfigured
+
+**Consequences:** Users install but can't run the tool. First impression is "broken."
 
 **Prevention:**
-- **Sync should NOT call `set_project()` on ProjectDetail.** Sync should only move the cursor, not re-render the entire detail pane. If the sync resolver determines "project X matches," and project X is already displayed in ProjectDetail, just leave it alone. Only call `set_project()` if the project actually changes.
-- **Guard: `if detail._project is project: return`** (identity check, not equality). Since `_projects` is a stable list of the same Project objects, identity comparison works.
+- Test `uv tool install .` locally before pushing
+- Verify the entry point: `[project.scripts]\njoy = "joy.__main__:main"` and ensure that function exists
+- Include `[build-system]\nrequires = ["hatchling"]\nbuild-backend = "hatchling.build"` (or setuptools equivalent)
+- Test in a clean environment: `uv tool install --force git+file:///path/to/local/repo`
 
-**Phase:** Cross-pane sync to ProjectDetail connection.
+**Detection:** `which joy` returns nothing after install.
 
-**Confidence:** HIGH -- the `_render_generation` pattern exists at line 108-109 of project_detail.py. It works well for rapid user navigation but could interact badly with sync-triggered updates.
+**Phase:** Phase 1 -- validate the installation path on day one.
+
+**Confidence:** HIGH -- standard Python packaging issue, well-documented.
 
 ---
 
-### IP-3: WorktreePane.set_worktrees() is async, But call_from_thread Expects Sync
+### PD-2: Upgrade Doesn't Pull Latest Git Commit
 
-**What goes wrong:** `_set_worktrees` in app.py is defined as `async def _set_worktrees(...)` and calls `await self.query_one(WorktreePane).set_worktrees(...)`. But `_load_worktrees()` calls it via `self.app.call_from_thread(self._set_worktrees, worktrees, ...)`. The `call_from_thread` function can handle both sync and async callables -- Textual schedules async ones on the event loop. However, if the sync coordinator also calls `set_worktrees()` (to update cursor position after sync), there's now two paths to the same async method, and they can overlap.
+**What goes wrong:** Running `uv tool upgrade joy` doesn't fetch new commits from the git repo. The user is stuck on an old version.
+
+**Why it happens:** `uv tool upgrade` respects the originally installed version constraints. For git sources, it may not re-resolve to the latest commit on the branch. The lockfile pins a specific commit hash.
+
+**Consequences:** Users don't get updates. They think they've upgraded but are running old code.
 
 **Prevention:**
-- **Separate data-push from cursor-update.** `set_worktrees()` should remain the data-push path (called from refresh workers). Sync should call a separate, lighter method like `sync_cursor_to_branch(repo_name, branch)` that only moves the cursor without rebuilding the DOM.
-- **This avoids the heavyweight remove_children + mount cycle during sync.** Sync should be a cursor move, not a full re-render.
+- Document the upgrade process: `uv tool install --force git+https://github.com/user/joy` (reinstall, not upgrade)
+- Consider using `uv tool install --reinstall` for updates
+- Pin a version in pyproject.toml and tag releases -- then `uv tool upgrade` works as expected
+- Add a `joy --version` command so users can verify their installed version
 
-**Phase:** Cross-pane sync to WorktreePane connection.
+**Detection:** `joy --version` shows wrong version after "upgrade."
 
-**Confidence:** HIGH -- derived from the code. `set_worktrees()` is a full DOM rebuild. Using it for cursor sync would be absurdly wasteful and could interact with concurrent refresh rebuilds.
+**Phase:** Phase 1 -- document the install/upgrade process in README.
+
+**Confidence:** HIGH -- confirmed by uv docs and GitHub issues about git dependency locking.
 
 ---
 
-### IP-4: Existing call_after_refresh Chains Interact Poorly with Sync
+### PD-3: Missing Implicit Dependencies
 
-**What goes wrong:** The codebase uses `call_after_refresh` extensively for deferred operations:
-- `ProjectList.set_projects()` -> `call_after_refresh(self._rebuild)` 
-- `ProjectDetail.set_project()` -> `call_after_refresh(self._render_project)`
-- `ProjectList.action_rename_project()` -> `call_after_refresh(_restore_cursor)`
-- Scroll position restoration -> `call_after_refresh(scroll_to)`
+**What goes wrong:** The tool installs fine in the development environment but fails for users because a dependency that's globally available in dev isn't declared in `pyproject.toml`.
 
-If sync also uses `call_after_refresh`, the ordering of deferred callbacks becomes unpredictable. A sync callback might execute before a rebuild callback, operating on stale DOM state.
+**Why it happens:** `uv tool install` creates an isolated virtual environment. Any package not listed in `[project.dependencies]` won't be available. Common culprits:
+- `tomlkit` or `tomli-w` (not stdlib)
+- `iterm2` Python package (if using the Python API instead of AppleScript)
+- Forgetting to declare `textual` itself
+
+**Consequences:** ImportError on first run. Terrible first experience.
 
 **Prevention:**
-- **Sync cursor updates should be immediate, not deferred.** Since sync only moves the cursor (MP-4 prevention: don't re-render), it operates on existing `_rows` which are already in the DOM. No `call_after_refresh` needed.
-- **If sync must be deferred (because it depends on a rebuild completing), chain it explicitly.** The rebuild method should call the sync update at the end, not schedule a separate deferred callback.
+- Test installation in a completely clean environment (new user account or container)
+- Run `uv tool install .` in a fresh directory without a virtualenv active
+- List ALL runtime dependencies in `[project.dependencies]`
+- Use `uv tool install --python 3.12` to test with a specific Python version
 
-**Phase:** Integration of sync with the existing refresh pipeline.
+**Detection:** ImportError on first run after clean install.
 
-**Confidence:** HIGH -- the six `call_after_refresh` usages in the codebase create a deferred callback queue. Adding more without understanding the order is a recipe for flaky behavior.
+**Phase:** Phase 1 -- CI should test `uv tool install` in a clean environment.
+
+**Confidence:** HIGH -- standard packaging pitfall.
 
 ---
 
-### IP-5: _rows List References Become Stale After DOM Rebuild
+## Obsidian and URL Scheme Risks
 
-**What goes wrong:** The sync resolver grabs a reference to `worktree_pane._rows[i]` to extract the branch name for matching. A background refresh runs, `set_worktrees()` rebuilds the DOM, and `_rows` is replaced with a new list. The resolver's reference now points to a detached `WorktreeRow` that's no longer in the DOM. Calling `add_class("--highlight")` on it does nothing visible.
+### UR-1: Obsidian URI Path Encoding Breaks on Spaces and Special Characters
 
-**Why it happens:** `_rows` is reassigned on every rebuild: `self._rows = new_rows`. Old references are invalidated.
+**What goes wrong:** Opening `obsidian://open?vault=My Vault&file=My Note` fails because the spaces and special characters aren't properly URL-encoded.
+
+**Why it happens:** The Obsidian URI scheme requires proper percent-encoding for spaces, slashes, and special characters in vault names and file paths. The `open` command on macOS passes the URI as-is to the handler, but shell escaping and URL encoding are separate concerns.
+
+**Consequences:** Notes with spaces in filenames (extremely common) fail to open. Users think Obsidian integration is broken.
 
 **Prevention:**
-- **Never cache `_rows` references across async boundaries.** Any code that reads `_rows` must re-read it at the point of use, not cache it from an earlier tick.
-- **The sync resolver should operate on identity data (branch name, repo name), not on row widget references.** Resolve "which row index matches this branch?" by iterating `_rows` at the moment of cursor movement, not from a pre-computed mapping.
+- Always URL-encode the vault name and file path: `urllib.parse.quote(vault_name, safe="")` and `urllib.parse.quote(file_path, safe="/")`
+- Build the URI carefully: `f"obsidian://open?vault={quote(vault)}&file={quote(file)}"`
+- Test with file paths containing: spaces, parentheses, apostrophes, unicode characters, and nested directories
+- Shell-escape the full URI when passing to subprocess: use list form `["open", uri]` not string form
 
-**Phase:** Sync cursor positioning implementation.
+**Detection:** Test with a note file named "My Project (2024) Notes/Daily Log.md".
 
-**Confidence:** HIGH -- all four panes use `self._rows = new_rows` pattern that replaces the list on rebuild.
+**Phase:** Phase 2 (object operations) -- test encoding edge cases for every URL scheme.
+
+**Confidence:** HIGH -- documented in Obsidian help docs, confirmed by forum posts about encoding issues.
 
 ---
 
-## Phase-Specific Warnings
+### UR-2: Notion/Slack URL Scheme Changes Break Deep Links
 
-| Phase Topic | Likely Pitfall | Severity | Mitigation |
-|-------------|---------------|----------|------------|
-| Relationship resolver | CP-1: Sync loop | CRITICAL | Guard flag or prevent() on programmatic cursor moves |
-| Relationship resolver | MP-1: Branch ambiguity | MODERATE | Match on (repo_name, branch) pair, never branch alone |
-| Relationship resolver | IP-1: Synthetic repo object | MODERATE | Use data model, not rendered rows |
-| Live data propagation | CP-2: Concurrent TOML mutation | CRITICAL | Workers discover, main thread mutates, then saves |
-| Live data propagation | CP-3: Branch objects mutated | CRITICAL | ALLOWED_AUTO_KINDS whitelist |
-| Live data propagation | MP-2: Stale marking model | MODERATE | Add stale field to ObjectItem dataclass |
-| Live data propagation | MP-3: Non-atomic ownership transfer | MODERATE | Both mutations in one method, verify both projects exist |
-| Worktree ownership transfer | MP-3: Transfer not atomic | MODERATE | Single-method mutation, fallback to keeping object in source |
-| Cursor sync | CP-4: Cursor reset on refresh | CRITICAL | Match by identity before/after rebuild |
-| Cursor sync | IP-3: set_worktrees for sync | MODERATE | Separate sync_cursor method, don't rebuild DOM |
-| Cursor sync | IP-5: Stale _rows references | MODERATE | Resolve at point-of-use, not cached |
-| Badge counts | MN-1: Badge flicker | MINOR | Debounce or accept brief inconsistency |
-| Worker management | MP-4: Overlapping refresh workers | MODERATE | Add exclusive=True to refresh workers |
-| Sync toggle UX | MP-5: Toggle persistence | MODERATE | Ephemeral + visible indicator |
-| Deferred callbacks | IP-4: call_after_refresh ordering | MODERATE | Sync cursors immediately, don't defer |
-| Auto MR management | MN-2: Stale MR objects | MINOR | Auto-add only, never auto-remove MRs |
+**What goes wrong:** `notion://` or `slack://` URL schemes change format between app versions, breaking previously-stored deep links.
+
+**Why it happens:** URL schemes for desktop apps are not standardized. Notion has changed its URL scheme format in the past. Slack's deep link format differs between the web and desktop app.
+
+**Consequences:** Stored project URLs stop working after an app update.
+
+**Prevention:**
+- Store the original HTTPS URL, not the scheme-rewritten URL
+- Convert `https://` to `notion://` (or equivalent) at activation time, not at storage time
+- This way, if the scheme changes, you only need to update the conversion logic, not all stored data
+- For Notion: replace `https://www.notion.so/` with `notion://www.notion.so/` at open time
+- For Slack: consider using `open -a Slack <https-url>` instead of scheme rewriting
+
+**Detection:** Stored URLs fail to open in the desktop app after an app update.
+
+**Phase:** Phase 2 (object operations) -- design the storage format to store raw URLs.
+
+**Confidence:** MEDIUM -- based on community reports of scheme changes; not independently verified for current versions.
+
+---
+
+## Per-Phase Warnings Summary
+
+| Phase | Pitfall | Severity | Mitigation |
+|-------|---------|----------|------------|
+| Phase 1 (Core TUI) | CP-1: Event loop blocking | CRITICAL | Use @work decorator for all I/O |
+| Phase 1 (Core TUI) | CP-2: Slow startup imports | CRITICAL | Profile imports, lazy-load non-essential |
+| Phase 1 (Core TUI) | CP-3: Task GC heisenbug | CRITICAL | Always use @work, never bare create_task |
+| Phase 1 (Core TUI) | CM-1: Widget lifecycle | HIGH | Load data in on_mount, not compose/init |
+| Phase 1 (Core TUI) | CM-2: CSS layout traps | HIGH | Use fr units, test with --dev |
+| Phase 1 (Core TUI) | CM-3: Key binding conflicts | HIGH | Stick to simple letter keys, test in iTerm2 |
+| Phase 1 (Core TUI) | CM-6: Focus traps | HIGH | Escape always unfocuses/dismisses |
+| Phase 1 (Core TUI) | PD-1: Entry point config | HIGH | Test uv tool install . on day one |
+| Phase 2 (Data/Ops) | CP-4: Non-atomic writes | CRITICAL | Write temp + os.replace pattern |
+| Phase 2 (Data/Ops) | CM-4: webbrowser.open | HIGH | Use subprocess open command |
+| Phase 2 (Data/Ops) | CM-5: TOML library choice | MEDIUM | tomllib read + tomli-w write |
+| Phase 2 (Data/Ops) | UR-1: Obsidian URI encoding | HIGH | URL-encode all path components |
+| Phase 2 (Data/Ops) | UR-2: URL scheme fragility | MEDIUM | Store HTTPS, convert at open time |
+| Phase 3 (Agents) | IR-1: AppleScript deprecation | MEDIUM | Use AppleScript for simplicity, accept risk |
+| Phase 3 (Agents) | IR-2: Session race condition | MEDIUM | Identify by name, add delays |
+| Phase 3 (Agents) | IR-3: Window vs session naming | MEDIUM | Use session name with prefix convention |
+| Distribution | PD-2: Git upgrade behavior | HIGH | Document reinstall-based updates |
+| Distribution | PD-3: Missing dependencies | HIGH | Test clean install in isolation |
 
 ---
 
 ## Key Findings
 
-1. **The sync loop (CP-1) is the highest-risk pitfall.** Every cross-pane sync system must solve the "A syncs B syncs A" problem. Textual's `prevent()` context manager is purpose-built for this. The existing codebase already has unidirectional message flow (ProjectList -> ProjectDetail); making it bidirectional requires explicit loop prevention.
+1. **Event loop blocking is the #1 Textual pitfall.** Every `subprocess.run()`, file read, or external tool invocation must go through `@work(thread=True)` or `asyncio.create_subprocess_exec()`. This must be the default pattern from line one of code, not retrofitted.
 
-2. **Concurrent TOML mutation (CP-2) is currently safe by accident.** The single-user, low-frequency mutation pattern in v1.1 means workers rarely overlap. v1.2's automatic mutations (MR auto-add, worktree auto-remove, stale marking) will run concurrently with user actions. The "workers discover, main thread mutates" pattern must be enforced from the first v1.2 phase.
+2. **Startup time will be a fight.** Textual + Rich alone cost 130-230ms. The Posting project (a real Textual app) documented a 40% reduction by lazy-importing non-essential modules. Joy should measure startup on every PR and target under 350ms to first paint.
 
-3. **Cursor preservation during DOM rebuilds (CP-4) is a prerequisite for sync.** The current `_cursor = 0` reset on every refresh would trigger sync cascades every 30 seconds. This must be fixed before sync is enabled. The identity-matching pattern already exists in `action_rename_project` and should be generalized.
+3. **Atomic file writes are non-negotiable for `~/.joy/` data.** A single interrupted write can destroy all project configurations. The temp-file-then-rename pattern costs nothing and prevents catastrophic data loss.
 
-4. **Sync should move cursors, not rebuild panes.** The biggest integration risk is using the existing `set_worktrees()`/`set_sessions()`/`set_project()` methods for sync updates. These are heavyweight DOM rebuilds. Sync should be a lightweight cursor move on existing rows.
+4. **AppleScript is simpler than iTerm2's Python API for joy's needs.** The Python API is more powerful but requires iTerm2 to be running and adds dependency complexity. For "create named window + activate by name," AppleScript via `osascript` is the pragmatic choice despite being in maintenance mode.
 
-5. **The "branch is king" invariant needs a code-level enforcement mechanism.** A whitelist of auto-manageable PresetKinds (`ALLOWED_AUTO_KINDS`) prevents accidental mutation of user-curated objects.
+5. **Store original URLs, not scheme-rewritten URLs.** Converting `https://` to `notion://` at storage time is a data design mistake. Convert at activation time so the storage format remains resilient to URL scheme changes across app versions.
 
 ---
 
 ## Sources
 
-- Textual Events and Messages (prevent() context manager): https://textual.textualize.io/guide/events/
-- Textual Reactivity (watch methods, prevent): https://textual.textualize.io/guide/reactivity/
-- Textual Workers (call_from_thread, exclusive, thread safety): https://textual.textualize.io/guide/workers/
-- Textual Worker API (cancel_group, exclusive): https://textual.textualize.io/api/work/
-- Textual GitHub Issue #5269 (focus lost with recompose): https://github.com/Textualize/textual/issues/5269
-- Textual GitHub Issue #4691 (mount before widget mounted): https://github.com/Textualize/textual/issues/4691
-- Textual GitHub PR #954 (focus handling after widget removal): https://github.com/Textualize/textual/pull/954
-- Python tomllib docs: https://docs.python.org/3/library/tomllib.html
-- Thread-safe file writes in Python: https://superfastpython.com/thread-safe-write-to-file-in-python/
-- Atomic file operations (os.replace): https://zetcode.com/python/os-replace/
+- Posting startup optimization: https://darren.codes/posts/python-startup-time/
+- Textual async heisenbug: https://textual.textualize.io/blog/2023/02/11/the-heisenbug-lurking-in-your-async-code/
+- Textual workers guide: https://textual.textualize.io/guide/workers/
+- Textual layout guide: https://textual.textualize.io/guide/layout/
+- Textual CSS guide: https://textual.textualize.io/guide/CSS/
+- Textual input/bindings: https://textual.textualize.io/guide/input/
+- 7 Lessons from Textual: https://www.textualize.io/blog/7-things-ive-learned-building-a-modern-tui-framework/
+- iTerm2 Python API: https://iterm2.com/python-api/window.html
+- iTerm2 AppleScript docs: https://iterm2.com/documentation-scripting.html
+- iTerm2 session race condition bug: https://gitlab.com/gnachman/iterm2/-/work_items/5462
+- Obsidian URI scheme: https://help.obsidian.md/Extending+Obsidian/Obsidian+URI
+- Python TOML guide: https://realpython.com/python-toml/
+- Atomic writes (safer vs atomicwrites): https://docs.bswen.com/blog/2026-04-04-safer-vs-atomicwrites-python/
+- PEP 810 lazy imports: https://peps.python.org/pep-0810/
+- uv tools guide: https://docs.astral.sh/uv/concepts/tools/
+- uv git dependency updates: https://iifx.dev/en/articles/457001353/updating-git-dependencies-with-uv-the-upgrade-solution

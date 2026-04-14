@@ -10,16 +10,6 @@ v1.0 delivered the core artifact launcher. v1.1 transformed it into a live works
 
 Every artifact for the active project, openable instantly from one keyboard-driven interface — no hunting through tabs, terminals, or bookmarks.
 
-## Current Milestone: v1.2 Cross-Pane Intelligence
-
-**Goal:** Connect the four panes through a shared relationship model so selecting any item syncs related items across panes, and live refresh automatically propagates changes to project data.
-
-**Target features:**
-- Cross-pane selection sync with keyboard toggle
-- Badge counts (active worktrees + agents) on project rows
-- Live data propagation: worktrees/MRs auto-add/remove, agents marked stale
-- Worktree ownership follows branch (branch is king)
-
 ## Requirements
 
 ### Validated
@@ -57,15 +47,7 @@ Every artifact for the active project, openable instantly from one keyboard-driv
 
 ### Active
 
-- [ ] Cross-pane relationship resolver: compute Project ↔ Worktree ↔ Agent matches at runtime
-- [ ] Selection sync: cursor move in any pane updates cursor in all others to first matching item
-- [ ] Badge counts on project rows: active worktrees and agents
-- [ ] Sync on/off toggle via keyboard shortcut
-- [ ] Worktree disappears → auto-remove from project objects
-- [ ] MR detected for project's branch → auto-add as object (silent)
-- [ ] Worktree branch matches different project → move worktree object silently (branch is king)
-- [ ] Agent session gone → mark stale; session reappears → stale clears
-- [ ] Projects without repo field excluded from live sync
+(None — planning next milestone)
 
 ### Out of Scope
 
@@ -126,4 +108,4 @@ Every artifact for the active project, openable instantly from one keyboard-driv
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-14 after v1.2 milestone started — Cross-Pane Intelligence*
+*Last updated: 2026-04-14 after v1.1 milestone — Workspace Intelligence shipped*
