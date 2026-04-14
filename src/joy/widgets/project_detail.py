@@ -98,6 +98,9 @@ class ProjectDetail(Widget, can_focus=True):
     ObjectRow.--highlight {
         background: $accent 30%;
     }
+    ProjectDetail .section-spacer {
+        height: 1;
+    }
     ProjectDetail .repo-overview {
         width: 1fr;
         height: 1;
@@ -162,10 +165,14 @@ class ProjectDetail(Widget, can_focus=True):
         # Mount groups in order, only for kinds that have objects
         new_rows: list[ObjectRow] = []
         row_index = 0
+        first_group = True
         for kind in GROUP_ORDER:
             items = grouped.get(kind, [])
             if not items:
                 continue
+            if not first_group:
+                scroll.mount(Static("", classes="section-spacer"))
+            first_group = False
             scroll.mount(GroupHeader(GROUP_LABELS[kind]))
             for item in items:
                 row = ObjectRow(item, index=row_index)

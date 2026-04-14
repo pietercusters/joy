@@ -444,17 +444,19 @@ async def test_empty_state_no_worktrees(mock_store_repos_no_worktrees):
 
 
 @pytest.mark.asyncio
-async def test_pane_read_only(mock_store_with_worktrees):
-    """WKTR-10: WorktreePane.BINDINGS is empty; pane has can_focus=True."""
+async def test_pane_interactive(mock_store_with_worktrees):
+    """WKTR-10 updated: WorktreePane has cursor BINDINGS; pane has can_focus=True."""
     app = JoyApp()
     async with app.run_test() as pilot:
         await pilot.pause(0.2)
         await app.workers.wait_for_complete()
         pane = app.query_one("#worktrees-pane")
-        # BINDINGS must be empty (no cursor movement or activation keys)
-        assert WorktreePane.BINDINGS == [], (
-            f"Expected empty BINDINGS, got: {WorktreePane.BINDINGS}"
-        )
+        # BINDINGS must include cursor and activate keys
+        binding_keys = [b.key for b in WorktreePane.BINDINGS]
+        assert "j" in binding_keys, f"Expected 'j' binding, got: {binding_keys}"
+        assert "k" in binding_keys, f"Expected 'k' binding, got: {binding_keys}"
+        assert "enter" in binding_keys, f"Expected 'enter' binding, got: {binding_keys}"
+        assert "escape" in binding_keys, f"Expected 'escape' binding, got: {binding_keys}"
         # Pane must be focusable (for Tab cycling)
         assert pane.can_focus is True, "WorktreePane must have can_focus=True"
 
@@ -471,6 +473,7 @@ def _sample_mr_info(
     author: str = "@pieter",
     last_commit_hash: str = "abc1234",
     last_commit_msg: str = "fix: login redirect",
+    url: str = "https://github.com/example/repo/pull/42",
 ) -> MRInfo:
     return MRInfo(
         mr_number=mr_number,
@@ -479,6 +482,7 @@ def _sample_mr_info(
         author=author,
         last_commit_hash=last_commit_hash,
         last_commit_msg=last_commit_msg,
+        url=url,
     )
 
 
