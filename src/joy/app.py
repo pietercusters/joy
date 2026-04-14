@@ -68,6 +68,12 @@ class JoyApp(App):
         self._label_timer: object | None = None
         self._terminal_last_refresh_at: datetime | None = None
         self._terminal_refresh_failed: bool = False
+        # Phase 14: relationship resolver state (D-06, D-07)
+        self._rel_index: object | None = None  # RelationshipIndex | None
+        self._worktrees_ready: bool = False
+        self._sessions_ready: bool = False
+        self._current_worktrees: list[WorktreeInfo] = []
+        self._current_sessions: list[TerminalSession] = []
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -164,15 +170,53 @@ class JoyApp(App):
         mr_data: dict | None = None,
         mr_failed: bool = False,
     ) -> None:
-        """Push worktree data to the pane widget (D-01)."""
+        """Push worktree data to the pane widget (D-01). Also captures data for resolver (D-07)."""
         self._mr_fetch_failed = mr_failed
+        # Phase 14: store for resolver and set ready-flag (D-07, D-08)
+        self._current_worktrees = worktrees
+        self._worktrees_ready = True
         await self.query_one(WorktreePane).set_worktrees(
             worktrees, repo_count=repo_count, branch_filter=branch_filter, mr_data=mr_data
         )
+        self._maybe_compute_relationships()
 
     async def _set_terminal_sessions(self, sessions: list[TerminalSession] | None) -> None:
-        """Push terminal session data to the pane widget (D-15)."""
+        """Push terminal session data to the pane widget (D-15). Also captures data for resolver (D-07)."""
+        # Phase 14: store for resolver (treat None as empty — pitfall 2 avoidance)
+        self._current_sessions = sessions or []
+        self._sessions_ready = True
         await self.query_one(TerminalPane).set_sessions(sessions)
+        self._maybe_compute_relationships()
+
+    def _maybe_compute_relationships(self) -> None:
+        """Compute RelationshipIndex when both workers have completed their cycle (D-07, D-08).
+
+        Called from _set_worktrees and _set_terminal_sessions — both run on the main thread
+        via call_from_thread, so no asyncio coordination needed. Uses two boolean flags.
+        Ready-flags are reset immediately to prevent stale-data races on subsequent cycles.
+        """
+        if not (self._worktrees_ready and self._sessions_ready):
+            return
+        # Reset flags before computing (prevents stale-data on next cycle)
+        self._worktrees_ready = False
+        self._sessions_ready = False
+        from joy.resolver import compute_relationships  # noqa: PLC0415 — lazy import
+        self._rel_index = compute_relationships(
+            self._projects,
+            self._current_worktrees,
+            self._current_sessions,
+            self._repos,
+        )
+        self._update_badges()
+
+    def _update_badges(self) -> None:
+        """Push RelationshipIndex badge counts to ProjectList rows (D-08, D-11, BADGE-03)."""
+        if self._rel_index is None:
+            return
+        try:
+            self.query_one(ProjectList).update_badges(self._rel_index)
+        except Exception:
+            pass  # ProjectList not yet mounted — badges will be populated on next cycle
 
     def _trigger_worktree_refresh(self) -> None:
         """Timer callback: re-run worktree and terminal discovery (D-07, D-15)."""
