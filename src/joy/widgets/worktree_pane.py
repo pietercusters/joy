@@ -1,6 +1,8 @@
 """Bottom-right pane: grouped worktree list with status indicators."""
 from __future__ import annotations
 
+import subprocess
+import webbrowser
 from pathlib import Path
 
 from rich.text import Text
@@ -384,10 +386,8 @@ class WorktreePane(Widget, can_focus=True):
         row = self._rows[self._cursor]
         mr_info = row.mr_info
         if mr_info is not None and mr_info.url:
-            import webbrowser  # noqa: PLC0415
             webbrowser.open(mr_info.url)
         else:
-            import subprocess  # noqa: PLC0415
             subprocess.run(
                 ["open", "-a", self.app._config.ide, row.path],
                 check=False,
