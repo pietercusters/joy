@@ -1,920 +1,700 @@
-# Architecture Research: joy
+# Architecture Patterns: Cross-Pane Sync & Live Data Propagation
 
-**Project:** joy -- keyboard-driven Python TUI for managing coding project artifacts
-**Researched:** 2026-04-10
+**Domain:** Cross-pane intelligence for a 4-pane Textual TUI
+**Researched:** 2026-04-14
 **Overall confidence:** HIGH
 
 ---
 
-## Component Overview
+## Recommended Architecture
 
-joy has five major components. Each has a single responsibility and communicates through well-defined interfaces.
+The v1.2 architecture introduces three new concerns on top of the existing codebase:
 
-| Component | Responsibility | Depends On |
-|-----------|---------------|------------|
-| **Data Model** (`models.py`) | Dataclasses for Project, ObjectItem, Config. Pure data, no I/O. | Nothing |
-| **Store** (`store.py`) | Read/write `~/.joy/` TOML files. Serialize/deserialize models. | Data Model |
-| **Operations** (`operations.py`) | Type-dispatched actions: open URL, copy to clipboard, launch IDE, etc. | Data Model, subprocess |
-| **Widgets** (`widgets/`) | Custom Textual widgets: ProjectList, ProjectDetail, ObjectRow. | Data Model |
-| **App + Screens** (`app.py`, `screens/`) | Textual App, MainScreen, SettingsScreen, modals. Wires everything together. | All above |
+1. **Relationship resolution** -- given an item in any pane, compute related items in the other three panes
+2. **Cross-pane cursor sync** -- when the user moves the cursor in one pane, move cursors in other panes to the best matching related item
+3. **Live data propagation** -- after background refresh, diff discovered worktrees/agents against project objects and mutate projects.toml
 
-**Data flows in one direction:** Store loads data into Models, Models feed Widgets, user actions on Widgets trigger Operations, Operations may update Models, Store persists changes.
+These concerns are layered on top of the existing worker/refresh architecture. The architecture below keeps each concern in a separate module with clear boundaries.
+
+### System Diagram
 
 ```
-Store --reads/writes--> Models <--renders-- Widgets
-                           ^                    |
-                           |                    v
-                       Operations <--triggers-- User Input
+                     JoyApp (app.py)
+                        |
+          +-------------+-------------+
+          |             |             |
+    _load_worktrees  _load_terminal  (existing workers)
+          |             |
+          v             v
+    _set_worktrees  _set_terminal_sessions
+          |             |
+          +------+------+
+                 |
+                 v
+         _on_live_data_ready()  <-- NEW: orchestrator method
+                 |
+          +------+------+
+          |             |
+          v             v
+    propagator       resolver.build_index()
+    .propagate()         |
+          |              v
+          v         RelationshipIndex  <-- NEW: pure data structure
+    projects.toml       |
+    (mutated)           |
+          |             v
+          v        sync_controller    <-- NEW: app-level coordinator
+    _refresh_all_panes()   |
+                           v
+                    pane.sync_to(item) <-- NEW: method on each pane
 ```
+
+### Component Boundaries
+
+| Component | Location | Responsibility | Communicates With |
+|-----------|----------|---------------|-------------------|
+| **RelationshipIndex** | `resolver.py` (new) | Pure data: maps any item key to related items in other panes | Nothing -- pure lookup table |
+| **build_index()** | `resolver.py` (new) | Builds RelationshipIndex from current projects + live worktrees + live sessions | models.py data only |
+| **SyncController** | `sync.py` (new) | Coordinates cross-pane cursor sync; owns the sync-enabled flag; guards against loops | Pane widgets (via app.query_one) |
+| **propagate()** | `propagator.py` (new) | Diffs live data against project objects, returns mutations | models.py, store.py |
+| **JoyApp** | `app.py` (modified) | Orchestrates: after refresh, runs propagator then rebuilds index then triggers sync | All new modules |
+| **ProjectList** | `project_list.py` (modified) | Accepts sync_to() calls; posts SyncRequested message on cursor move | SyncController (indirectly via messages) |
+| **WorktreePane** | `worktree_pane.py` (modified) | Accepts sync_to() calls; posts SyncRequested message on cursor move | SyncController (indirectly via messages) |
+| **TerminalPane** | `terminal_pane.py` (modified) | Accepts sync_to() calls; posts SyncRequested message on cursor move | SyncController (indirectly via messages) |
+| **ProjectDetail** | `project_detail.py` (modified) | Passive recipient only -- syncs when project changes | No sync messages posted |
 
 ---
 
-## Data Model
+## New Module: resolver.py -- Relationship Resolution
 
-Use plain Python dataclasses. Pydantic adds startup time and is overkill for this data shape. Dataclasses give type hints, `__eq__`, `__repr__`, and `asdict()` for free.
+### Placement: Standalone Module, Not Mixin
 
-### Core Types
+The resolver belongs in its own module (`src/joy/resolver.py`), not as an app mixin or widget method. Reasons:
+
+1. **Pure logic, no I/O, no widgets.** The resolver takes data in, returns data out. It has no business touching Textual's DOM.
+2. **Independently testable.** A mixin would require instantiating a Textual App to test. A standalone module needs only dataclass instances.
+3. **Called from multiple places.** Both the sync controller and the propagator need relationship data. A mixin on one widget would create awkward coupling.
+4. **Follows the existing pattern.** `worktrees.py`, `mr_status.py`, and `terminal_sessions.py` are all standalone modules for data logic. The resolver is the same shape.
+
+### Data Model
 
 ```python
-# models.py
+# resolver.py
+from __future__ import annotations
+
 from dataclasses import dataclass, field
-from enum import Enum
-from datetime import date
+from joy.models import Project, WorktreeInfo, TerminalSession
 
 
-class ObjectType(str, Enum):
-    """All supported object types. The str mixin makes TOML serialization trivial."""
-    STRING = "string"
-    URL = "url"
-    OBSIDIAN = "obsidian"
-    FILE = "file"
-    WORKTREE = "worktree"
-    ITERM = "iterm"
+@dataclass(frozen=True)
+class ItemKey:
+    """Universal key identifying any item across all panes.
 
-
-class PresetKind(str, Enum):
-    """Pre-defined object kinds that map to an ObjectType + default behavior."""
-    MR = "mr"              # ObjectType.URL, browser
-    BRANCH = "branch"      # ObjectType.STRING, clipboard
-    TICKET = "ticket"      # ObjectType.URL, Notion desktop
-    THREAD = "thread"      # ObjectType.URL, Slack desktop
-    FILE = "file"          # ObjectType.FILE, editor
-    NOTE = "note"          # ObjectType.OBSIDIAN, Obsidian
-    WORKTREE = "worktree"  # ObjectType.WORKTREE, IDE
-    AGENTS = "agents"      # ObjectType.ITERM, iTerm2
-    URL = "url"            # ObjectType.URL, browser
-
-
-# Maps preset kinds to their underlying type
-PRESET_TYPE_MAP: dict[PresetKind, ObjectType] = {
-    PresetKind.MR: ObjectType.URL,
-    PresetKind.BRANCH: ObjectType.STRING,
-    PresetKind.TICKET: ObjectType.URL,
-    PresetKind.THREAD: ObjectType.URL,
-    PresetKind.FILE: ObjectType.FILE,
-    PresetKind.NOTE: ObjectType.OBSIDIAN,
-    PresetKind.WORKTREE: ObjectType.WORKTREE,
-    PresetKind.AGENTS: ObjectType.ITERM,
-    PresetKind.URL: ObjectType.URL,
-}
+    pane: "project" | "worktree" | "terminal"
+    identity: unique string within that pane
+        - project: project.name
+        - worktree: f"{repo_name}:{branch}"
+        - terminal: session_id
+    """
+    pane: str
+    identity: str
 
 
 @dataclass
-class ObjectItem:
-    """A single artifact within a project."""
-    kind: PresetKind          # e.g., "mr", "branch", "ticket"
-    value: str                # The actual data: URL, path, branch name, etc.
-    label: str = ""           # Optional display label (defaults to value if empty)
-    open_by_default: bool = False
+class RelationshipIndex:
+    """Bidirectional lookup: for any ItemKey, find related ItemKeys in other panes.
 
-    @property
-    def object_type(self) -> ObjectType:
-        return PRESET_TYPE_MAP[self.kind]
+    Built once per refresh cycle. Immutable after construction (replace, don't mutate).
+    """
+    _related: dict[ItemKey, set[ItemKey]] = field(default_factory=dict)
 
-    @property
-    def display_label(self) -> str:
-        return self.label or self.value
+    def get_related(self, key: ItemKey) -> set[ItemKey]:
+        """Return all related items across other panes."""
+        return self._related.get(key, set())
 
-
-@dataclass
-class Project:
-    """A project with its list of artifacts."""
-    name: str
-    objects: list[ObjectItem] = field(default_factory=list)
-    created: date = field(default_factory=date.today)
-
-    @property
-    def default_objects(self) -> list[ObjectItem]:
-        """Objects marked for open-by-default."""
-        return [obj for obj in self.objects if obj.open_by_default]
-
-
-@dataclass
-class Config:
-    """Global configuration."""
-    ide: str = "PyCharm"           # Application name for `open -a`
-    editor: str = "Sublime Text"   # Application name for `open -a`
-    obsidian_vault: str = ""       # Vault name (not path) for obsidian:// URIs
-    terminal: str = "iTerm2"       # Terminal app (future-proofing)
-    default_open_kinds: list[str] = field(
-        default_factory=lambda: ["worktree", "agents"]
-    )
+    def get_related_in_pane(self, key: ItemKey, pane: str) -> list[ItemKey]:
+        """Return related items filtered to a specific pane, sorted for determinism."""
+        return sorted(
+            (k for k in self.get_related(key) if k.pane == pane),
+            key=lambda k: k.identity,
+        )
 ```
 
-### Why This Design
+### Relationship Rules
 
-**Two-level type system (PresetKind + ObjectType):** PresetKind is what users see and interact with ("mr", "ticket", "branch"). ObjectType is what the operations layer dispatches on (URL, STRING, FILE). This separation means:
-- Adding a new preset kind (e.g., "design" for Figma URLs) only requires adding an enum value and a mapping entry -- no new operation code.
-- The operations layer stays small: 6 handlers for 6 ObjectTypes, not 9+ for every preset kind.
-- Users don't need to know about ObjectType; they pick from the preset list.
+These are the matching rules, in priority order:
 
-**Dataclasses not Pydantic:** joy's data is simple and trusted (we write it ourselves). Pydantic's validation overhead and import time are unnecessary. If validation becomes needed later, adding `__post_init__` to dataclasses is straightforward.
+| Relationship | Match Criterion | Direction |
+|-------------|----------------|-----------|
+| Project <-> Worktree | Project has a worktree object whose `value` (path) matches `WorktreeInfo.path`, OR project's branch object matches `WorktreeInfo.branch` | Bidirectional |
+| Project <-> Worktree (repo) | Project's `repo` field matches `WorktreeInfo.repo_name` | Bidirectional |
+| Project <-> Terminal | Project has an agents object whose `value` matches `TerminalSession.session_name` | Bidirectional |
+| Worktree <-> Terminal | Terminal session's `cwd` starts with worktree's `path` (the agent is running inside that worktree) | Bidirectional |
+
+### Build Function
+
+```python
+def build_index(
+    projects: list[Project],
+    worktrees: list[WorktreeInfo],
+    sessions: list[TerminalSession] | None,
+) -> RelationshipIndex:
+    """Build a fresh RelationshipIndex from current state.
+
+    Called after each refresh cycle completes. O(P*W + P*S + W*S)
+    where P=projects, W=worktrees, S=sessions. For typical counts
+    (<50 projects, <30 worktrees, <20 sessions) this is <30K comparisons -- trivial.
+    """
+    index = RelationshipIndex()
+    # ... build bidirectional mappings ...
+    return index
+```
+
+### Why Rebuild-On-Refresh, Not Incremental
+
+The data set is tiny (dozens of items). Rebuilding the entire index after each 30s refresh is simpler and cheaper than tracking incremental changes. Incremental updates would require diffing old vs new worktrees/sessions and updating edges -- more code, more bugs, no measurable perf win.
+
+**Confidence: HIGH** -- pure dataclass logic, no Textual API dependency, straightforward to test.
 
 ---
 
-## ~/.joy/ Directory Layout
+## New Module: sync.py -- Cross-Pane Sync Controller
 
-```
-~/.joy/
-  config.toml        # Global settings
-  projects.toml      # All project data in one file
-```
+### Placement: Standalone Coordinator, Instantiated by App
 
-### config.toml
-
-```toml
-# Global settings for joy
-
-ide = "PyCharm"
-editor = "Sublime Text"
-obsidian_vault = "wiki"
-terminal = "iTerm2"
-
-# Object kinds to mark as open_by_default when creating a new project
-default_open_kinds = ["worktree", "agents"]
-```
-
-### projects.toml
-
-```toml
-[[project]]
-name = "joy"
-created = 2026-04-10
-
-[[project.object]]
-kind = "worktree"
-value = "/Users/pieter/Github/joy"
-label = ""
-open_by_default = true
-
-[[project.object]]
-kind = "mr"
-value = "https://gitlab.com/user/joy/-/merge_requests/1"
-label = "Main MR"
-open_by_default = true
-
-[[project.object]]
-kind = "branch"
-value = "feature/tui-layout"
-label = ""
-open_by_default = true
-
-[[project.object]]
-kind = "note"
-value = "Projects/joy"
-label = "Project notes"
-open_by_default = false
-
-[[project]]
-name = "other-project"
-created = 2026-03-15
-
-[[project.object]]
-kind = "ticket"
-value = "https://notion.so/ticket-123"
-label = "PROJ-123"
-open_by_default = true
-```
-
-### Rationale: Single File, Not Directory-Per-Project
-
-- **Data volume is tiny.** Dozens of projects, each with ~5-15 objects. A single `projects.toml` will be <10KB even with 50 projects.
-- **Atomic operations.** Writing one file is simpler and safer than coordinating across multiple files. No partial-state issues.
-- **Easy backup.** Copy two files, done.
-- **TOML's `[[array_of_tables]]` syntax** handles the project-list-with-nested-objects shape cleanly.
-- **When to reconsider:** If projects.toml grows past 100KB or users want per-project version control. Neither is likely for a personal tool.
-
-### Store Implementation Pattern
+The sync controller is not a widget. It is a plain Python object instantiated and owned by JoyApp. It holds the sync-enabled flag, the current RelationshipIndex, and the loop guard.
 
 ```python
-# store.py
-import tomllib
-import tomli_w
-from pathlib import Path
-from models import Project, ObjectItem, Config
+# sync.py
+from __future__ import annotations
 
-JOY_DIR = Path.home() / ".joy"
-CONFIG_PATH = JOY_DIR / "config.toml"
-PROJECTS_PATH = JOY_DIR / "projects.toml"
+from joy.resolver import ItemKey, RelationshipIndex
 
 
-def ensure_joy_dir() -> None:
-    """Create ~/.joy/ if it doesn't exist."""
-    JOY_DIR.mkdir(exist_ok=True)
+class SyncController:
+    """Coordinates cross-pane cursor sync.
 
+    Owned by JoyApp. Not a widget -- has no DOM presence.
+    """
 
-def load_config() -> Config:
-    """Load global config, returning defaults if file missing."""
-    if not CONFIG_PATH.exists():
-        return Config()
-    with open(CONFIG_PATH, "rb") as f:
-        data = tomllib.load(f)
-    return Config(**data)
+    def __init__(self) -> None:
+        self.enabled: bool = True
+        self._index: RelationshipIndex = RelationshipIndex()
+        self._syncing: bool = False  # loop guard
 
+    def update_index(self, index: RelationshipIndex) -> None:
+        """Replace the relationship index (called after each refresh)."""
+        self._index = index
 
-def save_config(config: Config) -> None:
-    """Write global config to TOML."""
-    ensure_joy_dir()
-    from dataclasses import asdict
-    with open(CONFIG_PATH, "wb") as f:
-        tomli_w.dump(asdict(config), f)
+    def handle_cursor_move(self, source_key: ItemKey, app) -> None:
+        """Called when cursor moves in any pane. Syncs related panes.
 
+        The loop guard (_syncing) prevents infinite recursion:
+        Pane A cursor moves -> sync fires -> Pane B cursor moves ->
+        sync fires again -> but _syncing is True, so it returns immediately.
+        """
+        if not self.enabled or self._syncing:
+            return
 
-def load_projects() -> list[Project]:
-    """Load all projects from TOML."""
-    if not PROJECTS_PATH.exists():
-        return []
-    with open(PROJECTS_PATH, "rb") as f:
-        data = tomllib.load(f)
-    projects = []
-    for p in data.get("project", []):
-        objects = [
-            ObjectItem(**obj) for obj in p.get("object", [])
-        ]
-        projects.append(Project(
-            name=p["name"],
-            objects=objects,
-            created=p.get("created", date.today()),
-        ))
-    return projects
-
-
-def save_projects(projects: list[Project]) -> None:
-    """Write all projects to TOML."""
-    ensure_joy_dir()
-    from dataclasses import asdict
-    data = {"project": []}
-    for p in projects:
-        pd = {"name": p.name, "created": p.created}
-        pd["object"] = [asdict(obj) for obj in p.objects]
-        data["project"].append(pd)
-    with open(PROJECTS_PATH, "wb") as f:
-        tomli_w.dump(data, f)
+        self._syncing = True
+        try:
+            related = self._index.get_related(source_key)
+            # Group by pane, find first match in each
+            for pane_name in ("project", "worktree", "terminal"):
+                if source_key.pane == pane_name:
+                    continue  # don't sync back to source
+                targets = self._index.get_related_in_pane(source_key, pane_name)
+                if targets:
+                    _sync_pane(app, pane_name, targets[0])
+        finally:
+            self._syncing = False
 ```
 
-**Key decisions:**
-- Functions, not a class. There is no state to manage -- read file, return data. Write data, done.
-- Load returns full list, save writes full list. The data is small enough that incremental updates add complexity without benefit.
-- `ensure_joy_dir()` creates `~/.joy/` on first write so users don't need to run a setup command.
+### Sync Loop Guard: Why a Simple Boolean Works
 
----
+The guard is a boolean `_syncing` flag, not a lock or semaphore. This works because:
 
-## Textual App Structure
+1. **Textual is single-threaded for UI.** All cursor moves and message handling run on the main asyncio event loop. There is no concurrent access to `_syncing`.
+2. **Sync is synchronous.** `handle_cursor_move` calls `_sync_pane` which calls `pane.sync_to()` which sets `_cursor` and calls `_update_highlight()`. All of this happens in one synchronous call chain. No awaits, no deferred callbacks.
+3. **The guard prevents re-entry, not concurrency.** The scenario is: cursor move in A -> `handle_cursor_move(A)` -> sets B cursor -> B's `_update_highlight` would normally post a highlight message -> that message would call `handle_cursor_move(B)` -> but `_syncing` is True, so it returns.
 
-### File Layout
+A more complex guard (per-pane locks, message-type filtering, generation counters) would be over-engineering. The boolean flag has zero failure modes in a single-threaded event loop.
 
-```
-src/joy/
-    __init__.py
-    app.py              # JoyApp class, main() entry point
-    models.py           # Dataclasses: Project, ObjectItem, Config
-    store.py            # TOML read/write functions
-    operations.py       # Type-dispatched open/copy/launch actions
-    screens/
-        __init__.py
-        main.py         # MainScreen (two-pane layout)
-        settings.py     # SettingsScreen (global config editor)
-    widgets/
-        __init__.py
-        project_list.py # Left pane: project list with keyboard nav
-        project_detail.py # Right pane: object list for selected project
-        object_row.py   # Single object row with icon + label + status
-    styles/
-        app.tcss        # Global styles
-        main.tcss       # MainScreen styles
-        settings.tcss   # SettingsScreen styles
-```
+**Alternative considered: Textual's `prevent()` context manager.** This suppresses specific message types during programmatic updates. It would work for preventing re-entrant messages, but requires the pane widgets to know about sync-specific message types. The boolean guard on the controller is simpler and keeps sync logic out of the pane widgets.
 
-### Widget Hierarchy
+**Confidence: HIGH** -- single-threaded event loop guarantees no concurrent access. Pattern is well-established in UI frameworks.
 
-```
-JoyApp
-  +-- MainScreen
-  |     +-- Header (optional, or custom TitleBar)
-  |     +-- Horizontal
-  |     |     +-- ProjectList (left pane, docked)
-  |     |     |     +-- ListView
-  |     |     |           +-- ListItem (per project)
-  |     |     +-- ProjectDetail (right pane)
-  |     |           +-- VerticalScroll
-  |     |                 +-- ObjectRow (per object)
-  |     +-- Footer
-  |
-  +-- SettingsScreen (pushed on top when activated)
-  |     +-- Config form widgets
-  |
-  +-- ConfirmModal (pushed for delete confirmations)
-  +-- ObjectFormModal (pushed for add/edit object)
-  +-- ProjectFormModal (pushed for new project)
-```
-
-### App Class
+### Sync Toggle
 
 ```python
-# app.py
-from textual.app import App
-from screens.main import MainScreen
-
-
-class JoyApp(App):
-    """Keyboard-driven project artifact manager."""
-
-    TITLE = "joy"
-    CSS_PATH = "styles/app.tcss"
-
-    # App-level bindings (available everywhere)
-    BINDINGS = [
-        ("q", "quit", "Quit"),
-        ("?", "help", "Help"),
-    ]
-
-    SCREENS = {
-        "main": MainScreen,
-    }
-
-    def on_mount(self) -> None:
-        self.push_screen("main")
-
-
-def main() -> None:
-    app = JoyApp()
-    app.run()
-```
-
-### MainScreen: The Two-Pane Layout
-
-```python
-# screens/main.py
-from textual.screen import Screen
-from textual.app import ComposeResult
-from textual.containers import Horizontal
-from textual.widgets import Header, Footer
-from widgets.project_list import ProjectList
-from widgets.project_detail import ProjectDetail
-
-
-class MainScreen(Screen):
-    CSS_PATH = "main.tcss"  # Relative to app CSS_PATH
-
-    # Screen-level bindings
-    BINDINGS = [
-        ("a", "add_object", "Add"),
-        ("e", "edit_object", "Edit"),
-        ("d", "delete_object", "Delete"),
-        ("o", "open_object", "Open"),
-        ("O", "open_defaults", "Open All"),
-        ("space", "toggle_default", "Toggle Default"),
-        ("n", "new_project", "New Project"),
-        ("s", "settings", "Settings"),
-    ]
-
-    def compose(self) -> ComposeResult:
-        yield Header()
-        with Horizontal():
-            yield ProjectList(id="project-list")
-            yield ProjectDetail(id="project-detail")
-        yield Footer()
-```
-
-### CSS for Two-Pane Layout
-
-```css
-/* styles/main.tcss */
-#project-list {
-    dock: left;
-    width: 30;
-    height: 100%;
-    border-right: solid $primary-background;
-}
-
-#project-detail {
-    width: 1fr;
-    height: 100%;
-    overflow-y: auto;
-}
-```
-
-**Why dock instead of grid:** Docking the project list to the left is simpler, keeps it fixed during scrolling, and matches the mental model of a sidebar. Grid layout would work but adds unnecessary complexity for a two-column split.
-
-### Custom Widget: ProjectList
-
-```python
-# widgets/project_list.py
-from textual.widgets import ListView, ListItem, Label
-from textual.widget import Widget
-from textual.app import ComposeResult
-from textual.message import Message
-from models import Project
-
-
-class ProjectList(Widget, can_focus=True):
-    """Left pane: list of projects."""
-
-    class ProjectHighlighted(Message):
-        """Sent when user moves highlight to a project."""
-        def __init__(self, project: Project) -> None:
-            self.project = project
-            super().__init__()
-
-    class ProjectSelected(Message):
-        """Sent when user presses enter on a project."""
-        def __init__(self, project: Project) -> None:
-            self.project = project
-            super().__init__()
-
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
-        self._projects: list[Project] = []
-
-    def compose(self) -> ComposeResult:
-        yield ListView(id="project-listview")
-
-    def set_projects(self, projects: list[Project]) -> None:
-        """Populate the list with projects."""
-        self._projects = projects
-        listview = self.query_one("#project-listview", ListView)
-        listview.clear()
-        for project in projects:
-            listview.append(ListItem(Label(project.name)))
-
-    def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
-        """Bubble a ProjectHighlighted message when highlight changes."""
-        if event.index is not None and event.index < len(self._projects):
-            self.post_message(self.ProjectHighlighted(self._projects[event.index]))
-
-    def on_list_view_selected(self, event: ListView.Selected) -> None:
-        """Bubble a ProjectSelected message when enter is pressed."""
-        if event.index is not None and event.index < len(self._projects):
-            self.post_message(self.ProjectSelected(self._projects[event.index]))
-```
-
-### Custom Widget: ProjectDetail
-
-```python
-# widgets/project_detail.py
-from textual.widget import Widget
-from textual.app import ComposeResult
-from textual.containers import VerticalScroll
-from textual.reactive import reactive
-from models import Project
-from widgets.object_row import ObjectRow
-
-
-class ProjectDetail(Widget, can_focus=True):
-    """Right pane: shows objects for the selected project."""
-
-    project: reactive[Project | None] = reactive(None, recompose=True)
-
-    BINDINGS = [
-        ("up", "cursor_up", "Up"),
-        ("down", "cursor_down", "Down"),
-    ]
-
-    def compose(self) -> ComposeResult:
-        if self.project is None:
-            yield VerticalScroll(id="detail-empty")
-        else:
-            with VerticalScroll(id="detail-scroll"):
-                for i, obj in enumerate(self.project.objects):
-                    yield ObjectRow(obj, index=i)
-```
-
----
-
-## Object Type System
-
-### Pattern: functools.singledispatch
-
-Use `singledispatch` from the standard library. It is the Pythonic way to dispatch behavior based on type, avoids giant if/elif chains, and is extensible without modifying existing code.
-
-However, since we dispatch on an enum value (not a Python type), we use a simple dictionary registry instead -- this is cleaner than singledispatch for string/enum dispatch.
-
-```python
-# operations.py
-import subprocess
-import webbrowser
-from typing import Callable
-from models import ObjectItem, ObjectType, Config
-
-# Type alias for an opener function
-Opener = Callable[[ObjectItem, Config], None]
-
-# Registry: ObjectType -> opener function
-_OPENERS: dict[ObjectType, Opener] = {}
-
-
-def opener(obj_type: ObjectType):
-    """Decorator to register an opener for an ObjectType."""
-    def decorator(fn: Opener) -> Opener:
-        _OPENERS[obj_type] = fn
-        return fn
-    return decorator
-
-
-def open_object(item: ObjectItem, config: Config) -> None:
-    """Open an object using its type-specific handler."""
-    handler = _OPENERS.get(item.object_type)
-    if handler is None:
-        raise ValueError(f"No opener registered for {item.object_type}")
-    handler(item, config)
-
-
-# --- Registered openers ---
-
-@opener(ObjectType.URL)
-def _open_url(item: ObjectItem, config: Config) -> None:
-    """Open a URL in the default browser or registered app."""
-    subprocess.run(["open", item.value], check=True)
-
-
-@opener(ObjectType.STRING)
-def _copy_string(item: ObjectItem, config: Config) -> None:
-    """Copy a string to the clipboard."""
-    subprocess.run(
-        ["pbcopy"], input=item.value.encode("utf-8"), check=True
-    )
-
-
-@opener(ObjectType.FILE)
-def _open_file(item: ObjectItem, config: Config) -> None:
-    """Open a file in the configured editor."""
-    subprocess.run(["open", "-a", config.editor, item.value], check=True)
-
-
-@opener(ObjectType.WORKTREE)
-def _open_worktree(item: ObjectItem, config: Config) -> None:
-    """Open a git worktree directory in the configured IDE."""
-    subprocess.run(["open", "-a", config.ide, item.value], check=True)
-
-
-@opener(ObjectType.OBSIDIAN)
-def _open_obsidian(item: ObjectItem, config: Config) -> None:
-    """Open a file in Obsidian via URI scheme."""
-    from urllib.parse import quote
-    vault = config.obsidian_vault
-    file_path = quote(item.value)
-    uri = f"obsidian://open?vault={vault}&file={file_path}"
-    subprocess.run(["open", uri], check=True)
-
-
-@opener(ObjectType.ITERM)
-def _open_iterm(item: ObjectItem, config: Config) -> None:
-    """Create or activate a named iTerm2 window."""
-    name = item.value
-    script = f'''
-    tell application "iTerm2"
-        activate
-        set targetWindow to missing value
-        repeat with w in windows
-            if name of w is "{name}" then
-                set targetWindow to w
-                exit repeat
-            end if
-        end repeat
-        if targetWindow is missing value then
-            set targetWindow to (create window with default profile)
-            tell current session of targetWindow
-                set name to "{name}"
-            end tell
-        end if
-        select targetWindow
-    end tell
-    '''
-    subprocess.run(["osascript", "-e", script], check=True)
-```
-
-### Why This Pattern
-
-- **Simple dict registry vs. class hierarchy:** Each ObjectType needs a single function (open/activate). A full class hierarchy (AbstractOpener -> URLOpener -> etc.) is over-engineered for functions that are 3-5 lines each.
-- **Decorator registration:** The `@opener(ObjectType.URL)` pattern keeps the registration co-located with the implementation. No separate registration step needed.
-- **Extensible:** Adding a new ObjectType means: (1) add enum value, (2) write a 3-line function with `@opener` decorator. No other code changes.
-- **Testable:** Each opener function is independently testable. The registry can be inspected or mocked.
-- **No imports needed in callers:** `open_object(item, config)` is the only public API. The caller doesn't need to know about specific opener implementations.
-
-### Open All Defaults
-
-```python
-def open_defaults(project: Project, config: Config) -> None:
-    """Open all objects marked as open_by_default, in display order."""
-    for obj in project.objects:
-        if obj.open_by_default:
-            open_object(obj, config)
-```
-
-### Subprocess Calls and the UI
-
-**subprocess.run() blocks.** For most operations (open URL, copy to clipboard), this is fine -- they complete in milliseconds. For iTerm2 AppleScript, which may take 100-500ms, use a Textual thread worker:
-
-```python
-# In the screen or widget that triggers operations
-from textual import work
-
-@work(thread=True)
-def perform_open(self, item: ObjectItem, config: Config) -> None:
-    """Run open_object in a thread to avoid blocking the UI."""
-    open_object(item, config)
-```
-
-Use `thread=True` because `subprocess.run` is synchronous. The `@work` decorator ensures the UI remains responsive.
-
----
-
-## Keyboard Binding Strategy
-
-### Binding Hierarchy
-
-Textual resolves key bindings by searching from the focused widget upward through the DOM to the App. joy should use this hierarchy deliberately:
-
-| Level | Bindings | Purpose |
-|-------|----------|---------|
-| **App** | `q` (quit), `?` (help) | Always available, everywhere |
-| **MainScreen** | `a` (add), `e` (edit), `d` (delete), `n` (new project), `s` (settings) | Available when main screen is active |
-| **ProjectDetail** | `o` (open), `O` (open all), `space` (toggle default), arrow keys | Object-level operations, only when detail pane is focused |
-| **ProjectList** | Arrow keys, `enter` | Navigation, only when list pane is focused |
-| **Modals** | `enter` (confirm), `escape` (cancel) | Modal-specific, block everything below |
-
-### Focus Management Between Panes
-
-The two panes need clear focus semantics:
-
-```python
-# In MainScreen
+# In JoyApp
 BINDINGS = [
-    ("h", "focus_list", "Focus List"),     # vim-style
-    ("l", "focus_detail", "Focus Detail"), # vim-style
-    ("left", "focus_list", "Focus List"),
-    ("right", "focus_detail", "Focus Detail"),
-    ("tab", "toggle_focus", "Switch Pane"),
+    # ... existing ...
+    Binding("S", "toggle_sync", "Sync", priority=True),
 ]
 
-def action_focus_list(self) -> None:
-    self.query_one("#project-list").focus()
-
-def action_focus_detail(self) -> None:
-    self.query_one("#project-detail").focus()
-
-def action_toggle_focus(self) -> None:
-    if self.query_one("#project-list").has_focus:
-        self.query_one("#project-detail").focus()
-    else:
-        self.query_one("#project-list").focus()
+def action_toggle_sync(self) -> None:
+    self._sync_controller.enabled = not self._sync_controller.enabled
+    state = "on" if self._sync_controller.enabled else "off"
+    self.notify(f"Sync {state}", markup=False)
 ```
 
-**Tab switches panes, not individual widgets.** Override the default Tab behavior (which cycles through all focusable widgets) to only toggle between the two panes. This keeps navigation predictable.
+The toggle is app-level because sync is a global behavior, not per-pane.
 
-### Modal Screens for Destructive Actions
+### How Panes Participate in Sync
 
-Use Textual's `ModalScreen` for confirmations and forms. ModalScreen blocks all input to the screen below:
+Each pane needs two additions:
+
+1. **`sync_to(key: ItemKey)` method** -- move cursor to the row matching the given key, without triggering a sync cascade (the controller's `_syncing` flag handles this).
+2. **Post a notification on cursor move** -- so the controller can react. This integrates into existing `_update_highlight()` methods.
+
+The notification uses Textual's message bubbling. Each pane posts a `CursorMoved` message that bubbles to the App, where the handler calls `self._sync_controller.handle_cursor_move(key, self)`.
 
 ```python
-from textual.screen import ModalScreen
-
-class ConfirmDeleteModal(ModalScreen[bool]):
-    """Confirm before deleting a project or object."""
-
-    BINDINGS = [
-        ("y", "confirm", "Yes"),
-        ("n", "cancel", "No"),
-        ("escape", "cancel", "Cancel"),
-    ]
-
-    def __init__(self, message: str) -> None:
-        self.message = message
+# Shared message class (can live in a common messages.py or in sync.py)
+class CursorMoved(Message):
+    """Posted by any pane when its cursor moves to a new item."""
+    def __init__(self, key: ItemKey) -> None:
+        self.key = key
         super().__init__()
-
-    def action_confirm(self) -> None:
-        self.dismiss(True)
-
-    def action_cancel(self) -> None:
-        self.dismiss(False)
 ```
 
-Called from the screen:
+**Why not a reactive attribute on App?** Because cursor position is per-pane and the App would need separate reactives for each pane's cursor. Messages are the right tool for "something happened" events that need coordination.
+
+---
+
+## New Module: propagator.py -- Live Data Propagation
+
+### Placement: Standalone Module
+
+Like the resolver, the propagator is pure logic operating on data models. It takes the current projects and live-discovered data, computes mutations, and returns them. The App applies mutations and persists.
 
 ```python
-async def action_delete_object(self) -> None:
-    confirmed = await self.app.push_screen_wait(
-        ConfirmDeleteModal("Delete this object?")
+# propagator.py
+from __future__ import annotations
+
+from dataclasses import dataclass
+from joy.models import ObjectItem, PresetKind, Project, WorktreeInfo, TerminalSession
+
+
+@dataclass
+class PropagationResult:
+    """Describes all mutations to apply to projects after a refresh cycle."""
+    added_worktrees: list[tuple[str, ObjectItem]]    # (project_name, new_object)
+    removed_worktrees: list[tuple[str, ObjectItem]]   # (project_name, removed_object)
+    moved_worktrees: list[tuple[str, str, ObjectItem]] # (from_project, to_project, object)
+    added_mrs: list[tuple[str, ObjectItem]]           # (project_name, new_mr_object)
+    stale_agents: list[tuple[str, ObjectItem]]        # (project_name, object_to_mark_stale)
+    unstale_agents: list[tuple[str, ObjectItem]]      # (project_name, object_to_unmark)
+    dirty: bool = False  # True if any mutation was made
+
+
+def propagate(
+    projects: list[Project],
+    worktrees: list[WorktreeInfo],
+    sessions: list[TerminalSession] | None,
+    mr_data: dict | None = None,
+) -> PropagationResult:
+    """Compute mutations needed to sync project objects with live data.
+
+    Rules:
+    1. Worktree discovered for project (by repo match + branch) but no worktree
+       object exists -> add worktree object silently
+    2. Worktree object exists but worktree no longer discovered -> remove object
+    3. Worktree branch matches a DIFFERENT project's branch object -> move
+       worktree object to that project ("branch is king")
+    4. MR discovered for project's active branch -> add MR object if not present
+    5. Agent session name matches project's agent object but session gone -> mark stale
+    6. Agent session reappears -> clear stale mark
+
+    Only operates on projects with a `repo` field (projects without repo are
+    excluded from live sync per requirement).
+    """
+    # ... pure logic, returns PropagationResult ...
+```
+
+### Where Propagation Runs in the Refresh Cycle
+
+Propagation runs **after** both `_set_worktrees` and `_set_terminal_sessions` complete, not inside the worker threads. This is because:
+
+1. Propagation needs access to `self._projects` (app-level state) which should only be read/written on the main thread.
+2. Propagation may mutate projects, which triggers a save and UI refresh.
+3. Both worktree and terminal data must be available before propagation can run.
+
+The orchestration in JoyApp:
+
+```python
+# app.py additions
+
+def __init__(self, **kwargs) -> None:
+    super().__init__(**kwargs)
+    # ... existing ...
+    self._sync_controller = SyncController()
+    self._live_worktrees: list[WorktreeInfo] = []
+    self._live_sessions: list[TerminalSession] | None = None
+    self._worktrees_ready: bool = False
+    self._terminals_ready: bool = False
+
+async def _set_worktrees(self, worktrees, ...):
+    # ... existing code ...
+    self._live_worktrees = worktrees
+    self._worktrees_ready = True
+    self._maybe_run_propagation()
+
+async def _set_terminal_sessions(self, sessions):
+    # ... existing code ...
+    self._live_sessions = sessions
+    self._terminals_ready = True
+    self._maybe_run_propagation()
+
+def _maybe_run_propagation(self) -> None:
+    """Run propagation + index rebuild when both data sources are ready."""
+    if not (self._worktrees_ready and self._terminals_ready):
+        return
+    self._worktrees_ready = False
+    self._terminals_ready = False
+
+    # 1. Propagate live data to project objects
+    result = propagate(
+        self._projects, self._live_worktrees, self._live_sessions
     )
-    if confirmed:
-        # perform deletion
-        ...
+    if result.dirty:
+        self._apply_propagation(result)
+        self._save_projects_bg()
+        # Refresh project list to show updated badge counts
+        self.query_one(ProjectList).set_projects(self._projects, self._repos)
+
+    # 2. Rebuild relationship index
+    index = build_index(self._projects, self._live_worktrees, self._live_sessions)
+    self._sync_controller.update_index(index)
 ```
+
+### Ready-Flag Pattern vs. asyncio.gather
+
+The "both ready" check uses simple boolean flags rather than `asyncio.gather` or `asyncio.Event`. This is because the two workers (`_load_worktrees` and `_load_terminal`) already use `call_from_thread` to push results to the main thread independently. Adding asyncio coordination would require restructuring the worker pattern. The boolean flags are simpler and fit the existing architecture.
+
+**Confidence: HIGH** -- pure data transformation, no Textual API dependency, testable with dataclass instances.
 
 ---
 
-## Separation Between UI and Data/Operations
+## Badge Counts on Project Rows
 
-### The Rule
+Badge counts (worktree count + agent count) derive from the RelationshipIndex. After each index rebuild, the app pushes badge data to ProjectList.
 
-**Widgets and Screens never import `store` or `operations` directly.** They communicate through messages and the App/Screen acts as the mediator.
-
-```
-User presses 'o'
-  -> ProjectDetail binding fires action_open_object
-  -> ProjectDetail posts OpenObjectRequested message (bubbles up)
-  -> MainScreen handles message, calls operations.open_object()
-  -> MainScreen notifies user (toast/status)
-```
-
-This keeps widgets reusable and testable without TOML files or subprocess calls.
-
-### Message Flow Example
+### Implementation
 
 ```python
-# In ProjectDetail widget
-class OpenObjectRequested(Message):
-    def __init__(self, item: ObjectItem) -> None:
-        self.item = item
-        super().__init__()
+# In ProjectList
+class ProjectRow(Static):
+    def __init__(self, project: Project, *, badges: dict | None = None, **kwargs):
+        self.project = project
+        self._badges = badges or {}
+        label = self._format_label(project, self._badges)
+        super().__init__(label, **kwargs)
 
-def action_open_object(self) -> None:
-    selected = self._get_selected_object()
-    if selected:
-        self.post_message(self.OpenObjectRequested(selected))
-
-
-# In MainScreen
-@on(ProjectDetail.OpenObjectRequested)
-@work(thread=True)
-def handle_open_object(self, message: ProjectDetail.OpenObjectRequested) -> None:
-    config = store.load_config()
-    operations.open_object(message.item, config)
+    @staticmethod
+    def _format_label(project: Project, badges: dict) -> str:
+        wt_count = badges.get("worktrees", 0)
+        agent_count = badges.get("agents", 0)
+        parts = [f" {project.name}"]
+        if wt_count or agent_count:
+            badge_parts = []
+            if wt_count:
+                badge_parts.append(f"{wt_count}")  # folder icon + count
+            if agent_count:
+                badge_parts.append(f"{agent_count}")  # terminal icon + count
+            parts.append(f"  {'  '.join(badge_parts)}")
+        return "".join(parts)
 ```
 
-### Where State Lives
-
-- **Source of truth:** The TOML files in `~/.joy/`.
-- **In-memory state:** The MainScreen holds `projects: list[Project]` and `config: Config` loaded on mount. Modifications update both the in-memory list and persist via `store.save_projects()`.
-- **Widgets receive data, don't own it.** ProjectList and ProjectDetail receive data through method calls or reactive attributes, not by loading it themselves.
+Badge data flows from App to ProjectList:
 
 ```python
-# MainScreen manages the data lifecycle
-class MainScreen(Screen):
-    def on_mount(self) -> None:
-        self._config = store.load_config()
-        self._projects = store.load_projects()
-        self.query_one(ProjectList).set_projects(self._projects)
-        if self._projects:
-            self._select_project(self._projects[0])
-
-    def _select_project(self, project: Project) -> None:
-        detail = self.query_one(ProjectDetail)
-        detail.project = project
-
-    def _persist(self) -> None:
-        store.save_projects(self._projects)
+# In JoyApp, after index rebuild
+def _push_badge_counts(self) -> None:
+    badges: dict[str, dict[str, int]] = {}
+    for project in self._projects:
+        key = ItemKey(pane="project", identity=project.name)
+        wt_keys = self._sync_controller._index.get_related_in_pane(key, "worktree")
+        term_keys = self._sync_controller._index.get_related_in_pane(key, "terminal")
+        badges[project.name] = {
+            "worktrees": len(wt_keys),
+            "agents": len([k for k in term_keys
+                          if True]),  # count all related terminal sessions
+        }
+    self.query_one(ProjectList).set_badges(badges)
 ```
+
+ProjectList stores badges and applies them during `_rebuild()`. No full re-render needed if only badges change -- use a targeted `update_badges()` method that updates existing row labels in-place.
+
+**Confidence: HIGH** -- straightforward data derivation, no new patterns.
 
 ---
 
-## Global Config vs. Per-Project Settings
+## Patterns to Follow
 
-### Clear Separation
+### Pattern 1: Data Down, Messages Up (Textual Idiom)
 
-| Setting | Location | Scope | Example |
-|---------|----------|-------|---------|
-| IDE | `config.toml` | Global | `ide = "PyCharm"` |
-| Editor | `config.toml` | Global | `editor = "Sublime Text"` |
-| Obsidian vault | `config.toml` | Global | `obsidian_vault = "wiki"` |
-| Terminal | `config.toml` | Global | `terminal = "iTerm2"` |
-| Default open kinds | `config.toml` | Global | `default_open_kinds = ["worktree", "agents"]` |
-| Object list | `projects.toml` | Per-project | `[[project.object]]` entries |
-| Open-by-default flags | `projects.toml` | Per-project | `open_by_default = true` per object |
-| Project name, created | `projects.toml` | Per-project | `name = "joy"`, `created = 2026-04-10` |
+**What:** Widgets receive data through method calls and attributes set by the parent/app. Widgets communicate upward through Textual Messages that bubble through the DOM.
 
-### No Per-Project Config Overrides in v1
+**When:** Always, for all new inter-component communication.
 
-The PROJECT.md mentions "global default, overridable per project" for default open kinds. Implement this as:
-- **On project creation:** The `default_open_kinds` from config.toml determines which object kinds get `open_by_default = true` initially.
-- **After creation:** Each project's `open_by_default` flags are independent. No per-project config file.
+**Applied to v1.2:**
+- App pushes RelationshipIndex to SyncController (data down)
+- App pushes badge counts to ProjectList (data down)
+- App calls `pane.sync_to(key)` through SyncController (data down)
+- Panes post `CursorMoved` messages (messages up)
+- App handles `CursorMoved` and delegates to SyncController (app as mediator)
 
-This avoids a per-project config layer (which adds complexity). The user simply toggles `open_by_default` per object with the `space` key.
+### Pattern 2: Rebuild-Not-Mutate for Derived State
 
-### Settings Screen
+**What:** When the source data changes, rebuild the derived data structure from scratch rather than trying to incrementally update it.
 
-A dedicated `SettingsScreen` for editing global config. Pushed on top of MainScreen, popped when done. Uses standard Textual Input/Select widgets.
+**When:** The data set is small enough that rebuilding is cheap (<1ms).
 
-```python
-class SettingsScreen(Screen):
-    BINDINGS = [
-        ("escape", "app.pop_screen", "Back"),
-        ("enter", "save", "Save"),
-    ]
-    # Input fields for each config value
-    # On save: update Config dataclass, call store.save_config()
-```
+**Applied to v1.2:**
+- RelationshipIndex is rebuilt after every refresh, not incrementally patched
+- Badge counts are recomputed after every index rebuild
+- This eliminates an entire class of stale-state bugs
+
+### Pattern 3: Ready-Flags for Multi-Source Coordination
+
+**What:** When an action requires data from multiple async sources, use boolean flags to track readiness and fire when all sources are ready.
+
+**When:** Sources complete independently via `call_from_thread` and coordination must happen on the main thread.
+
+**Applied to v1.2:**
+- `_worktrees_ready` and `_terminals_ready` flags gate `_maybe_run_propagation()`
+- Each flag is set in the respective `_set_*` callback
+- The method resets both flags after running to prepare for the next refresh cycle
 
 ---
 
-## Build Order
+## Anti-Patterns to Avoid
 
-Implementation should follow dependency order. Each phase builds on the previous and produces something testable.
+### Anti-Pattern 1: Pane-to-Pane Direct Communication
 
-### Phase 1: Foundation (No UI)
-1. **`models.py`** -- Dataclasses for Project, ObjectItem, Config, enums
-2. **`store.py`** -- TOML read/write functions
-3. **`operations.py`** -- Type-dispatched openers
-4. **Unit tests** for all three
+**What:** Having WorktreePane directly call methods on ProjectList or vice versa.
 
-_Testable without any TUI code. Verify data round-trips through TOML correctly. Verify each opener calls the right subprocess command._
+**Why bad:** Creates tight coupling between sibling widgets. Any pane change requires updating all connected panes. Violates Textual's "messages up, attributes down" principle.
 
-### Phase 2: Basic TUI Shell
-5. **`app.py`** -- JoyApp with MainScreen
-6. **`widgets/project_list.py`** -- ProjectList with ListView
-7. **`widgets/project_detail.py`** -- ProjectDetail showing objects
-8. **`widgets/object_row.py`** -- ObjectRow rendering a single object
-9. **`styles/`** -- CSS for two-pane layout
+**Instead:** All cross-pane communication flows through the App/SyncController. Panes only know about their own data and the `CursorMoved` message contract.
 
-_Renders projects and objects. Navigation works. No mutations yet._
+### Anti-Pattern 2: Sync Logic Inside Pane Widgets
 
-### Phase 3: Operations Integration
-10. Wire `o` (open object) and `O` (open all defaults) to operations.py
-11. Wire `space` (toggle open_by_default) with persist
-12. Clipboard copy notification (toast)
+**What:** Putting relationship resolution or sync decisions inside the pane widgets themselves.
 
-_The core value proposition works: see projects, open artifacts._
+**Why bad:** Each pane would need to know about all other panes' data structures. Testing requires mocking three other panes. Adding a fifth pane means modifying four existing panes.
 
-### Phase 4: CRUD
-13. **Add object** -- ObjectFormModal
-14. **Edit object** -- Reuse ObjectFormModal
-15. **Delete object** -- ConfirmDeleteModal
-16. **New project** -- ProjectFormModal
-17. **Delete project** -- ConfirmDeleteModal
+**Instead:** Panes only expose `sync_to(key)` and post `CursorMoved`. All relationship logic lives in resolver.py and sync.py.
 
-_Full create/read/update/delete for projects and objects._
+### Anti-Pattern 3: Reactive Attributes for Cursor Sync
 
-### Phase 5: Polish
-18. **Settings screen**
-19. **Icons per object type** (Textual supports Unicode emoji/icons)
-20. **Visual polish** -- borders, colors, spacing
-21. **Error handling** -- missing config, invalid TOML, subprocess failures
+**What:** Using Textual's `reactive` + `data_bind` to propagate cursor position from App to panes.
 
-### Dependency Graph
+**Why bad:** `data_bind` is one-way (parent to child) and triggers watch methods, which would need to move the cursor. But cursor moves in panes need to propagate *up* too (pane cursor move -> sync other panes). Mixing bidirectional flow through reactives creates confusion about who owns the cursor state. The cursor is owned by each pane; sync is a coordination concern, not a binding concern.
+
+**Instead:** Use the message-based pattern: messages up (CursorMoved), method calls down (sync_to). Clear ownership, clear direction.
+
+### Anti-Pattern 4: Propagation in Worker Threads
+
+**What:** Running `propagate()` inside `_load_worktrees` worker thread.
+
+**Why bad:** Propagation mutates `self._projects` which is app-level state. Mutating it from a background thread while the main thread reads it for rendering causes race conditions. Also, propagation needs both worktree AND terminal data, but the two workers are independent.
+
+**Instead:** Propagation runs on the main thread after both `_set_worktrees` and `_set_terminal_sessions` have delivered their data.
+
+---
+
+## Data Flow: Complete Refresh Cycle
 
 ```
-models.py        (no deps)
+Timer fires (every 30s) or user presses 'r'
     |
-    +-- store.py        (depends on models)
-    +-- operations.py   (depends on models)
-    |
-    +-- widgets/*       (depends on models)
+    +-> _load_worktrees()  [worker thread]
     |       |
-    |       +-- screens/*   (depends on widgets, store, operations)
+    |       +-> discover_worktrees() + fetch_mr_data()
+    |       +-> call_from_thread(_set_worktrees)
     |               |
-    |               +-- app.py   (depends on screens)
+    |               +-> push data to WorktreePane
+    |               +-> store live_worktrees on app
+    |               +-> set _worktrees_ready = True
+    |               +-> call _maybe_run_propagation()
+    |
+    +-> _load_terminal()  [worker thread]
+            |
+            +-> fetch_sessions()
+            +-> call_from_thread(_set_terminal_sessions)
+                    |
+                    +-> push data to TerminalPane
+                    +-> store live_sessions on app
+                    +-> set _terminals_ready = True
+                    +-> call _maybe_run_propagation()
+
+_maybe_run_propagation()  [main thread, only runs when both ready]
+    |
+    +-> propagate(projects, worktrees, sessions, mr_data)
+    |       |
+    |       +-> returns PropagationResult (additions, removals, moves)
+    |
+    +-> if dirty: apply mutations to self._projects, save, refresh ProjectList
+    |
+    +-> build_index(projects, worktrees, sessions)
+    |       |
+    |       +-> returns RelationshipIndex
+    |
+    +-> sync_controller.update_index(index)
+    |
+    +-> _push_badge_counts()  -> ProjectList.set_badges()
+```
+
+## Data Flow: Cross-Pane Cursor Sync
+
+```
+User moves cursor in WorktreePane (j/k)
+    |
+    +-> _update_highlight() fires (existing)
+    |
+    +-> post_message(CursorMoved(key))  [new]
+            |
+            +-> bubbles to JoyApp
+            +-> on_cursor_moved(message)
+                    |
+                    +-> sync_controller.handle_cursor_move(key, app)
+                            |
+                            +-> check: enabled? syncing? -> guard
+                            +-> set _syncing = True
+                            +-> lookup related items in index
+                            +-> for each related pane:
+                            |       +-> app.query_one(pane).sync_to(target_key)
+                            |               |
+                            |               +-> find row matching target_key
+                            |               +-> set _cursor, _update_highlight()
+                            |               +-> _update_highlight posts CursorMoved
+                            |               +-> but _syncing is True -> no-op
+                            +-> set _syncing = False
 ```
 
 ---
 
-## Key Findings
+## Modifications to Existing Components
 
-1. **Textual's compose + message-bubbling architecture maps perfectly to joy's needs.** The two-pane layout uses dock-left for the project list and `1fr` width for the detail pane. ListView handles project navigation with built-in keyboard bindings. Custom messages bubble from widgets to screens, keeping the wiring clean. This is not a forced fit -- Textual was designed for exactly this kind of app.
+### app.py (JoyApp)
 
-2. **The two-level type system (PresetKind + ObjectType) is the critical design insight.** PresetKind is user-facing (9 values: mr, branch, ticket, etc.), ObjectType is operation-facing (6 values: URL, STRING, FILE, etc.). This decoupling means adding new preset kinds (e.g., "design" for Figma URLs) requires zero new operation code -- just an enum entry and a mapping. The operations layer stays at 6 handlers forever.
+| Change | What | Why |
+|--------|------|-----|
+| New instance vars | `_sync_controller`, `_live_worktrees`, `_live_sessions`, `_worktrees_ready`, `_terminals_ready` | State for sync and propagation coordination |
+| New binding | `S` for sync toggle | User control over sync behavior |
+| Modified `_set_worktrees` | Store worktrees, set ready flag, call `_maybe_run_propagation()` | Trigger propagation when both sources ready |
+| Modified `_set_terminal_sessions` | Store sessions, set ready flag, call `_maybe_run_propagation()` | Same |
+| New method `_maybe_run_propagation` | Orchestrate propagation + index rebuild + badge push | Central coordination point |
+| New method `_push_badge_counts` | Derive badge data from index, push to ProjectList | Badge counts depend on relationship index |
+| New handler `on_cursor_moved` | Delegate to sync_controller | Entry point for cross-pane sync |
 
-3. **Dict-based registry for type dispatch, not class hierarchy.** Each opener is a 3-5 line function. A class hierarchy (AbstractOpener, URLOpener, etc.) would be over-engineered for functions this simple. The `@opener(ObjectType.URL)` decorator pattern keeps registration co-located with implementation and makes the system trivially extensible.
+### widgets/project_list.py (ProjectList)
 
-4. **Strict UI/data separation: Widgets post messages, Screens handle operations.** Widgets never import `store` or `operations`. They post messages like `OpenObjectRequested` that bubble to the Screen, which calls operations and persists changes. This keeps widgets testable without I/O and follows Textual's intended architecture.
+| Change | What | Why |
+|--------|------|-----|
+| Modified `ProjectRow.__init__` | Accept `badges` dict for worktree/agent counts | Badge display |
+| New method `set_badges` | Update badge labels on existing rows without full rebuild | Efficient badge refresh |
+| New method `sync_to` | Move cursor to project matching given ItemKey | Sync target |
+| Modified `_update_highlight` | Post `CursorMoved` message after highlight | Sync source |
 
-5. **Two TOML files are the right choice over directory-per-project or a database.** The data volume is tiny (dozens of projects, <10KB total). A single `projects.toml` with `[[project]]` array-of-tables is human-readable, atomically writable, and trivially parseable. Split config.toml from projects.toml because they change at different rates and have different schemas.
+### widgets/worktree_pane.py (WorktreePane)
+
+| Change | What | Why |
+|--------|------|-----|
+| New method `sync_to` | Move cursor to worktree row matching given ItemKey | Sync target |
+| Modified `_update_highlight` | Post `CursorMoved` message after highlight | Sync source |
+| Store `ItemKey` on each `WorktreeRow` | `WorktreeRow` gets a `key` attribute: `ItemKey("worktree", f"{repo_name}:{branch}")` | For sync_to lookup |
+
+### widgets/terminal_pane.py (TerminalPane)
+
+| Change | What | Why |
+|--------|------|-----|
+| New method `sync_to` | Move cursor to session row matching given ItemKey | Sync target |
+| Modified `_update_highlight` | Post `CursorMoved` message after highlight | Sync source |
+| Store `ItemKey` on each `SessionRow` | `SessionRow` gets a `key` attribute: `ItemKey("terminal", session_id)` | For sync_to lookup |
+
+### widgets/project_detail.py (ProjectDetail)
+
+| Change | What | Why |
+|--------|------|-----|
+| None for sync | Detail pane is passive -- it updates when ProjectList cursor moves (existing `on_project_list_project_highlighted`) | No additional sync needed; detail follows project selection |
+
+### models.py
+
+| Change | What | Why |
+|--------|------|-----|
+| No changes | ItemKey lives in resolver.py, not models.py | Keep models.py pure data; ItemKey is a sync/resolver concern |
+
+### store.py
+
+| Change | What | Why |
+|--------|------|-----|
+| No changes | Propagator calls existing `save_projects` | No new persistence needs |
+
+---
+
+## New Components Summary
+
+| File | Type | Lines (est.) | Purpose |
+|------|------|-------------|---------|
+| `src/joy/resolver.py` | New module | ~120 | ItemKey, RelationshipIndex, build_index() |
+| `src/joy/sync.py` | New module | ~80 | SyncController, CursorMoved message |
+| `src/joy/propagator.py` | New module | ~200 | PropagationResult, propagate() |
+| `tests/test_resolver.py` | New test | ~150 | Unit tests for relationship resolution |
+| `tests/test_sync.py` | New test | ~100 | Unit tests for sync controller |
+| `tests/test_propagator.py` | New test | ~200 | Unit tests for live data propagation |
+
+---
+
+## Suggested Build Order
+
+Build order follows dependencies -- each phase produces testable, shippable increments.
+
+### Phase 1: Resolver + Index
+- Create `resolver.py` with ItemKey, RelationshipIndex, build_index()
+- Write `test_resolver.py` -- pure unit tests, no Textual
+- **Why first:** Everything else depends on the relationship index. Test it in isolation before wiring into the app.
+
+### Phase 2: Badge Counts
+- Modify ProjectRow to accept and display badge data
+- Add `set_badges()` to ProjectList
+- Wire `_push_badge_counts()` in JoyApp after index rebuild
+- **Why second:** Badges are visible proof the index works, but don't require sync or propagation. Validates the index in production without the sync complexity.
+
+### Phase 3: Sync Controller + Cross-Pane Sync
+- Create `sync.py` with SyncController and CursorMoved message
+- Add `sync_to()` to all three panes
+- Modify `_update_highlight()` in all three panes to post CursorMoved
+- Wire sync toggle (S key) in JoyApp
+- **Why third:** Depends on resolver (Phase 1). Sync is the most user-visible v1.2 feature and should be tested interactively before propagation adds data mutations.
+
+### Phase 4: Live Data Propagation
+- Create `propagator.py` with propagate()
+- Wire `_maybe_run_propagation()` in JoyApp
+- Add ready-flag coordination to `_set_worktrees` and `_set_terminal_sessions`
+- **Why last:** Most complex, most risk. Mutates projects.toml. Should only be added after the refresh/sync pipeline is proven stable.
+
+---
+
+## Scalability Considerations
+
+| Concern | Current (v1.1) | After v1.2 | At Scale |
+|---------|----------------|------------|----------|
+| Refresh cost | 2 workers: git CLI + iTerm2 API | Same workers + ~1ms propagation + ~1ms index build on main thread | No change until >100 repos |
+| Cursor sync latency | N/A | Synchronous on main thread, sub-ms | O(n) lookup in index; at 1000 items, still <1ms |
+| Memory | Project + worktree data in memory | +RelationshipIndex (dict of sets, ~1KB for 50 items) | Negligible |
+| TOML write frequency | On user action only | +after propagation (if dirty) | At most once per refresh (30s). Atomic write is ~1ms |
 
 ---
 
 ## Sources
 
-- Textual App guide: https://textual.textualize.io/guide/app/
-- Textual Screens guide: https://textual.textualize.io/guide/screens/
-- Textual Input/Bindings guide: https://textual.textualize.io/guide/input/
-- Textual Widgets guide: https://textual.textualize.io/guide/widgets/
-- Textual Layout guide: https://textual.textualize.io/guide/layout/
 - Textual Events/Messages guide: https://textual.textualize.io/guide/events/
-- Textual Reactivity guide: https://textual.textualize.io/guide/reactivity/
-- Textual Actions guide: https://textual.textualize.io/guide/actions/
+- Textual Reactivity guide (data_bind, watch): https://textual.textualize.io/guide/reactivity/
+- Textual message_pump API (prevent()): https://textual.textualize.io/api/message_pump/
 - Textual Workers guide: https://textual.textualize.io/guide/workers/
-- Textual ListView widget: https://textual.textualize.io/widgets/list_view/
-- Textual OptionList widget: https://textual.textualize.io/widgets/option_list/
-- Anatomy of a Textual UI (blog): https://textual.textualize.io/blog/2024/09/15/anatomy-of-a-textual-user-interface/
-- Python tomllib docs: https://docs.python.org/3/library/tomllib.html
-- PEP 443 singledispatch: https://peps.python.org/pep-0443/
-- Python Registry Pattern: https://dev.to/dentedlogic/stop-writing-giant-if-else-chains-master-the-python-registry-pattern-ldm
+- Textual Widgets guide: https://textual.textualize.io/guide/widgets/
+- Existing joy codebase: app.py, project_list.py, worktree_pane.py, terminal_pane.py, project_detail.py, models.py, store.py
