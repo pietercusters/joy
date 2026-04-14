@@ -358,17 +358,34 @@ class JoyApp(App):
         """Open settings modal overlay (D-01, D-05, SETT-06)."""
         def on_settings(config: Config | None) -> None:
             if config is None:
-                return  # Escaped -- no change (D-04)
+                # Repos may have been added/removed even if config was not saved
+                self._reload_repos()
+                return
             self._config = config
             self._save_config_bg()
+            # Reload repos (may have been added/removed in the modal)
+            self._reload_repos()
             self.notify("Settings saved", markup=False)
-        self.push_screen(SettingsModal(self._config), on_settings)
+        self.push_screen(SettingsModal(self._config, self._repos), on_settings)
 
     @work(thread=True, exit_on_error=False)
     def _save_config_bg(self) -> None:
         """Persist config to TOML in background thread (D-04)."""
         from joy.store import save_config  # noqa: PLC0415
         save_config(self._config)
+
+    @work(thread=True, exit_on_error=False)
+    def _reload_repos(self) -> None:
+        """Reload repos from disk and refresh project grouping + worktrees."""
+        from joy.store import load_repos  # noqa: PLC0415
+        repos = load_repos()
+        self.app.call_from_thread(self._apply_repos, repos)
+
+    def _apply_repos(self, repos: list[Repo]) -> None:
+        """Apply reloaded repos to the app state and refresh dependent widgets."""
+        self._repos = repos
+        self.query_one(ProjectList).set_projects(self._projects, self._repos)
+        self._load_worktrees()
 
     @work(thread=True, exit_on_error=False)
     def _open_defaults(self, defaults: list[ObjectItem]) -> None:

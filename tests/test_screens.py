@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import pytest
 from textual.app import App, ComposeResult
-from textual.widgets import Input, SelectionList, Static
+from textual.widgets import Button, Input, SelectionList, Static
 
-from joy.models import Config, PresetKind
+from joy.models import Config, PresetKind, Repo
 from joy.screens import ConfirmationModal, NameInputModal, PresetPickerModal, ValueInputModal
-from joy.screens.settings import SettingsModal
+from joy.screens.settings import SettingsModal, _RepoListWidget
 
 
 class ModalTestApp(App):
@@ -234,12 +234,12 @@ async def test_settings_save_returns_config():
     """SettingsModal returns a Config instance when Save button is pressed."""
     result_holder: list[Config | None] = []
     app = ModalTestApp()
-    async with app.run_test() as pilot:
+    async with app.run_test(size=(100, 60)) as pilot:
         await app.push_screen(SettingsModal(Config()), result_holder.append)
         await pilot.pause(0.1)
-        # Tab 5 times from field-ide (already focused) to reach btn-save:
-        # field-ide -> field-editor -> field-vault -> field-terminal -> field-kinds -> btn-save
-        for _ in range(5):
+        # Tab 6 times from field-ide (already focused) to reach btn-save:
+        # field-ide -> field-editor -> field-vault -> field-terminal -> field-kinds -> repo-list-widget -> btn-save
+        for _ in range(6):
             await pilot.press("tab")
         await pilot.pause(0.1)
         await pilot.press("enter")
@@ -285,3 +285,75 @@ async def test_settings_kinds_prepopulated():
         await pilot.pause(0.1)
         selected = app.screen.query_one("#field-kinds", SelectionList).selected
         assert list(selected) == ["worktree"]
+
+
+# ---------------------------------------------------------------------------
+# SettingsModal Repos section tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_settings_repos_section_visible():
+    """SettingsModal shows a Repos section label when repos are provided."""
+    repos = [Repo(name="my-repo", local_path="/tmp/my-repo")]
+    app = ModalTestApp()
+    async with app.run_test() as pilot:
+        await app.push_screen(SettingsModal(Config(), repos=repos), lambda _: None)
+        await pilot.pause(0.1)
+        # Find all Static widgets with "Repos" text
+        statics = app.screen.query(Static)
+        texts = [s.content for s in statics]
+        assert any("Repos" in t for t in texts), "Should show 'Repos' label"
+
+
+@pytest.mark.asyncio
+async def test_settings_repos_list_shows_repos():
+    """SettingsModal shows repo names in the _RepoListWidget when repos are passed."""
+    repos = [
+        Repo(name="alpha", local_path="/tmp/alpha"),
+        Repo(name="beta", local_path="/tmp/beta"),
+    ]
+    app = ModalTestApp()
+    async with app.run_test() as pilot:
+        await app.push_screen(SettingsModal(Config(), repos=repos), lambda _: None)
+        await pilot.pause(0.1)
+        widget = app.screen.query_one("#repo-list-widget", _RepoListWidget)
+        assert len(widget._rows) == 2
+        assert widget._rows[0].repo.name == "alpha"
+        assert widget._rows[1].repo.name == "beta"
+
+
+@pytest.mark.asyncio
+async def test_settings_repos_empty_message():
+    """SettingsModal shows 'No repos registered' when repos list is empty."""
+    app = ModalTestApp()
+    async with app.run_test() as pilot:
+        await app.push_screen(SettingsModal(Config(), repos=[]), lambda _: None)
+        await pilot.pause(0.1)
+        widget = app.screen.query_one("#repo-list-widget", _RepoListWidget)
+        assert len(widget._rows) == 0
+        # Check the "No repos registered" message is present
+        statics = widget.query(Static)
+        texts = [s.content for s in statics]
+        assert any("No repos registered" in t for t in texts)
+
+
+@pytest.mark.asyncio
+async def test_settings_save_still_returns_config_with_repos():
+    """Save button still returns Config when repos section is present (regression)."""
+    repos = [Repo(name="test-repo", local_path="/tmp/test-repo")]
+    result_holder: list[Config | None] = []
+    app = ModalTestApp()
+    async with app.run_test(size=(100, 60)) as pilot:
+        await app.push_screen(
+            SettingsModal(Config(), repos=repos), result_holder.append
+        )
+        await pilot.pause(0.1)
+        # Tab 6 times: ide -> editor -> vault -> terminal -> kinds -> repo-list -> btn-save
+        for _ in range(6):
+            await pilot.press("tab")
+        await pilot.pause(0.1)
+        await pilot.press("enter")
+        await pilot.pause(0.1)
+    assert len(result_holder) == 1
+    assert isinstance(result_holder[0], Config)
