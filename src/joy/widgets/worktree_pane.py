@@ -143,6 +143,7 @@ class WorktreeRow(Static):
         self.branch: str = worktree.branch
         self.path: str = worktree.path
         self.mr_info: MRInfo | None = mr_info
+        self.is_default_branch: bool = worktree.is_default_branch
         path = display_path if display_path is not None else abbreviate_home(worktree.path)
         content = self.build_content(
             worktree.branch,
@@ -150,6 +151,7 @@ class WorktreeRow(Static):
             worktree.has_upstream,
             path,
             mr_info=mr_info,
+            is_default_branch=worktree.is_default_branch,
         )
         super().__init__(content, **kwargs)
 
@@ -160,14 +162,26 @@ class WorktreeRow(Static):
         has_upstream: bool,
         display_path: str,
         mr_info: MRInfo | None = None,
+        is_default_branch: bool = False,
     ) -> Text:
         """Build the rich.Text renderable for a two-line worktree row.
 
         Per D-01/D-02: When mr_info is present, line 1 shows MR badges between
         branch and dirty/upstream indicators; line 2 shows @author + commit.
         When mr_info is None, layout is unchanged from Phase 9.
+
+        When is_default_branch is True, the entire row renders in dim style
+        with no dirty/upstream indicators (default branches are not interesting).
         """
         t = Text(no_wrap=True, overflow="ellipsis")
+
+        if is_default_branch:
+            t.append(f" {ICON_BRANCH} ", style="dim")
+            t.append(branch, style="dim")
+            t.append("\n")
+            t.append(f"  {display_path}", style="dim")
+            return t
+
         t.append(f" {ICON_BRANCH} ", style="bold")
         t.append(branch)
 
@@ -334,8 +348,8 @@ class WorktreePane(Widget, can_focus=True):
                 await scroll.mount(Static("", classes="section-spacer"))
             first_group = False
             await scroll.mount(GroupHeader(repo_name))
-            # Sort worktrees within repo by branch, case-insensitive (D-12)
-            for wt in sorted(grouped[repo_name], key=lambda w: w.branch.lower()):
+            # Sort worktrees: non-default first, then default; alphabetical within each group (D-12)
+            for wt in sorted(grouped[repo_name], key=lambda w: (w.is_default_branch, w.branch.lower())):
                 display_path = abbreviate_home(wt.path)
                 display_path = middle_truncate(display_path, available_width)
                 mr_info = mr_data.get((wt.repo_name, wt.branch))

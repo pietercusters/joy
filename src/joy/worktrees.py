@@ -128,8 +128,7 @@ def discover_worktrees(
         # _list_worktrees returns [] on any error — invalid repos silently
         # skipped per D-02
         for path, branch in worktrees:
-            if branch in filter_set:  # exact match per D-01
-                continue
+            is_default = branch in filter_set  # exact match per D-01
             results.append(
                 WorktreeInfo(
                     repo_name=repo.name,
@@ -137,6 +136,7 @@ def discover_worktrees(
                     path=path,
                     is_dirty=_is_dirty(path),
                     has_upstream=_has_upstream(path),
+                    is_default_branch=is_default,
                 )
             )
 

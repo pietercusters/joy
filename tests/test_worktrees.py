@@ -234,8 +234,8 @@ class TestDiscoverWorktrees:
 
     # --- WKTR-06: Branch filter ---
 
-    def test_filter_excludes_matching_branches(self, tmp_path: Path) -> None:
-        """Worktrees on branches matching filter are excluded."""
+    def test_filter_marks_matching_branches_as_default(self, tmp_path: Path) -> None:
+        """Worktrees on branches matching filter are marked is_default_branch=True."""
         repo_dir = tmp_path / "filtered"
         _init_git_repo(repo_dir)
         wt_feat = tmp_path / "wt-feature"
@@ -244,12 +244,14 @@ class TestDiscoverWorktrees:
         repos = [Repo(name="filtered", local_path=str(repo_dir))]
         result = discover_worktrees(repos, branch_filter=["main"])
 
-        # Only feature-y should remain, main is filtered out
-        assert len(result) == 1
-        assert result[0].branch == "feature-y"
+        # Both branches present; main is marked as default
+        assert len(result) == 2
+        by_branch = {wt.branch: wt for wt in result}
+        assert by_branch["main"].is_default_branch is True
+        assert by_branch["feature-y"].is_default_branch is False
 
     def test_filter_exact_match_not_substring(self, tmp_path: Path) -> None:
-        """Filter uses exact match per D-01 — 'main' does NOT exclude 'main-feature'."""
+        """Filter uses exact match per D-01 — 'main' does NOT mark 'main-feature' as default."""
         repo_dir = tmp_path / "exact"
         _init_git_repo(repo_dir)
         wt_main_feat = tmp_path / "wt-main-feature"
@@ -258,13 +260,13 @@ class TestDiscoverWorktrees:
         repos = [Repo(name="exact", local_path=str(repo_dir))]
         result = discover_worktrees(repos, branch_filter=["main"])
 
-        # main is filtered, but main-feature is NOT (exact match only)
-        branches = {wt.branch for wt in result}
-        assert "main-feature" in branches
-        assert "main" not in branches
+        # main is marked default, main-feature is NOT (exact match only)
+        by_branch = {wt.branch: wt for wt in result}
+        assert by_branch["main"].is_default_branch is True
+        assert by_branch["main-feature"].is_default_branch is False
 
-    def test_empty_filter_returns_all(self, tmp_path: Path) -> None:
-        """Empty filter list means no filtering — all worktrees returned."""
+    def test_empty_filter_returns_all_non_default(self, tmp_path: Path) -> None:
+        """Empty filter list means no filtering — all worktrees returned, none marked default."""
         repo_dir = tmp_path / "nofilter"
         _init_git_repo(repo_dir)
         wt_feat = tmp_path / "wt-dev"
@@ -274,6 +276,7 @@ class TestDiscoverWorktrees:
         result = discover_worktrees(repos, branch_filter=[])
 
         assert len(result) == 2
+        assert all(wt.is_default_branch is False for wt in result)
 
     # --- D-02: Error handling ---
 

@@ -148,6 +148,7 @@ class WorktreeInfo:
     path: str  # Absolute filesystem path to the worktree
     is_dirty: bool = False  # True if worktree has uncommitted changes
     has_upstream: bool = True  # True if branch tracks a remote upstream
+    is_default_branch: bool = False  # True when branch matches branch_filter
 
 
 @dataclass
