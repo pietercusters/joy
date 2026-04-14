@@ -192,9 +192,7 @@ class ProjectDetail(Widget, can_focus=True):
 
     def action_focus_list(self) -> None:
         """Return focus to the project list (D-06, CORE-04)."""
-        project_list = self.app.query_one("#project-list")
-        listview = project_list.query_one("#project-listview")
-        listview.focus()
+        self.app.query_one("#project-list").focus()
 
     def action_open_object(self) -> None:
         """Open the highlighted object via operations.open_object (ACT-01, per D-09)."""

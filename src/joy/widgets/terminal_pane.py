@@ -306,9 +306,7 @@ class TerminalPane(Widget, can_focus=True):
 
     def action_focus_projects(self) -> None:
         """Return focus to the projects pane (D-13)."""
-        project_list = self.app.query_one("#project-list")
-        listview = project_list.query_one("#project-listview")
-        listview.focus()
+        self.app.query_one("#project-list").focus()
 
     def set_refresh_label(self, timestamp: str, *, stale: bool = False) -> None:
         """Update border_title with refresh timestamp. stale adds warning icon (D-16).

@@ -14,7 +14,7 @@ from joy.models import Config, ObjectItem, PresetKind, Project, Repo, TerminalSe
 from joy.screens import NameInputModal, PresetPickerModal, SettingsModal, ValueInputModal
 from joy.widgets.object_row import _success_message, _truncate
 from joy.widgets.project_detail import GROUP_ORDER, ProjectDetail
-from joy.widgets.project_list import JoyListView, ProjectList
+from joy.widgets.project_list import ProjectList
 from joy.widgets.terminal_pane import TerminalPane
 from joy.widgets.worktree_pane import WorktreePane
 
@@ -85,18 +85,21 @@ class JoyApp(App):
 
     @work(thread=True)
     def _load_data(self) -> None:
-        """Load projects and config from store in a background thread (CP-1, CP-2)."""
-        from joy.store import load_config, load_projects  # noqa: PLC0415 — lazy import per CP-2
+        """Load projects, config, and repos from store in a background thread (CP-1, CP-2)."""
+        from joy.store import load_config, load_projects, load_repos  # noqa: PLC0415 — lazy import per CP-2
 
         projects = load_projects()
         config = load_config()
-        self.app.call_from_thread(self._set_projects, projects, config)
+        repos = load_repos()
+        self.app.call_from_thread(self._set_projects, projects, config, repos)
 
-    def _set_projects(self, projects: list[Project], config: Config | None = None) -> None:
+    def _set_projects(self, projects: list[Project], config: Config | None = None, repos: list[Repo] | None = None) -> None:
         """Update the project list widget with loaded projects (called from thread)."""
         self._projects = projects
         if config is not None:
             self._config = config
+        if repos is not None:
+            self._repos = repos
         # WR-03: Create/reset timer here so it uses the user's configured interval,
         # not the default that was in effect when on_mount ran.
         if self._refresh_timer is not None:
@@ -106,7 +109,7 @@ class JoyApp(App):
         )
         if self._label_timer is None:
             self._label_timer = self.set_interval(5, self._update_all_refresh_labels)
-        self.query_one(ProjectList).set_projects(projects)
+        self.query_one(ProjectList).set_projects(projects, self._repos)
         if projects:
             self.query_one(ProjectList).select_first()
         self._load_worktrees()
@@ -256,7 +259,7 @@ class JoyApp(App):
                 if node.id == "project-detail":
                     self.sub_title = "Detail"
                     return
-                if node.id in ("project-list", "project-listview"):
+                if node.id in ("project-list", "project-scroll"):
                     self.sub_title = "Projects"
                     return
                 if node.id == "terminal-pane":
@@ -315,7 +318,7 @@ class JoyApp(App):
             self._projects.append(project)
             self._save_projects_bg()
             project_list = self.query_one(ProjectList)
-            project_list.set_projects(self._projects)
+            project_list.set_projects(self._projects, self._repos)
             # Select the new project (last in list). Use call_after_refresh so
             # the reactive chain from set_projects (clear + append) settles
             # before we override the index — otherwise the ListView may reset
