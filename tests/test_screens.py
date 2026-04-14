@@ -6,7 +6,7 @@ from textual.app import App, ComposeResult
 from textual.widgets import Button, Input, SelectionList, Static
 
 from joy.models import Config, PresetKind, Repo
-from joy.screens import ConfirmationModal, NameInputModal, PresetPickerModal, ValueInputModal
+from joy.screens import ConfirmationModal, NameInputModal, PresetPickerModal, RepoPickerModal, ValueInputModal
 from joy.screens.settings import SettingsModal, _RepoListWidget
 
 
@@ -357,3 +357,74 @@ async def test_settings_save_still_returns_config_with_repos():
         await pilot.pause(0.1)
     assert len(result_holder) == 1
     assert isinstance(result_holder[0], Config)
+
+
+# ---------------------------------------------------------------------------
+# RepoPickerModal tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_repo_picker_shows_repos_and_none_option():
+    """RepoPickerModal lists all repos plus a '(none)' unassign option."""
+    from textual.widgets import ListView
+    repos = [Repo(name="alpha", local_path="/tmp/alpha"), Repo(name="beta", local_path="/tmp/beta")]
+    app = ModalTestApp()
+    async with app.run_test() as pilot:
+        await app.push_screen(RepoPickerModal(repos), lambda _: None)
+        await pilot.pause(0.1)
+        listview = app.screen.query_one("#repo-list", ListView)
+        # 2 repos + 1 "(none)" option = 3 total
+        assert len(list(listview.children)) == 3
+
+
+@pytest.mark.asyncio
+async def test_repo_picker_escape_returns_cancelled():
+    """RepoPickerModal returns CANCELLED sentinel on Escape."""
+    result_holder: list[object] = []
+    repos = [Repo(name="alpha", local_path="/tmp/alpha")]
+    app = ModalTestApp()
+    async with app.run_test() as pilot:
+        await app.push_screen(RepoPickerModal(repos), result_holder.append)
+        await pilot.pause(0.1)
+        await pilot.press("escape")
+        await pilot.pause(0.1)
+    assert len(result_holder) == 1
+    assert result_holder[0] is RepoPickerModal.CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_repo_picker_select_none_returns_none():
+    """RepoPickerModal returns None when user selects the unassign option."""
+    result_holder: list[object] = []
+    repos = [Repo(name="alpha", local_path="/tmp/alpha")]
+    app = ModalTestApp()
+    async with app.run_test() as pilot:
+        await app.push_screen(RepoPickerModal(repos), result_holder.append)
+        await pilot.pause(0.1)
+        # Type "none" to filter to the unassign option
+        for ch in "none":
+            await pilot.press(ch)
+        await pilot.pause(0.1)
+        await pilot.press("enter")
+        await pilot.pause(0.1)
+    assert len(result_holder) == 1
+    assert result_holder[0] is None
+
+
+@pytest.mark.asyncio
+async def test_repo_picker_filter_and_select():
+    """RepoPickerModal filters and returns the selected repo name."""
+    result_holder: list[object] = []
+    repos = [Repo(name="alpha", local_path="/tmp/alpha"), Repo(name="beta", local_path="/tmp/beta")]
+    app = ModalTestApp()
+    async with app.run_test() as pilot:
+        await app.push_screen(RepoPickerModal(repos), result_holder.append)
+        await pilot.pause(0.1)
+        # Type "alp" to filter to "alpha"
+        for ch in "alp":
+            await pilot.press(ch)
+        await pilot.pause(0.1)
+        await pilot.press("enter")
+        await pilot.pause(0.1)
+    assert result_holder == ["alpha"]

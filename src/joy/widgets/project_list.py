@@ -88,6 +88,7 @@ class ProjectList(Widget, can_focus=True):
         Binding("D", "delete_project", "Delete", show=True),
         Binding("delete", "delete_project", "Delete", show=False),
         Binding("/", "filter", "Filter", show=True),
+        Binding("r", "assign_repo", "Assign Repo", show=True),
     ]
 
     DEFAULT_CSS = """
@@ -260,6 +261,33 @@ class ProjectList(Widget, can_focus=True):
                 prompt=f"Delete project '{project.name}'? This will remove it and all its objects.",
             ),
             on_confirm,
+        )
+
+    def action_assign_repo(self) -> None:
+        """Assign (or clear) the highlighted project's repo field (FLOW-01)."""
+        from joy.screens.repo_picker import RepoPickerModal  # noqa: PLC0415
+
+        if self._cursor < 0 or self._cursor >= len(self._rows):
+            return
+        if not self._repos:
+            self.app.notify("No repos registered. Add one via Settings (s).", markup=False)
+            return
+        project = self._rows[self._cursor].project
+
+        def on_pick(result: object) -> None:
+            if result is RepoPickerModal.CANCELLED:
+                return  # Escape — no change
+            # result is str (repo name) or None (unassign)
+            project.repo = result  # type: ignore[assignment]
+            self.app._save_projects_bg()
+            label = result if result else "(none)"
+            self.app.notify(f"Assigned repo: {label} → '{project.name}'", markup=False)
+            # Re-render to reflect new grouping
+            self.set_projects(list(self.app._projects), self._repos)
+
+        self.app.push_screen(
+            RepoPickerModal(self._repos, current_repo=project.repo),
+            on_pick,
         )
 
     def action_filter(self) -> None:
