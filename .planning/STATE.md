@@ -68,9 +68,11 @@ None — clean milestone close.
 |---|-------------|------|--------|-----------|
 | 260411-ivh | Fix three UAT bugs: project list selection after delete, detail pane focus dimming, Slack thread URL navigation | 2026-04-11 | 9f5e006 | [260411-ivh-fix-three-uat-bugs-project-list-selectio](./quick/260411-ivh-fix-three-uat-bugs-project-list-selectio/) |
 | 260414-c4g | Mark slow TUI/filter tests with pytest.mark.slow, exclude by default — suite drops from ~264s to 25.84s | 2026-04-14 | cf15821 | [260414-c4g-the-unit-test-suite-take-too-long-to-run](./quick/260414-c4g-the-unit-test-suite-take-too-long-to-run/) |
+| 260414-nrt | Details pane redesign: columnar layout, repo field, whitespace, legend popup | 2026-04-14 | 9d13330 | [260414-nrt-details-pane-redesign-columnar-layout-re](./quick/260414-nrt-details-pane-redesign-columnar-layout-re/) |
+| 260414-pob | Details pane fixes: open icon restored, legend toggle, semantic grouping, repo as object, indent all panes | 2026-04-14 | b39bf2d | [260414-pob-details-pane-fixes-and-improvements-open](./quick/260414-pob-details-pane-fixes-and-improvements-open/) |
 
 ## Session Continuity
 
 Last session: 2026-04-14
-Stopped at: v1.1 milestone archived
+Stopped at: v1.1 milestone archived + two UI quick tasks completed
 Resume file: run `/gsd-new-milestone` to start v1.2 planning

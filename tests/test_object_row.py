@@ -13,51 +13,46 @@ from joy.widgets.object_row import ObjectRow, _success_message, _truncate
 
 
 def test_render_dot_filled_when_open_by_default_true():
-    """Test 1: _render_text with open_by_default=True returns Text containing U+25CF."""
+    """Test 1: _build_icon_text with open_by_default=True returns Text containing U+25CF."""
     item = ObjectItem(kind=PresetKind.BRANCH, value="main", open_by_default=True)
-    text = ObjectRow._render_text(item)
+    text = ObjectRow._build_icon_text(item)
     assert "\u25cf" in text.plain
 
 
 def test_render_dot_empty_when_open_by_default_false():
-    """Test 2: _render_text with open_by_default=False returns Text containing U+25CB."""
+    """Test 2: _build_icon_text with open_by_default=False returns Text containing U+25CB."""
     item = ObjectItem(kind=PresetKind.BRANCH, value="main", open_by_default=False)
-    text = ObjectRow._render_text(item)
+    text = ObjectRow._build_icon_text(item)
     assert "\u25cb" in text.plain
 
 
 def test_render_text_format():
-    """Test 3: _render_text output format is '{dot} {icon}  {label}  {value}'."""
+    """Test 3: _build_icon_text output starts with dot then space then icon."""
     item = ObjectItem(kind=PresetKind.BRANCH, value="main", open_by_default=True)
-    text = ObjectRow._render_text(item)
+    text = ObjectRow._build_icon_text(item)
     plain = text.plain
     # Should start with the filled dot
     assert plain[0] == "\u25cf"
     # Should have a space after the dot before the icon
     assert plain[1] == " "
-    # Should contain "  branch  " (2 spaces between icon and label, 2 between label and value)
-    assert "  branch  " in plain
 
 
 def test_dot_style_bright_white_when_open_by_default_true():
     """Test 4: The dot span has style 'bright_white' when open_by_default=True."""
     item = ObjectItem(kind=PresetKind.BRANCH, value="main", open_by_default=True)
-    text = ObjectRow._render_text(item)
-    # The first span should be the dot with bright_white style
+    text = ObjectRow._build_icon_text(item)
     spans = list(text._spans)
     assert len(spans) > 0
     first_span = spans[0]
-    # Check the span covers position 0 (the dot character)
     assert first_span.start == 0
     assert first_span.end == 1
-    # Style should contain bright_white
     assert "bright_white" in str(first_span.style)
 
 
 def test_dot_style_grey50_when_open_by_default_false():
     """Test 5: The dot span has style 'grey50' when open_by_default=False."""
     item = ObjectItem(kind=PresetKind.BRANCH, value="main", open_by_default=False)
-    text = ObjectRow._render_text(item)
+    text = ObjectRow._build_icon_text(item)
     spans = list(text._spans)
     assert len(spans) > 0
     first_span = spans[0]
@@ -71,28 +66,39 @@ def test_dot_style_grey50_when_open_by_default_false():
 # ---------------------------------------------------------------------------
 
 
-def test_refresh_indicator_calls_update(monkeypatch):
-    """Test 6: refresh_indicator() calls self.update() with re-rendered text."""
+def test_refresh_indicator_updates_icon_column(monkeypatch):
+    """Test 6: refresh_indicator() updates the icon column with a dot-containing Text."""
     item = ObjectItem(kind=PresetKind.BRANCH, value="main", open_by_default=False)
     row = ObjectRow.__new__(ObjectRow)
     row.item = item
     row.index = 0
 
-    called_with = []
+    icon_updates = []
+    value_updates = []
 
-    def mock_update(renderable):
-        called_with.append(renderable)
+    class _FakeStatic:
+        def __init__(self, updates_list):
+            self._updates = updates_list
+        def update(self, renderable):
+            self._updates.append(renderable)
 
-    monkeypatch.setattr(row, "update", mock_update)
+    icon_static = _FakeStatic(icon_updates)
+    value_static = _FakeStatic(value_updates)
 
-    # Toggle the item's open_by_default and call refresh_indicator
+    def mock_query_one(selector, widget_type):
+        if selector == ".col-icon":
+            return icon_static
+        return value_static
+
+    monkeypatch.setattr(row, "query_one", mock_query_one)
+
     row.item.open_by_default = True
     row.refresh_indicator()
 
-    assert len(called_with) == 1
-    # The update should have been called with a Text containing the filled dot
-    updated_text = called_with[0]
-    assert "\u25cf" in updated_text.plain
+    assert len(icon_updates) == 1
+    assert "\u25cf" in icon_updates[0].plain
+    assert len(value_updates) == 1
+    assert value_updates[0] == "main"
 
 
 # ---------------------------------------------------------------------------

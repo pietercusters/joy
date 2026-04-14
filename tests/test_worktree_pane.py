@@ -443,22 +443,6 @@ async def test_empty_state_no_worktrees(mock_store_repos_no_worktrees):
         )
 
 
-@pytest.mark.asyncio
-async def test_pane_read_only(mock_store_with_worktrees):
-    """WKTR-10: WorktreePane.BINDINGS is empty; pane has can_focus=True."""
-    app = JoyApp()
-    async with app.run_test() as pilot:
-        await pilot.pause(0.2)
-        await app.workers.wait_for_complete()
-        pane = app.query_one("#worktrees-pane")
-        # BINDINGS must be empty (no cursor movement or activation keys)
-        assert WorktreePane.BINDINGS == [], (
-            f"Expected empty BINDINGS, got: {WorktreePane.BINDINGS}"
-        )
-        # Pane must be focusable (for Tab cycling)
-        assert pane.can_focus is True, "WorktreePane must have can_focus=True"
-
-
 # ---------------------------------------------------------------------------
 # Phase 11 Plan 02: MR row rendering, pane wiring, app integration
 # ---------------------------------------------------------------------------

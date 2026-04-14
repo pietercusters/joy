@@ -26,8 +26,25 @@ _DETAIL_ICONS: list[tuple[str, str, str]] = [
 ]
 
 _INDICATOR_ICONS: list[tuple[str, str, str]] = [
-    ("\u25cf", "Open by default", "Filled circle"),
-    ("\u25cb", "Not open by default", "Empty circle"),
+    ("\u25cf", "Open by default", "filled circle"),
+    ("\u25cb", "Not open by default", "empty circle"),
+]
+
+_WORKTREE_ICONS: list[tuple[str, str, str]] = [
+    ("\uf111", "Uncommitted changes", "yellow"),
+    ("\U000f0be1", "No upstream remote", "dim"),
+    ("\uea64", "MR open", "green"),
+    ("\uebdb", "MR draft", "dim"),
+    ("\uf00c", "CI passed", "green"),
+    ("\uf00d", "CI failed", "red"),
+    ("\uf192", "CI pending", "yellow"),
+]
+
+_TERMINAL_ICONS: list[tuple[str, str, str]] = [
+    ("\uf120", "Terminal session", ""),
+    ("\U000f1325", "Claude agent session", ""),
+    ("\u25cf", "Claude busy (running)", "green"),
+    ("\u25cb", "Claude waiting (at prompt)", "dim"),
 ]
 
 
@@ -77,10 +94,18 @@ class LegendModal(ModalScreen[None]):
                 for icon, label, _desc in _DETAIL_ICONS:
                     yield Static(f"  {icon}  {label}", classes="legend-row")
 
-                yield Static("Indicators", classes="legend-section")
+                yield Static("Details — Indicators", classes="legend-section")
                 for icon, label, desc in _INDICATOR_ICONS:
                     suffix = f"  ({desc})" if desc else ""
                     yield Static(f"  {icon}  {label}{suffix}", classes="legend-row")
+
+                yield Static("Worktrees Pane", classes="legend-section")
+                for icon, label, _style in _WORKTREE_ICONS:
+                    yield Static(f"  {icon}  {label}", classes="legend-row")
+
+                yield Static("Terminal Pane", classes="legend-section")
+                for icon, label, _style in _TERMINAL_ICONS:
+                    yield Static(f"  {icon}  {label}", classes="legend-row")
 
     def action_dismiss_legend(self) -> None:
         """Dismiss the legend modal."""
