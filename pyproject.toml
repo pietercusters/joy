@@ -21,9 +21,10 @@ packages = ["src/joy"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = ["-m", "not macos_integration"]
+addopts = ["-m", "not slow and not macos_integration"]
 markers = [
     "macos_integration: tests requiring live macOS apps (iTerm2, Notion, etc.)",
+    "slow: tests using Textual pilot (async TUI driver, 6-12s each) -- run with -m slow",
 ]
 
 [dependency-groups]
