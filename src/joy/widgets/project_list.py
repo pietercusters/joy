@@ -10,6 +10,8 @@ from textual.widget import Widget
 from textual.widgets import Input, Static
 
 from joy.models import Project, Repo
+from joy.widgets.worktree_pane import ICON_BRANCH
+from joy.widgets.terminal_pane import ICON_CLAUDE
 
 
 # ---------------------------------------------------------------------------
@@ -50,7 +52,7 @@ class GroupHeader(Static):
 
 
 class ProjectRow(Static):
-    """Single-line row displaying one project. Stores the Project reference."""
+    """Single-line row displaying one project with badge counts (D-09, D-10, D-11)."""
 
     DEFAULT_CSS = """
     ProjectRow {
@@ -62,7 +64,25 @@ class ProjectRow(Static):
 
     def __init__(self, project: Project, **kwargs) -> None:
         self.project = project
-        super().__init__(f" {project.name}", **kwargs)
+        self._wt_count: int = 0
+        self._agent_count: int = 0
+        super().__init__(self._build_content(), **kwargs)
+
+    def _build_content(self) -> str:
+        """Build display string with project name and badge counts (D-09, D-10).
+
+        Both counts always shown, even when zero (D-10: consistent row width).
+        """
+        return f" {self.project.name}  {ICON_BRANCH} {self._wt_count}  {ICON_CLAUDE} {self._agent_count}"
+
+    def set_counts(self, wt_count: int, agent_count: int) -> None:
+        """Update badge counts and trigger content re-render (D-11).
+
+        Uses Static.update() — no DOM rebuild needed.
+        """
+        self._wt_count = wt_count
+        self._agent_count = agent_count
+        self.update(self._build_content())
 
 
 # ---------------------------------------------------------------------------
@@ -398,3 +418,14 @@ class ProjectList(Widget, can_focus=True):
         if 0 <= index < len(self._rows):
             self._cursor = index
             self._update_highlight()
+
+    def update_badges(self, index: object) -> None:
+        """Push badge counts from RelationshipIndex to all project rows (D-11, BADGE-03).
+
+        Called by JoyApp._update_badges() after every completed refresh cycle.
+        """
+        from joy.resolver import RelationshipIndex  # noqa: PLC0415 — avoid circular at module level
+        for row in self._rows:
+            wt_count = len(index.worktrees_for(row.project))  # type: ignore[union-attr]
+            agent_count = len(index.agents_for(row.project))  # type: ignore[union-attr]
+            row.set_counts(wt_count, agent_count)
