@@ -88,7 +88,7 @@ class ProjectList(Widget, can_focus=True):
         Binding("D", "delete_project", "Delete", show=True),
         Binding("delete", "delete_project", "Delete", show=False),
         Binding("/", "filter", "Filter", show=True),
-        Binding("r", "assign_repo", "Assign Repo", show=True),
+        Binding("R", "assign_repo", "Assign Repo", show=True),
     ]
 
     DEFAULT_CSS = """
