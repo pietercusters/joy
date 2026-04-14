@@ -20,31 +20,12 @@ class _DetailScroll(VerticalScroll, can_focus=False):
 from joy.models import ObjectItem, PresetKind, Project
 from joy.widgets.object_row import ObjectRow, _success_message, _truncate
 
-# Display order for groups in the detail pane
-GROUP_ORDER: list[PresetKind] = [
-    PresetKind.WORKTREE,
-    PresetKind.BRANCH,
-    PresetKind.MR,
-    PresetKind.TICKET,
-    PresetKind.THREAD,
-    PresetKind.FILE,
-    PresetKind.NOTE,
-    PresetKind.AGENTS,
-    PresetKind.URL,
+# Semantic group structure for Details pane
+SEMANTIC_GROUPS: list[tuple[str, list[PresetKind]]] = [
+    ("Code", [PresetKind.REPO, PresetKind.WORKTREE, PresetKind.MR, PresetKind.BRANCH]),
+    ("Docs", [PresetKind.TICKET, PresetKind.NOTE, PresetKind.URL, PresetKind.FILE, PresetKind.THREAD]),
+    ("Agents", [PresetKind.AGENTS]),
 ]
-
-# Human-readable group header labels
-GROUP_LABELS: dict[PresetKind, str] = {
-    PresetKind.MR: "Merge Requests",
-    PresetKind.BRANCH: "Branches",
-    PresetKind.TICKET: "Tickets",
-    PresetKind.THREAD: "Threads",
-    PresetKind.FILE: "Files",
-    PresetKind.NOTE: "Notes",
-    PresetKind.WORKTREE: "Worktrees",
-    PresetKind.AGENTS: "Agents",
-    PresetKind.URL: "URLs",
-}
 
 
 class GroupHeader(Static):
@@ -98,6 +79,9 @@ class ProjectDetail(Widget, can_focus=True):
     ObjectRow.--highlight {
         background: $accent 30%;
     }
+    .section-spacer {
+        height: 1;
+    }
     """
 
     def __init__(self, **kwargs) -> None:
@@ -149,15 +133,26 @@ class ProjectDetail(Widget, can_focus=True):
         for item in self._project.objects:
             grouped.setdefault(item.kind, []).append(item)
 
-        # Mount groups in order, only for kinds that have objects
+        # Synthesize repo ObjectItem if project has a repo URL
+        if self._project.repo:
+            repo_item = ObjectItem(kind=PresetKind.REPO, value=self._project.repo, label="")
+            grouped.setdefault(PresetKind.REPO, []).append(repo_item)
+
+        # Mount semantic groups, only for groups that have objects
         new_rows: list[ObjectRow] = []
         row_index = 0
-        for kind in GROUP_ORDER:
-            items = grouped.get(kind, [])
-            if not items:
+        first_group = True
+        for group_label, kinds in SEMANTIC_GROUPS:
+            group_items: list[ObjectItem] = []
+            for kind in kinds:
+                group_items.extend(grouped.get(kind, []))
+            if not group_items:
                 continue
-            scroll.mount(GroupHeader(GROUP_LABELS[kind]))
-            for item in items:
+            if not first_group:
+                scroll.mount(Static("", classes="section-spacer"))
+            first_group = False
+            scroll.mount(GroupHeader(group_label))
+            for item in group_items:
                 row = ObjectRow(item, index=row_index)
                 scroll.mount(row)
                 new_rows.append(row)

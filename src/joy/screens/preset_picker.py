@@ -9,20 +9,26 @@ from textual.widgets import Input, Label, ListItem, ListView, Static
 
 from joy.models import PresetKind
 from joy.widgets.object_row import PRESET_ICONS
-from joy.widgets.project_detail import GROUP_ORDER
+from joy.widgets.project_detail import SEMANTIC_GROUPS
+
+# Flatten SEMANTIC_GROUPS into a single list of user-addable preset kinds.
+# REPO is excluded since it is synthesized from project.repo, not user-added.
+_ALL_PRESETS: list[PresetKind] = [
+    kind for _label, kinds in SEMANTIC_GROUPS for kind in kinds if kind != PresetKind.REPO
+]
 
 
 class PresetPickerModal(ModalScreen[PresetKind | None]):
     """Modal to select a preset kind via type-to-filter.
 
-    Displays all 9 PresetKind values in GROUP_ORDER.
+    Displays all user-addable PresetKind values in SEMANTIC_GROUPS order.
     Filters in real-time as user types. Up/down arrows navigate the list while typing.
     Returns selected PresetKind on Enter, None on Escape.
     """
 
     BINDINGS = [("escape", "cancel", "Cancel")]
 
-    ALL_PRESETS: list[PresetKind] = list(GROUP_ORDER)
+    ALL_PRESETS: list[PresetKind] = list(_ALL_PRESETS)
 
     DEFAULT_CSS = """
     PresetPickerModal {

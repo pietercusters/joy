@@ -13,6 +13,7 @@ from joy.models import PresetKind
 
 # (icon, label, description) tuples for each section
 _DETAIL_ICONS: list[tuple[str, str, str]] = [
+    (PRESET_ICONS.get(PresetKind.REPO, ""), "Repository", ""),
     (PRESET_ICONS.get(PresetKind.MR, ""), "Merge Request", ""),
     (PRESET_ICONS.get(PresetKind.BRANCH, ""), "Branch", ""),
     (PRESET_ICONS.get(PresetKind.TICKET, ""), "Ticket", ""),

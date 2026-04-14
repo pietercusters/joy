@@ -29,6 +29,7 @@ class PresetKind(str, Enum):
     WORKTREE = "worktree"
     AGENTS = "agents"
     URL = "url"
+    REPO = "repo"
 
 
 PRESET_MAP: dict[PresetKind, ObjectType] = {
@@ -41,6 +42,7 @@ PRESET_MAP: dict[PresetKind, ObjectType] = {
     PresetKind.WORKTREE: ObjectType.WORKTREE,
     PresetKind.AGENTS: ObjectType.ITERM,
     PresetKind.URL: ObjectType.URL,
+    PresetKind.REPO: ObjectType.URL,
 }
 
 

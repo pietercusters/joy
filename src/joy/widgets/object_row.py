@@ -17,6 +17,7 @@ PRESET_ICONS: dict[PresetKind, str] = {
     PresetKind.WORKTREE: "\uf07b", #  (nf-fa-folder)
     PresetKind.AGENTS: "\uf120",   #  (nf-fa-terminal)
     PresetKind.URL: "\uf0ac",      #  (nf-fa-globe)
+    PresetKind.REPO: "\uf401",     #  (nf-oct-repo)
 }
 
 

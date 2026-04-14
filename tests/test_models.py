@@ -36,8 +36,8 @@ class TestObjectType:
 class TestPresetKind:
     """Tests for the PresetKind enum."""
 
-    def test_preset_kind_has_exactly_9_members(self) -> None:
-        assert len(PresetKind) == 9
+    def test_preset_kind_has_exactly_10_members(self) -> None:
+        assert len(PresetKind) == 10
 
     def test_preset_kind_values(self) -> None:
         assert PresetKind.MR.value == "mr"
@@ -49,6 +49,7 @@ class TestPresetKind:
         assert PresetKind.WORKTREE.value == "worktree"
         assert PresetKind.AGENTS.value == "agents"
         assert PresetKind.URL.value == "url"
+        assert PresetKind.REPO.value == "repo"
 
     def test_preset_kind_is_str(self) -> None:
         """PresetKind values should be usable as plain strings."""
@@ -59,8 +60,8 @@ class TestPresetKind:
 class TestPresetMap:
     """Tests for the PRESET_MAP mapping."""
 
-    def test_preset_map_has_9_entries(self) -> None:
-        assert len(PRESET_MAP) == 9
+    def test_preset_map_has_10_entries(self) -> None:
+        assert len(PRESET_MAP) == 10
 
     def test_preset_map_covers_all_preset_kinds(self) -> None:
         for kind in PresetKind:
@@ -92,6 +93,9 @@ class TestPresetMap:
 
     def test_preset_map_url_maps_to_url(self) -> None:
         assert PRESET_MAP[PresetKind.URL] == ObjectType.URL
+
+    def test_preset_map_repo_maps_to_url(self) -> None:
+        assert PRESET_MAP[PresetKind.REPO] == ObjectType.URL
 
 
 class TestObjectItem:

@@ -123,7 +123,7 @@ class SessionRow(Static):
         t = Text(no_wrap=True, overflow="ellipsis")
 
         if is_claude:
-            t.append(f"{ICON_CLAUDE} ", style="bold")
+            t.append(f" {ICON_CLAUDE} ", style="bold")
             t.append(session.session_name)
             if is_busy:
                 t.append(f"  {INDICATOR_BUSY}", style="green")
@@ -131,7 +131,7 @@ class SessionRow(Static):
                 t.append(f"  {INDICATOR_WAITING}", style="dim")
             t.append(f"  {session.foreground_process}", style="dim")
         else:
-            t.append(f"{ICON_SESSION} ", style="bold")
+            t.append(f" {ICON_SESSION} ", style="bold")
             t.append(session.session_name)
             t.append(f"  {session.foreground_process}", style="dim")
 

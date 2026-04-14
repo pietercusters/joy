@@ -13,7 +13,7 @@ from textual.widgets import Footer, Header
 from joy.models import Config, ObjectItem, PresetKind, Project, Repo, TerminalSession, WorktreeInfo
 from joy.screens import NameInputModal, PresetPickerModal, SettingsModal, ValueInputModal
 from joy.widgets.object_row import _success_message, _truncate
-from joy.widgets.project_detail import GROUP_ORDER, ProjectDetail
+from joy.widgets.project_detail import SEMANTIC_GROUPS, ProjectDetail
 from joy.widgets.project_list import ProjectList
 from joy.widgets.terminal_pane import TerminalPane
 from joy.widgets.worktree_pane import WorktreePane
@@ -295,12 +295,13 @@ class JoyApp(App):
         project = detail._project
         if project is None:
             return  # silent no-op: data not loaded yet (D-11)
-        # Collect defaults in GROUP_ORDER display order (D-06)
+        # Collect defaults in semantic group display order (D-06)
         defaults: list[ObjectItem] = []
-        for kind in GROUP_ORDER:
-            for item in project.objects:
-                if item.kind == kind and item.open_by_default:
-                    defaults.append(item)
+        for _label, kinds in SEMANTIC_GROUPS:
+            for kind in kinds:
+                for item in project.objects:
+                    if item.kind == kind and item.open_by_default:
+                        defaults.append(item)
         if not defaults:
             return  # silent no-op: no defaults (D-11)
         self._open_defaults(defaults)
