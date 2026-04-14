@@ -73,11 +73,12 @@ Plans:
   3. Selecting an agent session moves the ProjectList cursor to its owning project and the WorktreePane cursor to a related worktree (or keeps current if no match)
   4. Focus always remains on the pane the user is actively navigating — synced panes update their cursor silently without stealing focus
   5. User can toggle sync on/off via a keyboard shortcut and the current sync state is visible in the footer key hints
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 15-01: TBD
-- [ ] 15-02: TBD
+- [ ] 15-01-PLAN.md — Test scaffold: failing stubs for SYNC-01..09 (Wave 0)
+- [ ] 15-02-PLAN.md — Core sync implementation: message classes, sync_to(), six-direction handlers (Wave 1)
+- [ ] 15-03-PLAN.md — Toggle feature: x binding, check_action, footer label, human verify (Wave 2)
 
 ### Phase 16: Live Data Propagation
 **Goal**: Background refresh automatically keeps project objects in sync with live worktree, MR, and agent state — adding, removing, and moving objects without user action
@@ -112,6 +113,6 @@ Plans:
 | 11. MR & CI Status | v1.1 | 3/3 | ✓ Complete | 2026-04-13 |
 | 12. iTerm2 Integration & Terminal Pane | v1.1 | 3/3 | ✓ Complete | 2026-04-14 |
 | 13. Project Workflow, Settings & Docs | v1.1 | 4/4 | ✓ Complete | 2026-04-14 |
-| 14. Relationship Foundation & Badges | v1.2 | 3/1 | Complete    | 2026-04-14 |
-| 15. Cross-Pane Selection Sync | v1.2 | 0/? | Not started | - |
+| 14. Relationship Foundation & Badges | v1.2 | 3/3 | Complete    | 2026-04-14 |
+| 15. Cross-Pane Selection Sync | v1.2 | 0/3 | In progress | - |
 | 16. Live Data Propagation | v1.2 | 0/? | Not started | - |
