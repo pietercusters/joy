@@ -237,9 +237,9 @@ async def test_settings_save_returns_config():
     async with app.run_test(size=(100, 60)) as pilot:
         await app.push_screen(SettingsModal(Config()), result_holder.append)
         await pilot.pause(0.1)
-        # Tab 6 times from field-ide (already focused) to reach btn-save:
-        # field-ide -> field-editor -> field-vault -> field-terminal -> field-kinds -> repo-list-widget -> btn-save
-        for _ in range(6):
+        # Tab 7 times from field-ide (already focused) to reach btn-save:
+        # field-ide -> field-editor -> field-vault -> field-terminal -> field-kinds -> branch-filter-widget -> repo-list-widget -> btn-save
+        for _ in range(7):
             await pilot.press("tab")
         await pilot.pause(0.1)
         await pilot.press("enter")
@@ -349,8 +349,8 @@ async def test_settings_save_still_returns_config_with_repos():
             SettingsModal(Config(), repos=repos), result_holder.append
         )
         await pilot.pause(0.1)
-        # Tab 6 times: ide -> editor -> vault -> terminal -> kinds -> repo-list -> btn-save
-        for _ in range(6):
+        # Tab 7 times: ide -> editor -> vault -> terminal -> kinds -> branch-filter -> repo-list -> btn-save
+        for _ in range(7):
             await pilot.press("tab")
         await pilot.pause(0.1)
         await pilot.press("enter")

@@ -145,6 +145,104 @@ class _RepoListWidget(VerticalScroll, can_focus=True):
             self.post_message(_DeleteRepoRequest(repo))
 
 
+# ---------------------------------------------------------------------------
+# Branch filter list widget (mirrors _RepoListWidget pattern)
+# ---------------------------------------------------------------------------
+
+
+class _BranchFilterRow(Static):
+    """A single branch name row in the branch filter widget."""
+
+    DEFAULT_CSS = """
+    _BranchFilterRow { width: 1fr; height: 1; padding: 0 1; }
+    """
+
+    def __init__(self, branch_name: str, **kwargs) -> None:
+        self.branch_name = branch_name
+        super().__init__(branch_name, **kwargs)
+
+
+class _AddBranchRequest(Message):
+    """Request to add a new branch filter entry."""
+
+
+class _DeleteBranchRequest(Message):
+    """Request to delete the selected branch filter entry."""
+
+    def __init__(self, branch_name: str) -> None:
+        self.branch_name = branch_name
+        super().__init__()
+
+
+class _BranchFilterWidget(VerticalScroll, can_focus=True):
+    """Focusable branch filter list with j/k/d/a navigation."""
+
+    BINDINGS = [
+        Binding("j", "cursor_down", "Down", show=False),
+        Binding("k", "cursor_up", "Up", show=False),
+        Binding("down", "cursor_down", "Down"),
+        Binding("up", "cursor_up", "Up"),
+        Binding("a", "request_add_branch", "Add", show=False),
+        Binding("d", "request_delete_branch", "Delete", show=False),
+    ]
+
+    DEFAULT_CSS = """
+    _BranchFilterWidget { height: auto; max-height: 6; }
+    _BranchFilterWidget:focus _BranchFilterRow.--highlight { background: $accent; }
+    _BranchFilterRow.--highlight { background: $accent 30%; }
+    """
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._cursor: int = -1
+        self._rows: list[_BranchFilterRow] = []
+
+    def set_branches(self, branches: list[str]) -> None:
+        """Rebuild the branch filter list from data."""
+        self.remove_children()
+        self._rows = []
+        if not branches:
+            self.mount(Static("  No branch filters", classes="field-label"))
+            self._cursor = -1
+            return
+        for branch in branches:
+            row = _BranchFilterRow(branch)
+            self.mount(row)
+            self._rows.append(row)
+        self._cursor = 0 if self._rows else -1
+        self._update_highlight()
+
+    def _update_highlight(self) -> None:
+        for row in self._rows:
+            row.remove_class("--highlight")
+        if 0 <= self._cursor < len(self._rows):
+            self._rows[self._cursor].add_class("--highlight")
+
+    def action_cursor_up(self) -> None:
+        if self._cursor > 0:
+            self._cursor -= 1
+            self._update_highlight()
+
+    def action_cursor_down(self) -> None:
+        if self._cursor < len(self._rows) - 1:
+            self._cursor += 1
+            self._update_highlight()
+
+    @property
+    def selected_branch(self) -> str | None:
+        if 0 <= self._cursor < len(self._rows):
+            return self._rows[self._cursor].branch_name
+        return None
+
+    def action_request_add_branch(self) -> None:
+        self.post_message(_AddBranchRequest())
+
+    def action_request_delete_branch(self) -> None:
+        branch = self.selected_branch
+        if branch is not None:
+            self.post_message(_DeleteBranchRequest(branch))
+
+
 class SettingsModal(ModalScreen[Config | None]):
     """Modal overlay for viewing and editing all 5 global Config fields.
 
@@ -212,6 +310,12 @@ class SettingsModal(ModalScreen[Config | None]):
                 ],
                 id="field-kinds",
             )
+            yield Static("Branch Filter", classes="modal-title")
+            yield Static(
+                "Branches shown dimmed in worktrees. j/k navigate, a to add, d to remove",
+                classes="field-label",
+            )
+            yield _BranchFilterWidget(id="branch-filter-widget")
             yield Static("Repos", classes="modal-title")
             yield Static(
                 "j/k navigate, a to add, d to remove",
@@ -226,6 +330,9 @@ class SettingsModal(ModalScreen[Config | None]):
 
     def on_mount(self) -> None:
         self.query_one("#field-ide", Input).focus()
+        self.query_one("#branch-filter-widget", _BranchFilterWidget).set_branches(
+            list(self._config.branch_filter)
+        )
         self.query_one("#repo-list-widget", _RepoListWidget).set_repos(self._repos)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -237,6 +344,8 @@ class SettingsModal(ModalScreen[Config | None]):
 
     def _do_save(self) -> None:
         """Collect all field values and dismiss with updated Config (D-04)."""
+        branch_widget = self.query_one("#branch-filter-widget", _BranchFilterWidget)
+        branch_filter = [row.branch_name for row in branch_widget._rows]
         config = Config(
             ide=self.query_one("#field-ide", Input).value.strip(),
             editor=self.query_one("#field-editor", Input).value.strip(),
@@ -247,8 +356,43 @@ class SettingsModal(ModalScreen[Config | None]):
             default_open_kinds=list(
                 self.query_one("#field-kinds", SelectionList).selected
             ),
+            refresh_interval=self._config.refresh_interval,
+            branch_filter=branch_filter,
         )
         self.dismiss(config)
+
+    # ---- Branch filter management ----
+
+    def on__add_branch_request(self, event: _AddBranchRequest) -> None:
+        """Handle add-branch request from _BranchFilterWidget."""
+        from joy.screens.name_input import NameInputModal  # noqa: PLC0415
+
+        def on_name(name: str | None) -> None:
+            if name is None:
+                return
+            widget = self.query_one("#branch-filter-widget", _BranchFilterWidget)
+            existing = [row.branch_name for row in widget._rows]
+            if name in existing:
+                self.app.notify(f"Branch '{name}' already in filter", severity="error", markup=False)
+                return
+            existing.append(name)
+            widget.set_branches(existing)
+            self.app.notify(f"Added branch filter: {name}", markup=False)
+
+        self.app.push_screen(
+            NameInputModal(
+                title="Add Branch Filter",
+                placeholder="Branch name (e.g. main)",
+            ),
+            on_name,
+        )
+
+    def on__delete_branch_request(self, event: _DeleteBranchRequest) -> None:
+        """Handle delete-branch request from _BranchFilterWidget."""
+        widget = self.query_one("#branch-filter-widget", _BranchFilterWidget)
+        remaining = [row.branch_name for row in widget._rows if row.branch_name != event.branch_name]
+        widget.set_branches(remaining)
+        self.app.notify(f"Removed branch filter: {event.branch_name}", markup=False)
 
     # ---- Repo management ----
 
