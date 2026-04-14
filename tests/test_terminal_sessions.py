@@ -324,11 +324,11 @@ class TestDetectClaude:
         assert result[0].is_claude is True
         assert result[0].foreground_process == "node"  # job name unchanged
 
-    def test_fetch_sessions_detects_claude_via_session_name(self):
-        """fetch_sessions sets is_claude=True when session name contains 'claude'."""
+    def test_fetch_sessions_is_claude_false_for_named_session_without_claude_process(self):
+        """Session name alone does NOT trigger is_claude — process/TTY must confirm."""
         mock_session = _make_mock_session(
             session_id="w0t0p0:named",
-            name="claude-project",  # session named with claude
+            name="claude-project",  # named with "claude" but no claude process
             job_name="zsh",
             cwd="/Users/test",
         )
@@ -352,7 +352,7 @@ class TestDetectClaude:
             result = fetch_sessions()
 
         assert result is not None
-        assert result[0].is_claude is True
+        assert result[0].is_claude is False  # name alone is not enough
 
     def test_fetch_sessions_is_claude_false_for_plain_shell(self):
         """fetch_sessions sets is_claude=False for a plain shell session."""

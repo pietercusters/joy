@@ -9,20 +9,20 @@ from joy.models import TerminalSession
 _SHELL_PROCESSES = frozenset({"zsh", "bash", "fish", "sh", "dash"})
 
 
-def _detect_claude(job: str, session_name: str, tty: str) -> bool:
+def _detect_claude(job: str, tty: str) -> bool:
     """Return True if this session is running Claude (active or paused/backgrounded).
 
-    Uses three signals in order of cost:
+    Uses two signals in order of cost:
     1. Foreground job name contains "claude" (case-insensitive) — fast, catches the
        common case where the binary is named "claude" or "Claude".
-    2. Session name contains "claude" (case-insensitive) — catches explicitly-named tabs.
-    3. TTY process list contains "claude" in any argument — catches the Node.js wrapper
+    2. TTY process list contains "claude" in any argument — catches the Node.js wrapper
        case where jobName is "node" but the script path includes "claude", and also
        catches paused/backgrounded Claude processes (Ctrl+Z).
+
+    Session name is intentionally NOT used — too imprecise (any tab named "claude"
+    would match, even if Claude is not running).
     """
     if "claude" in job.lower():
-        return True
-    if "claude" in session_name.lower():
         return True
     return _tty_has_claude(tty)
 
@@ -94,7 +94,7 @@ def fetch_sessions() -> list[TerminalSession] | None:
                 session_name=name,
                 foreground_process=job,
                 cwd=cwd,
-                is_claude=_detect_claude(job, name, tty),
+                is_claude=_detect_claude(job, tty),
             )
         )
     return results
