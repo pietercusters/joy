@@ -7,6 +7,8 @@ from unittest.mock import patch
 from joy.app import JoyApp
 from joy.models import ObjectItem, PresetKind, Project
 
+pytestmark = pytest.mark.slow
+
 
 def _sample_projects() -> list[Project]:
     """Create sample projects for testing.
