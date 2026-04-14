@@ -98,6 +98,12 @@ class ProjectDetail(Widget, can_focus=True):
     ObjectRow.--highlight {
         background: $accent 30%;
     }
+    ProjectDetail .repo-overview {
+        width: 1fr;
+        height: 1;
+        padding: 0 1;
+        color: $text-muted;
+    }
     """
 
     def __init__(self, **kwargs) -> None:
@@ -148,6 +154,10 @@ class ProjectDetail(Widget, can_focus=True):
         grouped: dict[PresetKind, list[ObjectItem]] = {}
         for item in self._project.objects:
             grouped.setdefault(item.kind, []).append(item)
+
+        # Mount repo overview row (non-navigable) when project has a repo
+        if self._project.repo:
+            scroll.mount(Static(f"\uf401  {self._project.repo}", classes="repo-overview"))
 
         # Mount groups in order, only for kinds that have objects
         new_rows: list[ObjectRow] = []

@@ -1,7 +1,8 @@
-"""ObjectRow widget: displays a single project object with icon, label, and value."""
+"""ObjectRow widget: displays a single project object as a 3-column row (icon | value | kind)."""
 from __future__ import annotations
 
-from rich.text import Text
+from textual.app import ComposeResult
+from textual.containers import Horizontal
 from textual.widgets import Static
 
 from joy.models import Config, ObjectItem, ObjectType, PresetKind
@@ -51,12 +52,10 @@ def _success_message(item: ObjectItem, config: Config) -> str:
             return f"Opened: {display}"
 
 
-class ObjectRow(Static):
-    """A single row in the detail pane: dot + icon + preset label + value.
+class ObjectRow(Horizontal):
+    """A single row in the detail pane: 3-column layout (icon | value | kind).
 
-    Rows are single-height and truncated at the boundary (overflow: hidden).
     Parent ProjectDetail manages cursor highlighting via CSS class '--highlight'.
-    The dot indicator (U+25CF filled / U+25CB empty) reflects open_by_default status (D-01, D-02).
     """
 
     can_focus = False
@@ -64,30 +63,28 @@ class ObjectRow(Static):
     DEFAULT_CSS = """
     ObjectRow {
         width: 1fr;
-        height: 1;
+        height: auto;
         padding: 0 1;
     }
+    ObjectRow .col-icon  { width: 3; }
+    ObjectRow .col-value { width: 1fr; }
+    ObjectRow .col-kind  { width: 12; text-align: right; color: $text-muted; }
     """
 
     def __init__(self, item: ObjectItem, *, index: int = 0, **kwargs) -> None:
         self.item = item
         self.index = index
-        renderable = self._render_text(item)
-        super().__init__(renderable, **kwargs)
+        super().__init__(**kwargs)
 
-    @staticmethod
-    def _render_text(item: ObjectItem) -> Text:
-        """Build display text: dot  icon  label  value (per D-01, D-02)."""
-        dot = "\u25cf" if item.open_by_default else "\u25cb"  # filled or empty circle
-        dot_style = "bright_white" if item.open_by_default else "grey50"
-        icon = PRESET_ICONS.get(item.kind, " ")
-        label = item.kind.value
-        value = item.label if item.label else item.value
-        t = Text(no_wrap=True, overflow="ellipsis")
-        t.append(dot, style=dot_style)
-        t.append(f" {icon}  {label}  {value}")
-        return t
+    def compose(self) -> ComposeResult:
+        icon = PRESET_ICONS.get(self.item.kind, " ")
+        value = self.item.label if self.item.label else self.item.value
+        kind = self.item.kind.value
+        yield Static(icon, classes="col-icon")
+        yield Static(value, classes="col-value")
+        yield Static(kind, classes="col-kind")
 
     def refresh_indicator(self) -> None:
-        """Rebuild and update the row's rendered text in-place after toggle."""
-        self.update(self._render_text(self.item))
+        """Update the value column in-place after toggle or edit."""
+        value = self.item.label if self.item.label else self.item.value
+        self.query_one(".col-value", Static).update(value)

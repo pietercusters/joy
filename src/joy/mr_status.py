@@ -72,7 +72,7 @@ def _fetch_github_mrs(
             "-R",
             repo.remote_url,
             "--json",
-            "number,headRefName,isDraft,author,commits,statusCheckRollup,url",
+            "number,headRefName,isDraft,author,commits,statusCheckRollup",
             "--state",
             "open",
         ],
@@ -100,7 +100,6 @@ def _fetch_github_mrs(
             author=f"@{author_obj.get('login', 'unknown')}",
             last_commit_hash=last_commit.get("oid", "")[:7],
             last_commit_msg=last_commit.get("messageHeadline", ""),
-            url=pr.get("url", ""),
         )
     return out
 
@@ -150,7 +149,6 @@ def _fetch_gitlab_mrs(
             author=f"@{author_obj.get('username', 'unknown')}",
             last_commit_hash=mr.get("sha", "")[:7],
             last_commit_msg="",  # Commit message not available from list endpoint
-            url=mr.get("web_url", ""),
         )
     return out
 
@@ -182,7 +180,7 @@ def _fetch_glab_ci_status(repo: Repo, branch: str) -> str | None:
             return None
         data = json.loads(result.stdout)
         return _map_glab_ci_status(data.get("status"))
-    except Exception:
+    except (json.JSONDecodeError, Exception):
         return None
 
 

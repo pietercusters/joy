@@ -1,98 +1,96 @@
-"""Unit tests for ObjectRow dot indicator rendering and helper functions."""
+"""Unit tests for ObjectRow 3-column layout, refresh_indicator, and helper functions."""
 from __future__ import annotations
 
 import pytest
 
 from joy.models import Config, ObjectItem, ObjectType, PresetKind
-from joy.widgets.object_row import ObjectRow, _success_message, _truncate
+from joy.widgets.object_row import ObjectRow, PRESET_ICONS, _success_message, _truncate
 
 
 # ---------------------------------------------------------------------------
-# Dot indicator rendering tests (Tests 1-5)
+# 3-column compose() tests (Tests 1-6)
 # ---------------------------------------------------------------------------
 
 
-def test_render_dot_filled_when_open_by_default_true():
-    """Test 1: _render_text with open_by_default=True returns Text containing U+25CF."""
+def test_compose_yields_three_static_children():
+    """Test 1: ObjectRow.compose() yields 3 Static children with correct CSS classes."""
+    item = ObjectItem(kind=PresetKind.BRANCH, value="main")
+    row = ObjectRow(item, index=0)
+    children = list(row.compose())
+    assert len(children) == 3
+    assert "col-icon" in children[0].classes
+    assert "col-value" in children[1].classes
+    assert "col-kind" in children[2].classes
+
+
+def _get_content(widget):
+    """Extract the content string from a Static widget (access name-mangled __content)."""
+    return str(widget._Static__content)
+
+
+def test_col_icon_contains_correct_preset_icon():
+    """Test 2: col-icon child contains the correct PRESET_ICON for the item's kind."""
+    item = ObjectItem(kind=PresetKind.MR, value="https://example.com/mr/1")
+    row = ObjectRow(item, index=0)
+    children = list(row.compose())
+    icon_widget = children[0]
+    expected_icon = PRESET_ICONS[PresetKind.MR]
+    assert expected_icon in _get_content(icon_widget)
+
+
+def test_col_value_contains_label_when_set():
+    """Test 3a: col-value contains item.label when label is set."""
+    item = ObjectItem(kind=PresetKind.BRANCH, value="feature/xyz", label="My Branch")
+    row = ObjectRow(item, index=0)
+    children = list(row.compose())
+    value_widget = children[1]
+    assert "My Branch" in _get_content(value_widget)
+
+
+def test_col_value_contains_value_when_no_label():
+    """Test 3b: col-value contains item.value when label is empty."""
+    item = ObjectItem(kind=PresetKind.BRANCH, value="feature/xyz")
+    row = ObjectRow(item, index=0)
+    children = list(row.compose())
+    value_widget = children[1]
+    assert "feature/xyz" in _get_content(value_widget)
+
+
+def test_col_kind_contains_kind_value():
+    """Test 4: col-kind child contains item.kind.value (e.g., 'branch')."""
+    item = ObjectItem(kind=PresetKind.BRANCH, value="main")
+    row = ObjectRow(item, index=0)
+    children = list(row.compose())
+    kind_widget = children[2]
+    assert "branch" in _get_content(kind_widget)
+
+
+def test_no_dot_indicator_in_compose():
+    """Test 5: No dot indicator (U+25CF/U+25CB) appears anywhere in the composed children."""
     item = ObjectItem(kind=PresetKind.BRANCH, value="main", open_by_default=True)
-    text = ObjectRow._render_text(item)
-    assert "\u25cf" in text.plain
+    row = ObjectRow(item, index=0)
+    children = list(row.compose())
+    all_text = "".join(_get_content(c) for c in children)
+    assert "\u25cf" not in all_text
+    assert "\u25cb" not in all_text
 
 
-def test_render_dot_empty_when_open_by_default_false():
-    """Test 2: _render_text with open_by_default=False returns Text containing U+25CB."""
-    item = ObjectItem(kind=PresetKind.BRANCH, value="main", open_by_default=False)
-    text = ObjectRow._render_text(item)
-    assert "\u25cb" in text.plain
+def test_refresh_indicator_updates_col_value():
+    """Test 6: refresh_indicator() updates the col-value child by querying .col-value Static."""
+    from unittest.mock import MagicMock, patch
+    from textual.widgets import Static
 
+    item = ObjectItem(kind=PresetKind.BRANCH, value="main", label="Main Branch")
+    row = ObjectRow(item, index=0)
 
-def test_render_text_format():
-    """Test 3: _render_text output format is '{dot} {icon}  {label}  {value}'."""
-    item = ObjectItem(kind=PresetKind.BRANCH, value="main", open_by_default=True)
-    text = ObjectRow._render_text(item)
-    plain = text.plain
-    # Should start with the filled dot
-    assert plain[0] == "\u25cf"
-    # Should have a space after the dot before the icon
-    assert plain[1] == " "
-    # Should contain "  branch  " (2 spaces between icon and label, 2 between label and value)
-    assert "  branch  " in plain
+    # Mock query_one to return a mock Static widget
+    mock_static = MagicMock(spec=Static)
+    row.query_one = MagicMock(return_value=mock_static)
 
-
-def test_dot_style_bright_white_when_open_by_default_true():
-    """Test 4: The dot span has style 'bright_white' when open_by_default=True."""
-    item = ObjectItem(kind=PresetKind.BRANCH, value="main", open_by_default=True)
-    text = ObjectRow._render_text(item)
-    # The first span should be the dot with bright_white style
-    spans = list(text._spans)
-    assert len(spans) > 0
-    first_span = spans[0]
-    # Check the span covers position 0 (the dot character)
-    assert first_span.start == 0
-    assert first_span.end == 1
-    # Style should contain bright_white
-    assert "bright_white" in str(first_span.style)
-
-
-def test_dot_style_grey50_when_open_by_default_false():
-    """Test 5: The dot span has style 'grey50' when open_by_default=False."""
-    item = ObjectItem(kind=PresetKind.BRANCH, value="main", open_by_default=False)
-    text = ObjectRow._render_text(item)
-    spans = list(text._spans)
-    assert len(spans) > 0
-    first_span = spans[0]
-    assert first_span.start == 0
-    assert first_span.end == 1
-    assert "grey50" in str(first_span.style)
-
-
-# ---------------------------------------------------------------------------
-# refresh_indicator method (Test 6)
-# ---------------------------------------------------------------------------
-
-
-def test_refresh_indicator_calls_update(monkeypatch):
-    """Test 6: refresh_indicator() calls self.update() with re-rendered text."""
-    item = ObjectItem(kind=PresetKind.BRANCH, value="main", open_by_default=False)
-    row = ObjectRow.__new__(ObjectRow)
-    row.item = item
-    row.index = 0
-
-    called_with = []
-
-    def mock_update(renderable):
-        called_with.append(renderable)
-
-    monkeypatch.setattr(row, "update", mock_update)
-
-    # Toggle the item's open_by_default and call refresh_indicator
-    row.item.open_by_default = True
     row.refresh_indicator()
 
-    assert len(called_with) == 1
-    # The update should have been called with a Text containing the filled dot
-    updated_text = called_with[0]
-    assert "\u25cf" in updated_text.plain
+    row.query_one.assert_called_once_with(".col-value", Static)
+    mock_static.update.assert_called_once_with("Main Branch")
 
 
 # ---------------------------------------------------------------------------
