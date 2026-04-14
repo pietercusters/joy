@@ -10,7 +10,7 @@ from textual.binding import Binding
 from textual.containers import Grid
 from textual.widgets import Footer, Header
 
-from joy.models import Config, ObjectItem, PresetKind, Project, TerminalSession, WorktreeInfo
+from joy.models import Config, ObjectItem, PresetKind, Project, Repo, TerminalSession, WorktreeInfo
 from joy.screens import NameInputModal, PresetPickerModal, SettingsModal, ValueInputModal
 from joy.widgets.object_row import _success_message, _truncate
 from joy.widgets.project_detail import GROUP_ORDER, ProjectDetail
@@ -59,6 +59,7 @@ class JoyApp(App):
         super().__init__(**kwargs)
         self._config: Config = Config()
         self._projects: list[Project] = []
+        self._repos: list[Repo] = []
         self._last_refresh_at: datetime | None = None
         self._refresh_failed: bool = False
         self._mr_fetch_failed: bool = False
