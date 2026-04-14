@@ -56,11 +56,12 @@ Full details: `.planning/milestones/v1.1-ROADMAP.md`
   2. Each project row displays the correct count of active agent sessions belonging to that project (matching by session name)
   3. Badge counts update automatically after each background refresh cycle without user intervention
   4. Switching between projects or triggering a refresh does not cause the WorktreePane or TerminalPane cursor to jump to row 0 — cursors stay on the same worktree/session they were on before the rebuild
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 14-01: TBD
-- [ ] 14-02: TBD
+- [ ] 14-01-PLAN.md — Relationship resolver: compute_relationships() and RelationshipIndex (TDD)
+- [ ] 14-02-PLAN.md — Cursor identity preservation: WorktreePane and TerminalPane (parallel with 14-01)
+- [ ] 14-03-PLAN.md — Badge wiring: ProjectRow counts, app orchestration, human verify
 
 ### Phase 15: Cross-Pane Selection Sync
 **Goal**: Users can navigate any pane and see all other panes automatically track to related items, with a toggle to turn sync on or off
