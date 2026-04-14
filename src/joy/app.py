@@ -53,6 +53,7 @@ class JoyApp(App):
         Binding("n", "new_project", "New", priority=True),
         Binding("s", "settings", "Settings", priority=True),
         Binding("r", "refresh_worktrees", "Refresh", priority=True),
+        Binding("l", "legend", "Legend", priority=True),
     ]
 
     def __init__(self, **kwargs) -> None:
@@ -353,6 +354,11 @@ class JoyApp(App):
         """Persist projects to TOML in background thread (D-16)."""
         from joy.store import save_projects  # noqa: PLC0415
         save_projects(self._projects)
+
+    def action_legend(self) -> None:
+        """Show icon legend popup."""
+        from joy.screens import LegendModal  # noqa: PLC0415
+        self.push_screen(LegendModal())
 
     def action_settings(self) -> None:
         """Open settings modal overlay (D-01, D-05, SETT-06)."""
