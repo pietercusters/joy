@@ -4,13 +4,13 @@ milestone: v1.1
 milestone_name: Workspace Intelligence
 status: executing
 stopped_at: Phase 13 context gathered (discuss mode)
-last_updated: "2026-04-14T08:48:12.728Z"
-last_activity: 2026-04-14 -- Phase 12 execution started
+last_updated: "2026-04-14T11:48:55.476Z"
+last_activity: 2026-04-14
 progress:
   total_phases: 8
-  completed_phases: 6
-  total_plans: 15
-  completed_plans: 17
+  completed_phases: 7
+  total_plans: 19
+  completed_plans: 21
   percent: 100
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-10)
 
 **Core value:** Every artifact for the active project, openable instantly from one keyboard-driven interface.
-**Current focus:** Phase 12 — iterm2-integration-terminal-pane
+**Current focus:** Phase 13 — project-workflow-settings-docs
 
 ## Current Position
 
-Phase: 12 (iterm2-integration-terminal-pane) — EXECUTING
-Plan: 1 of 3
-Status: Executing Phase 12
-Last activity: 2026-04-14 -- Phase 12 execution started
+Phase: 13
+Plan: Not started
+Status: Executing Phase 13
+Last activity: 2026-04-14
 
 Progress: ████████████░░░░░░░░ 38% (3/8 phases)
 
@@ -36,7 +36,7 @@ Progress: ████████████░░░░░░░░ 38% (3/8 
 
 **Velocity:**
 
-- Total plans completed: 13
+- Total plans completed: 17
 - Average duration: --
 - Total execution time: 0 hours
 
@@ -49,6 +49,7 @@ Progress: ████████████░░░░░░░░ 38% (3/8 
 | 05 | 3 | - | - |
 | 07 | 2 | - | - |
 | 08 | 2 | - | - |
+| 13 | 4 | - | - |
 
 **Recent Trend:**
 

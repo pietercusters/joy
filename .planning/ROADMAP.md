@@ -31,7 +31,7 @@ Full details: `.planning/milestones/v1.0-ROADMAP.md`
 - [x] **Phase 10: Background Refresh Engine** — Polling loop, manual refresh, timestamp display, and cursor preservation (completed 2026-04-13)
 - [x] **Phase 11: MR & CI Status** — GitHub/GitLab CLI integration for PR/MR status and CI pipeline indicators (completed 2026-04-13)
 - [x] **Phase 12: iTerm2 Integration & Terminal Pane** — iTerm2 Python API connection, session enumeration, Claude detection, and terminal pane UI (completed 2026-04-14)
-- [ ] **Phase 13: Project Workflow, Settings & Docs** — Repo registry UI, project grouping by repo, README updates
+- [x] **Phase 13: Project Workflow, Settings & Docs** — Repo registry UI, project grouping by repo, README updates (completed 2026-04-14)
 
 ## Phase Details
 
@@ -148,12 +148,12 @@ Plans:
   2. Projects not matched to any repo appear in an "Other" group
   3. ~~User can create a new project from a discovered worktree~~ (FLOW-03 dropped)
   4. README documents all prerequisites: gh CLI auth, glab CLI auth, iTerm2 Python API enabled, iTerm2 shell integration
-**Plans:** 4 plans
+**Plans:** 4/4 plans complete
 Plans:
-- [ ] 13-01-PLAN.md — Project.repo field + TOML round-trip (models.py + store.py)
-- [ ] 13-02-PLAN.md — ProjectList refactor: VerticalScroll + GroupHeader + cursor navigation + grouping
-- [ ] 13-03-PLAN.md — SettingsModal Repos section: add/remove repos with auto-detection
-- [ ] 13-04-PLAN.md — README Prerequisites section (gh, glab, iTerm2 Python API, shell integration)
+- [x] 13-01-PLAN.md — Project.repo field + TOML round-trip (models.py + store.py)
+- [x] 13-02-PLAN.md — ProjectList refactor: VerticalScroll + GroupHeader + cursor navigation + grouping
+- [x] 13-03-PLAN.md — SettingsModal Repos section: add/remove repos with auto-detection
+- [x] 13-04-PLAN.md — README Prerequisites section (gh, glab, iTerm2 Python API, shell integration)
 **UI hint**: yes
 
 ## Progress
@@ -176,4 +176,4 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 11 -> 12 -> 13
 | 10. Background Refresh Engine | v1.1 | 2/2 | Complete   | 2026-04-13 |
 | 11. MR & CI Status | v1.1 | 3/3 | Complete   | 2026-04-13 |
 | 12. iTerm2 Integration & Terminal Pane | v1.1 | 3/3 | Complete   | 2026-04-14 |
-| 13. Project Workflow, Settings & Docs | v1.1 | 0/4 | Planning complete | - |
+| 13. Project Workflow, Settings & Docs | v1.1 | 4/4 | Complete    | 2026-04-14 |
