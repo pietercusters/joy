@@ -64,13 +64,14 @@ None — clean milestone close.
 
 ### Quick Tasks Completed
 
-| # | Description | Date | Commit | Directory |
-|---|-------------|------|--------|-----------|
-| 260411-ivh | Fix three UAT bugs: project list selection after delete, detail pane focus dimming, Slack thread URL navigation | 2026-04-11 | 9f5e006 | [260411-ivh-fix-three-uat-bugs-project-list-selectio](./quick/260411-ivh-fix-three-uat-bugs-project-list-selectio/) |
-| 260414-c4g | Mark slow TUI/filter tests with pytest.mark.slow, exclude by default — suite drops from ~264s to 25.84s | 2026-04-14 | cf15821 | [260414-c4g-the-unit-test-suite-take-too-long-to-run](./quick/260414-c4g-the-unit-test-suite-take-too-long-to-run/) |
+| # | Description | Date | Commit | Status | Directory |
+|---|-------------|------|--------|--------|-----------|
+| 260411-ivh | Fix three UAT bugs: project list selection after delete, detail pane focus dimming, Slack thread URL navigation | 2026-04-11 | 9f5e006 | | [260411-ivh-fix-three-uat-bugs-project-list-selectio](./quick/260411-ivh-fix-three-uat-bugs-project-list-selectio/) |
+| 260414-c4g | Mark slow TUI/filter tests with pytest.mark.slow, exclude by default — suite drops from ~264s to 25.84s | 2026-04-14 | cf15821 | | [260414-c4g-the-unit-test-suite-take-too-long-to-run](./quick/260414-c4g-the-unit-test-suite-take-too-long-to-run/) |
+| 260414-k2u | WorktreePane cursor navigation (j/k/Enter/Esc) — Enter opens MR in browser or worktree in IDE | 2026-04-14 | 8fcf243 | Needs Review | [260414-k2u-the-worktree-overview-should-be-scrollab](./quick/260414-k2u-the-worktree-overview-should-be-scrollab/) |
 
 ## Session Continuity
 
 Last session: 2026-04-14
-Stopped at: v1.1 milestone archived
-Resume file: run `/gsd-new-milestone` to start v1.2 planning
+Stopped at: Quick task 260414-k2u complete — WorktreePane cursor nav + Enter to open
+Resume file: run `joy` and manually smoke-test worktree pane navigation (see VERIFICATION.md)
