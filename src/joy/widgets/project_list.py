@@ -149,6 +149,10 @@ class ProjectList(Widget, can_focus=True):
         if gen != self._render_generation:
             return  # superseded by a newer set_projects call
         scroll = self.query_one("#project-scroll", _ProjectScroll)
+        if not scroll.is_attached:
+            # Scroll container not yet mounted -- reschedule
+            self.call_after_refresh(lambda: self._rebuild(gen))
+            return
         scroll.remove_children()
 
         # Group projects by repo

@@ -223,7 +223,7 @@ async def test_existing_enter_and_escape(mock_store):
         await pilot.pause(0.1)
         focused = app.focused
         assert focused is not None
-        assert focused.id in ("project-listview", "project-list")
+        assert focused.id == "project-list"
 
 
 # ---------------------------------------------------------------------------

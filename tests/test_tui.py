@@ -126,7 +126,7 @@ async def test_escape_returns_focus_to_list(mock_store):
         focused = app.focused
         assert focused is not None
         # Should be the listview inside project-list
-        assert focused.id in ("project-listview", "project-list")
+        assert focused.id == "project-list"
 
 
 @pytest.mark.asyncio

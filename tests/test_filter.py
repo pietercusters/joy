@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import pytest
 from unittest.mock import patch
-from textual.widgets import ListItem
 
 from joy.app import JoyApp
 from joy.models import ObjectItem, PresetKind, Project
+from joy.widgets.project_list import ProjectList, ProjectRow
 
 pytestmark = pytest.mark.slow
 
@@ -59,8 +59,8 @@ async def test_filter_realtime(mock_store):
         for ch in "alpha":
             await pilot.press(ch)
         await pilot.pause(0.15)
-        listview = app.query_one("#project-listview")
-        assert len(listview.query(ListItem)) == 1
+        project_list = app.query_one("#project-list", ProjectList)
+        assert len(project_list._rows) == 1
 
 
 @pytest.mark.asyncio
@@ -79,8 +79,8 @@ async def test_filter_escape_restores_full_list(mock_store):
         await pilot.press("escape")
         await pilot.pause(0.15)
         # All 3 projects should be restored
-        listview = app.query_one("#project-listview")
-        assert len(listview.query(ListItem)) == 3
+        project_list = app.query_one("#project-list", ProjectList)
+        assert len(project_list._rows) == 3
         # Input should be removed
         assert len(app.query("#filter-input")) == 0
 
@@ -103,8 +103,8 @@ async def test_filter_enter_keeps_subset(mock_store):
         # Input should be removed
         assert len(app.query("#filter-input")) == 0
         # Filtered subset (1 item) should remain
-        listview = app.query_one("#project-listview")
-        assert len(listview.query(ListItem)) == 1
+        project_list = app.query_one("#project-list", ProjectList)
+        assert len(project_list._rows) == 1
 
 
 @pytest.mark.asyncio
@@ -120,14 +120,14 @@ async def test_filter_clear_restores_list(mock_store):
             await pilot.press(ch)
         await pilot.pause(0.15)
         # Verify filtered (1 item)
-        listview = app.query_one("#project-listview")
-        assert len(listview.query(ListItem)) == 1
+        project_list = app.query_one("#project-list", ProjectList)
+        assert len(project_list._rows) == 1
         # Clear by pressing backspace 5 times
         for _ in range(5):
             await pilot.press("backspace")
         await pilot.pause(0.15)
         # All 3 projects should be shown again
-        assert len(listview.query(ListItem)) == 3
+        assert len(project_list._rows) == 3
 
 
 @pytest.mark.asyncio
@@ -158,5 +158,5 @@ async def test_filter_case_insensitive(mock_store):
         for ch in "ALPHA":
             await pilot.press(ch)
         await pilot.pause(0.15)
-        listview = app.query_one("#project-listview")
-        assert len(listview.query(ListItem)) == 1
+        project_list = app.query_one("#project-list", ProjectList)
+        assert len(project_list._rows) == 1
