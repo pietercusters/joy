@@ -85,6 +85,7 @@ class ProjectList(Widget, can_focus=True):
         Binding("j", "cursor_down", "Down", show=False),
         Binding("k", "cursor_up", "Up", show=False),
         Binding("enter", "select_project", "Open"),
+        Binding("e", "rename_project", "Rename", show=True),
         Binding("D", "delete_project", "Delete", show=True),
         Binding("delete", "delete_project", "Delete", show=False),
         Binding("/", "filter", "Filter", show=True),
@@ -214,6 +215,48 @@ class ProjectList(Widget, can_focus=True):
         """Fire ProjectSelected message for the highlighted project (D-04)."""
         if 0 <= self._cursor < len(self._rows):
             self.post_message(self.ProjectSelected(self._rows[self._cursor].project))
+
+    def action_rename_project(self) -> None:
+        """Rename the highlighted project via a modal pre-filled with the current name."""
+        from joy.screens.name_input import NameInputModal  # noqa: PLC0415 -- lazy import
+
+        if self._cursor < 0 or self._cursor >= len(self._rows):
+            return
+        project = self._rows[self._cursor].project
+
+        def on_name(name: str | None) -> None:
+            if name is None:
+                return  # Escape
+            if name == project.name:
+                return  # no change
+            # Check for duplicate name
+            if any(p.name == name and p is not project for p in self.app._projects):
+                self.app.notify(f"Project '{name}' already exists", severity="error", markup=False)
+                return
+            project.name = name
+            self.app._save_projects_bg()
+            self.set_projects(list(self.app._projects), self._repos)
+
+            def _restore_cursor() -> None:
+                for i, row in enumerate(self._rows):
+                    if row.project is project:
+                        self.select_index(i)
+                        break
+
+            self.call_after_refresh(_restore_cursor)
+            self.app.notify(f"Renamed to: '{name}'", markup=False)
+            # Re-render the detail pane
+            from joy.widgets.project_detail import ProjectDetail  # noqa: PLC0415
+
+            try:
+                self.app.query_one("#project-detail", ProjectDetail).set_project(project)
+            except Exception:
+                pass  # detail pane not mounted yet
+
+        self.app.push_screen(
+            NameInputModal(title="Rename Project", initial_value=project.name),
+            on_name,
+        )
 
     def action_delete_project(self) -> None:
         """Delete the highlighted project after confirmation (PROJ-05, D-12, D-13)."""
