@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Workspace Intelligence
-status: executing
-stopped_at: Phase 13 context gathered (discuss mode)
-last_updated: "2026-04-14T11:48:55.476Z"
+status: complete
+stopped_at: v1.1 milestone archived
+last_updated: "2026-04-14T14:00:00.000Z"
 last_activity: 2026-04-14
 progress:
   total_phases: 8
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 19
-  completed_plans: 21
+  completed_plans: 19
   percent: 100
 ---
 
@@ -18,64 +18,49 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-10)
+See: .planning/PROJECT.md (updated 2026-04-14)
 
 **Core value:** Every artifact for the active project, openable instantly from one keyboard-driven interface.
-**Current focus:** Phase 13 — project-workflow-settings-docs
+**Current focus:** Planning next milestone (v1.2)
 
 ## Current Position
 
-Phase: 13
-Plan: Not started
-Status: Executing Phase 13
+Phase: —
+Plan: —
+Status: v1.1 Workspace Intelligence shipped ✅
 Last activity: 2026-04-14
 
-Progress: ████████████░░░░░░░░ 38% (3/8 phases)
+Progress: ████████████████████ 100% (8/8 phases)
 
-## Performance Metrics
+## Milestone Summary
 
-**Velocity:**
-
-- Total plans completed: 17
-- Average duration: --
-- Total execution time: 0 hours
-
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 02 | 3 | - | - |
-| 04 | 3 | - | - |
-| 05 | 3 | - | - |
-| 07 | 2 | - | - |
-| 08 | 2 | - | - |
-| 13 | 4 | - | - |
-
-**Recent Trend:**
-
-- Last 5 plans: --
-- Trend: --
-
-*Updated after each plan completion*
+v1.1 Workspace Intelligence shipped 2026-04-14:
+- 8 phases (6-13), 19 plans
+- Live worktree pane with MR/CI badges
+- iTerm2 terminal pane with Claude agent detection
+- Background auto-refresh engine
+- Repo registry with project grouping
+- 276 fast tests, 3,606 src LOC + 5,883 test LOC
 
 ## Accumulated Context
 
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
 
-- Roadmap: 5 phases (Foundation -> TUI Shell -> Activation -> CRUD -> Settings/Distribution)
-- Research: Textual 8.x for TUI, TOML for persistence, two total Python dependencies
+Key decisions from v1.1:
+- list-form subprocess for all external calls (security)
+- cursor/_rows/--highlight pattern for all scrollable panes
+- lazy import + catch-all for iTerm2 graceful fallback
+- pytest.mark.slow for TUI/integration tests
 
 ### Pending Todos
 
-None yet.
+None.
 
 ### Blockers/Concerns
 
-- iTerm2 AppleScript reliability needs hands-on validation during Phase 1/3
-- Startup time budget (350ms) must be measured from first Textual prototype in Phase 2
+None — clean milestone close.
 
 ### Quick Tasks Completed
 
@@ -86,6 +71,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-14T08:48:12.723Z
-Stopped at: Phase 13 context gathered (discuss mode)
-Resume file: .planning/phases/13-project-workflow-settings-docs/13-CONTEXT.md
+Last session: 2026-04-14
+Stopped at: v1.1 milestone archived
+Resume file: run `/gsd-new-milestone` to start v1.2 planning

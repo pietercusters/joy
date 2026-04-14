@@ -1,5 +1,33 @@
 # Milestones
 
+## v1.1 Workspace Intelligence (Shipped: 2026-04-14)
+
+**Phases completed:** 8 phases, 19 plans, 30 tasks
+
+**Key accomplishments:**
+
+- RED phase (421f9d0):
+- WorktreeInfo dataclass with repo_name, branch, path, is_dirty, has_upstream fields -- data contract for worktree discovery
+- discover_worktrees function with git porcelain parsing, dirty detection via diff-index, upstream tracking via rev-parse, and exact-match branch filtering
+- TerminalPane and WorktreePane stub widgets with 9 RED-phase tests defining the 4-pane grid layout and Tab focus cycling contract
+- Refactored JoyApp from Horizontal 2-pane to Grid 2x2 layout with Tab/Shift+Tab focus cycling across all four panes and accent-border focus indicators
+- One-liner:
+- One-liner:
+- User approved worktree pane rendering — grouped rows, Nerd Font icons, focus border, and read-only behavior all confirmed correct
+- WorktreePane extended with scroll-position preservation across DOM rebuilds and a set_refresh_label() method that updates border_title with timestamp and stale-state warning glyph
+- JoyApp wired with set_interval background timer, r keybinding, relative timestamp display via set_refresh_label, and stale-data detection with warning glyph — delivering the core phase goal of automatic background refresh without UI freezes
+- MRInfo dataclass and mr_status.py fetch module with GitHub (gh) and GitLab (glab) CLI integration for MR/PR status and CI pipeline results
+- Extended WorktreeRow with MR/CI badges on line 1 and author+commit on line 2, wired fetch_mr_data into app.py background worker, with 14 new TDD tests
+- One-liner:
+- Constants (per D-07):
+- `_load_terminal()` worker wired into JoyApp — terminal pane refreshes in parallel with worktrees on mount, r key, and timer; border_title shows timestamp and stale state independently
+- Added Project.repo optional field with backward-compatible TOML serialization and initialized JoyApp._repos for downstream Wave 2 plans
+- Full rewrite of ProjectList from ListView to VerticalScroll/GroupHeader/cursor pattern with repo-based project grouping and filter mode compatibility
+- Extended SettingsModal with a Repos section featuring j/k cursor navigation, path-validated add via PathInputModal, and confirmation-gated remove with independent persistence via save_repos
+- Added Prerequisites section to README documenting iTerm2 Python API, shell integration, gh CLI, and glab CLI setup requirements
+
+---
+
 ## v1.0 MVP (Shipped: 2026-04-12)
 
 **Phases completed:** 5 phases, 15 plans, 18 tasks
