@@ -53,6 +53,7 @@ class JoyApp(App):
         Binding("n", "new_project", "New", priority=True),
         Binding("s", "settings", "Settings", priority=True),
         Binding("r", "refresh_worktrees", "Refresh", priority=True),
+        Binding("l", "legend", "Legend", priority=True),
     ]
 
     def __init__(self, **kwargs) -> None:
@@ -367,6 +368,16 @@ class JoyApp(App):
             self._reload_repos()
             self.notify("Settings saved", markup=False)
         self.push_screen(SettingsModal(self._config, self._repos), on_settings)
+
+    def action_legend(self) -> None:
+        """Toggle icon legend popup — dismiss if already open, else show."""
+        from joy.screens import LegendModal  # noqa: PLC0415
+        # Check if a LegendModal is already on the screen stack
+        for screen in self.screen_stack:
+            if isinstance(screen, LegendModal):
+                screen.dismiss(None)
+                return
+        self.push_screen(LegendModal())
 
     @work(thread=True, exit_on_error=False)
     def _save_config_bg(self) -> None:
