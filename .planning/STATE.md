@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Workspace Intelligence
-status: executing
-stopped_at: Phase 12 context gathered (discuss mode)
-last_updated: "2026-04-13T14:48:23.864Z"
-last_activity: 2026-04-13 -- Phase 11 execution started
+status: complete
+stopped_at: Phase 12 complete — verified 2026-04-14
+last_updated: "2026-04-14T12:00:00.000Z"
+last_activity: 2026-04-14 -- Phase 12 complete (iTerm2 integration verified)
 progress:
   total_phases: 8
-  completed_phases: 5
-  total_plans: 12
-  completed_plans: 14
-  percent: 100
+  completed_phases: 6
+  total_plans: 15
+  completed_plans: 16
+  percent: 75
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-10)
 
 **Core value:** Every artifact for the active project, openable instantly from one keyboard-driven interface.
-**Current focus:** Phase 11 — mr-ci-status
+**Current focus:** Phase 12 — iterm2-integration-terminal-pane
 
 ## Current Position
 
-Phase: 11 (mr-ci-status) — EXECUTING
+Phase: 12 (iterm2-integration-terminal-pane) — EXECUTING
 Plan: 1 of 3
-Status: Executing Phase 11
-Last activity: 2026-04-13 -- Phase 11 execution started
+Status: Executing Phase 12
+Last activity: 2026-04-14 -- Phase 12 execution started
 
 Progress: ████████████░░░░░░░░ 38% (3/8 phases)
 
