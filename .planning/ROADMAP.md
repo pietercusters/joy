@@ -31,7 +31,7 @@ Full details: `.planning/milestones/v1.0-ROADMAP.md`
 - [x] **Phase 10: Background Refresh Engine** — Polling loop, manual refresh, timestamp display, and cursor preservation (completed 2026-04-13)
 - [x] **Phase 11: MR & CI Status** — GitHub/GitLab CLI integration for PR/MR status and CI pipeline indicators (completed 2026-04-13)
 - [x] **Phase 12: iTerm2 Integration & Terminal Pane** — iTerm2 Python API connection, session enumeration, Claude detection, and terminal pane UI (completed 2026-04-14)
-- [ ] **Phase 13: Project Workflow, Settings & Docs** — Repo registry UI, project grouping by repo, new-project-from-worktree, README updates
+- [ ] **Phase 13: Project Workflow, Settings & Docs** — Repo registry UI, project grouping by repo, README updates
 
 ## Phase Details
 
@@ -140,15 +140,20 @@ Plans:
 **UI hint**: yes
 
 ### Phase 13: Project Workflow, Settings & Docs
-**Goal**: Users can manage repos from the settings UI, see projects grouped by repo, create projects from discovered worktrees, and find all prerequisites documented
+**Goal**: Users can manage repos from the settings UI, see projects grouped by repo, and find all prerequisites documented
 **Depends on**: Phase 11, Phase 12
 **Requirements**: FLOW-01, FLOW-02, FLOW-03, DOC-01
 **Success Criteria** (what must be TRUE):
   1. Projects pane groups projects under their associated repo with a section header
   2. Projects not matched to any repo appear in an "Other" group
-  3. User can create a new project from a discovered worktree, with name, branch, and MR URL pre-filled
+  3. ~~User can create a new project from a discovered worktree~~ (FLOW-03 dropped)
   4. README documents all prerequisites: gh CLI auth, glab CLI auth, iTerm2 Python API enabled, iTerm2 shell integration
-**Plans**: TBD
+**Plans:** 4 plans
+Plans:
+- [ ] 13-01-PLAN.md — Project.repo field + TOML round-trip (models.py + store.py)
+- [ ] 13-02-PLAN.md — ProjectList refactor: VerticalScroll + GroupHeader + cursor navigation + grouping
+- [ ] 13-03-PLAN.md — SettingsModal Repos section: add/remove repos with auto-detection
+- [ ] 13-04-PLAN.md — README Prerequisites section (gh, glab, iTerm2 Python API, shell integration)
 **UI hint**: yes
 
 ## Progress
@@ -171,4 +176,4 @@ Phases execute in numeric order: 6 -> 7 -> 8 -> 9 -> 10 -> 11 -> 12 -> 13
 | 10. Background Refresh Engine | v1.1 | 2/2 | Complete   | 2026-04-13 |
 | 11. MR & CI Status | v1.1 | 3/3 | Complete   | 2026-04-13 |
 | 12. iTerm2 Integration & Terminal Pane | v1.1 | 3/3 | Complete   | 2026-04-14 |
-| 13. Project Workflow, Settings & Docs | v1.1 | 0/0 | Not started | - |
+| 13. Project Workflow, Settings & Docs | v1.1 | 0/4 | Planning complete | - |
