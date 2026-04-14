@@ -188,9 +188,6 @@ class TerminalPane(Widget, can_focus=True):
         color: $text-muted;
         text-style: dim;
     }
-    TerminalPane .section-spacer {
-        height: 1;
-    }
     """
 
     def __init__(self, **kwargs) -> None:
@@ -250,11 +247,9 @@ class TerminalPane(Widget, can_focus=True):
         other_sessions.sort(key=lambda s: s.session_name.lower())
 
         new_rows: list[SessionRow] = []
-        first_group = True
 
         # Mount Claude group (if any)
         if claude_sessions:
-            first_group = False
             scroll.mount(GroupHeader("Claude"))
             for session in claude_sessions:
                 is_busy = session.foreground_process.lower() not in _SHELL_PROCESSES
@@ -264,9 +259,6 @@ class TerminalPane(Widget, can_focus=True):
 
         # Mount Other group (if any)
         if other_sessions:
-            if not first_group:
-                scroll.mount(Static("", classes="section-spacer"))
-            first_group = False
             scroll.mount(GroupHeader("Other"))
             for session in other_sessions:
                 row = SessionRow(session, is_claude=False)

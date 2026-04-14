@@ -98,15 +98,6 @@ class ProjectDetail(Widget, can_focus=True):
     ObjectRow.--highlight {
         background: $accent 30%;
     }
-    ProjectDetail .section-spacer {
-        height: 1;
-    }
-    ProjectDetail .repo-overview {
-        width: 1fr;
-        height: 1;
-        padding: 0 1;
-        color: $text-muted;
-    }
     """
 
     def __init__(self, **kwargs) -> None:
@@ -158,21 +149,13 @@ class ProjectDetail(Widget, can_focus=True):
         for item in self._project.objects:
             grouped.setdefault(item.kind, []).append(item)
 
-        # Mount repo overview row (non-navigable) when project has a repo
-        if self._project.repo:
-            scroll.mount(Static(f"\uf401  {self._project.repo}", classes="repo-overview"))
-
         # Mount groups in order, only for kinds that have objects
         new_rows: list[ObjectRow] = []
         row_index = 0
-        first_group = True
         for kind in GROUP_ORDER:
             items = grouped.get(kind, [])
             if not items:
                 continue
-            if not first_group:
-                scroll.mount(Static("", classes="section-spacer"))
-            first_group = False
             scroll.mount(GroupHeader(GROUP_LABELS[kind]))
             for item in items:
                 row = ObjectRow(item, index=row_index)

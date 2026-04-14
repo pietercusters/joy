@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 Phase: —
 Plan: —
 Status: v1.1 Workspace Intelligence shipped ✅
-Last activity: 2026-04-14 - Completed quick task 260414-nrt: Details pane redesign: columnar layout, repo field, whitespace, legend popup
+Last activity: 2026-04-14
 
 Progress: ████████████████████ 100% (8/8 phases)
 
@@ -68,7 +68,6 @@ None — clean milestone close.
 |---|-------------|------|--------|-----------|
 | 260411-ivh | Fix three UAT bugs: project list selection after delete, detail pane focus dimming, Slack thread URL navigation | 2026-04-11 | 9f5e006 | [260411-ivh-fix-three-uat-bugs-project-list-selectio](./quick/260411-ivh-fix-three-uat-bugs-project-list-selectio/) |
 | 260414-c4g | Mark slow TUI/filter tests with pytest.mark.slow, exclude by default — suite drops from ~264s to 25.84s | 2026-04-14 | cf15821 | [260414-c4g-the-unit-test-suite-take-too-long-to-run](./quick/260414-c4g-the-unit-test-suite-take-too-long-to-run/) |
-| 260414-nrt | Details pane redesign: columnar layout, repo field, whitespace, legend popup | 2026-04-14 | 8a8a345 | [260414-nrt-details-pane-redesign-columnar-layout-re](./quick/260414-nrt-details-pane-redesign-columnar-layout-re/) |
 
 ## Session Continuity
 

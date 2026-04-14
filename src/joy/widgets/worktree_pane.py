@@ -1,13 +1,10 @@
 """Bottom-right pane: grouped worktree list with status indicators."""
 from __future__ import annotations
 
-import subprocess
-import webbrowser
 from pathlib import Path
 
 from rich.text import Text
 from textual.app import ComposeResult
-from textual.binding import Binding
 from textual.containers import VerticalScroll
 from textual.widget import Widget
 from textual.widgets import Static
@@ -139,10 +136,6 @@ class WorktreeRow(Static):
         mr_info: MRInfo | None = None,
         **kwargs,
     ) -> None:
-        self.repo_name: str = worktree.repo_name
-        self.branch: str = worktree.branch
-        self.path: str = worktree.path
-        self.mr_info: MRInfo | None = mr_info
         path = display_path if display_path is not None else abbreviate_home(worktree.path)
         content = self.build_content(
             worktree.branch,
@@ -217,18 +210,11 @@ class WorktreeRow(Static):
 class WorktreePane(Widget, can_focus=True):
     """Bottom-right pane: grouped worktree list with status indicators.
 
-    Interactive — j/k/arrows for cursor navigation, Enter to open MR or IDE.
-    Data is pushed via set_worktrees().
+    Read-only — no BINDINGS, no selection cursor. Focusable for Tab cycling
+    (preserved from Phase 8 stub, D-10). Data is pushed via set_worktrees().
     """
 
-    BINDINGS = [
-        Binding("escape", "focus_projects", "Back"),
-        Binding("up", "cursor_up", "Up"),
-        Binding("down", "cursor_down", "Down"),
-        Binding("k", "cursor_up", "Up"),
-        Binding("j", "cursor_down", "Down"),
-        Binding("enter", "activate_row", "Open"),
-    ]
+    BINDINGS = []  # Read-only pane (WKTR-10)
 
     DEFAULT_CSS = """
     WorktreePane {
@@ -248,15 +234,6 @@ class WorktreePane(Widget, can_focus=True):
         color: $text-muted;
         text-style: dim;
     }
-    WorktreePane:focus-within WorktreeRow.--highlight {
-        background: $accent;
-    }
-    WorktreeRow.--highlight {
-        background: $accent 30%;
-    }
-    WorktreePane .section-spacer {
-        height: 1;
-    }
     """
 
     def __init__(self, **kwargs) -> None:
@@ -264,8 +241,6 @@ class WorktreePane(Widget, can_focus=True):
         super().__init__(**kwargs)
         self.border_title = "Worktrees"
         self._loaded = False
-        self._cursor: int = -1
-        self._rows: list[WorktreeRow] = []
 
     def compose(self) -> ComposeResult:
         """Mount initial Loading\u2026 placeholder (D-05)."""
@@ -296,14 +271,11 @@ class WorktreePane(Widget, can_focus=True):
         saved_scroll_y = scroll.scroll_y
         await scroll.remove_children()
         self._loaded = True
-        new_rows: list[WorktreeRow] = []
 
         if not worktrees:
-            self._rows = []
-            self._cursor = -1
             if repo_count == 0:
                 # D-15: no repos registered at all
-                await scroll.mount(
+                scroll.mount(
                     Static(
                         "No repos registered. Add one via settings.",
                         classes="empty-state",
@@ -311,7 +283,7 @@ class WorktreePane(Widget, can_focus=True):
                 )
             else:
                 # D-16: repos exist but all worktrees filtered or errored (D-17)
-                await scroll.mount(
+                scroll.mount(
                     Static(
                         f"No active worktrees. (filtered: {branch_filter})",
                         classes="empty-state",
@@ -328,24 +300,14 @@ class WorktreePane(Widget, can_focus=True):
         available_width = self._get_available_width()
 
         # Render repo sections alphabetically (D-11)
-        first_group = True
         for repo_name in sorted(grouped, key=str.lower):
-            if not first_group:
-                await scroll.mount(Static("", classes="section-spacer"))
-            first_group = False
-            await scroll.mount(GroupHeader(repo_name))
+            scroll.mount(GroupHeader(repo_name))
             # Sort worktrees within repo by branch, case-insensitive (D-12)
             for wt in sorted(grouped[repo_name], key=lambda w: w.branch.lower()):
                 display_path = abbreviate_home(wt.path)
                 display_path = middle_truncate(display_path, available_width)
                 mr_info = mr_data.get((wt.repo_name, wt.branch))
-                row = WorktreeRow(wt, display_path=display_path, mr_info=mr_info)
-                await scroll.mount(row)
-                new_rows.append(row)
-
-        self._rows = new_rows
-        self._cursor = 0 if new_rows else -1
-        self._update_highlight()
+                scroll.mount(WorktreeRow(wt, display_path=display_path, mr_info=mr_info))
 
         scroll.call_after_refresh(lambda: scroll.scroll_to(y=saved_scroll_y, animate=False))
 
@@ -366,44 +328,6 @@ class WorktreePane(Widget, can_focus=True):
             parts.append("mr fetch failed")
         parts.append(timestamp)
         self.border_title = "  ".join(parts)
-
-    def _update_highlight(self) -> None:
-        for row in self._rows:
-            row.remove_class("--highlight")
-        if 0 <= self._cursor < len(self._rows):
-            self._rows[self._cursor].add_class("--highlight")
-            self._rows[self._cursor].scroll_visible()
-
-    def action_cursor_up(self) -> None:
-        if self._cursor > 0:
-            self._cursor -= 1
-            self._update_highlight()
-
-    def action_cursor_down(self) -> None:
-        if self._cursor < len(self._rows) - 1:
-            self._cursor += 1
-            self._update_highlight()
-
-    def action_focus_projects(self) -> None:
-        self.app.query_one("#project-list").focus()
-
-    def action_activate_row(self) -> None:
-        if self._cursor < 0 or self._cursor >= len(self._rows):
-            return
-        row = self._rows[self._cursor]
-        mr_info = row.mr_info
-        if mr_info is not None and mr_info.url:
-            from urllib.parse import urlparse
-            parsed = urlparse(mr_info.url)
-            if parsed.scheme in ("https", "http"):
-                webbrowser.open(mr_info.url)
-        else:
-            config = getattr(self.app, "_config", None)
-            ide = config.ide if config else "Cursor"
-            subprocess.run(
-                ["open", "-a", ide, row.path],
-                check=False,
-            )
 
     def _get_available_width(self) -> int:
         """Return usable content width for path truncation (Pitfall 3 mitigation)."""
