@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Cross-Pane Intelligence
-status: defining_requirements
-stopped_at: Milestone v1.2 started
+status: ready_to_plan
+stopped_at: Roadmap created for v1.2 Cross-Pane Intelligence
 last_updated: "2026-04-14T00:00:00.000Z"
 last_activity: 2026-04-14
 progress:
-  total_phases: 0
+  total_phases: 3
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -21,20 +21,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-14)
 
 **Core value:** Every artifact for the active project, openable instantly from one keyboard-driven interface.
-**Current focus:** Defining requirements for v1.2 Cross-Pane Intelligence
+**Current focus:** Phase 14 — Relationship Foundation & Badges
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-04-14 — Milestone v1.2 started
+Phase: 14 of 16 (Relationship Foundation & Badges)
+Plan: 0 of ? in current phase
+Status: Ready to plan
+Last activity: 2026-04-14 — Roadmap created for v1.2 Cross-Pane Intelligence
+
+Progress: [░░░░░░░░░░] 0% (v1.2 starting)
 
 ## Accumulated Context
 
 ### Decisions
 
-Decisions are logged in PROJECT.MD Key Decisions table.
+Decisions are logged in PROJECT.md Key Decisions table.
 
 Key decisions carried from v1.1:
 - list-form subprocess for all external calls (security)
@@ -48,6 +50,8 @@ Key decisions for v1.2:
 - Agents are marked stale (not deleted) when session disappears
 - Projects without a repo field are excluded from live sync
 - main branch is protected; all work on feature branch, single PR at milestone end
+- Cursor preservation (FOUND-03, FOUND-04) ships in Phase 14 as prerequisite for sync
+- Badge counts bundled with foundation (Phase 14) for early visible proof of resolver
 
 ### Pending Todos
 
@@ -55,4 +59,12 @@ None.
 
 ### Blockers/Concerns
 
-None.
+- [Research CP-1]: Sync loop prevention via boolean guard must be first implementation step in Phase 15
+- [Research CP-2]: "Workers discover, main thread mutates" rule must be enforced in Phase 16 to prevent TOML corruption
+- [Research IP-1]: Synthetic repo object in ProjectDetail must not confuse resolver — use data model, not rendered rows
+
+## Session Continuity
+
+Last session: 2026-04-14
+Stopped at: Roadmap created for v1.2 milestone
+Resume file: None
