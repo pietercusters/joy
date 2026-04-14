@@ -441,6 +441,58 @@ class TestRepoStore:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Project repo field round-trip tests
+# ---------------------------------------------------------------------------
+
+
+class TestProjectRepoRoundTrip:
+    """Tests for repo field on Project TOML serialization/deserialization."""
+
+    def test_round_trip_project_with_repo(self, tmp_path: Path) -> None:
+        """Save a project with repo set, load it back, assert repo preserved."""
+        from joy.store import load_projects, save_projects
+
+        projects_path = tmp_path / "projects.toml"
+        project = Project(name="my-proj", repo="my-repo", created=date(2026, 1, 1))
+        save_projects([project], path=projects_path)
+        loaded = load_projects(path=projects_path)
+
+        assert len(loaded) == 1
+        assert loaded[0].repo == "my-repo"
+
+    def test_round_trip_project_without_repo(self, tmp_path: Path) -> None:
+        """Save a project with repo=None, load it back, assert repo is None."""
+        from joy.store import load_projects, save_projects
+
+        projects_path = tmp_path / "projects.toml"
+        project = Project(name="no-repo", created=date(2026, 1, 1))
+        save_projects([project], path=projects_path)
+        loaded = load_projects(path=projects_path)
+
+        assert len(loaded) == 1
+        assert loaded[0].repo is None
+
+    def test_load_projects_missing_repo_field(self, tmp_path: Path) -> None:
+        """Old projects.toml without repo field loads successfully (backward compat)."""
+        from joy.store import load_projects
+
+        projects_path = tmp_path / "projects.toml"
+        # Write raw TOML without repo field — simulates old file format
+        raw_toml = (
+            '[projects.legacy]\n'
+            'name = "legacy"\n'
+            'created = 2026-01-01\n'
+            'objects = []\n'
+        )
+        projects_path.write_bytes(raw_toml.encode("utf-8"))
+        loaded = load_projects(path=projects_path)
+
+        assert len(loaded) == 1
+        assert loaded[0].name == "legacy"
+        assert loaded[0].repo is None
+
+
 class TestGetRemoteUrl:
     """Tests for get_remote_url() subprocess git integration."""
 

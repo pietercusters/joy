@@ -1,0 +1,23 @@
+{
+  "phase": "3",
+  "phase_name": "activation",
+  "timestamp": "2026-04-11T00:00:00Z",
+  "areas_completed": ["Open-by-default indicator", "Status bar feedback", "Bulk open (O) behavior"],
+  "areas_remaining": ["Key binding scope"],
+  "decisions": {
+    "Open-by-default indicator": [
+      {"question": "Where should the open-by-default indicator appear?", "answer": "Left of icon — filled/empty dot (●/○) before the icon", "options_presented": ["Left of icon", "Right of row (star)", "Row background tint"]}
+    ],
+    "Status bar feedback": [
+      {"question": "How should activation feedback be shown?", "answer": "Textual notify() toast", "options_presented": ["Textual notify() toast", "Footer message", "Header sub_title update"]},
+      {"question": "How verbose should activation messages be?", "answer": "Short with value — e.g. 'Copied: feature/auth-refactor'", "options_presented": ["Short with value", "Action only", "Minimal"]}
+    ],
+    "Bulk open (O) behavior": [
+      {"question": "Sequential or concurrent?", "answer": "Sequential — one at a time in display order", "options_presented": ["Sequential", "Concurrent"]},
+      {"question": "What happens on failure?", "answer": "Continue, report at end — all successful opens proceed, error toast for failures", "options_presented": ["Continue, report at end", "Stop on first failure"]},
+      {"question": "What feedback does O show?", "answer": "One toast per object — consistent with single-object feedback", "options_presented": ["One toast per object", "Summary toast only"]}
+    ]
+  },
+  "deferred_ideas": [],
+  "canonical_refs": [".planning/REQUIREMENTS.md", ".planning/phases/01-foundation/01-CONTEXT.md", ".planning/phases/02-tui-shell/02-CONTEXT.md"]
+}

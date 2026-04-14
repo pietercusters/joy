@@ -210,6 +210,29 @@ class TestProject:
         p1.objects.append(ObjectItem(kind=PresetKind.MR, value="x"))
         assert p2.objects == []
 
+    def test_project_repo_default_none(self) -> None:
+        """Project.repo defaults to None when not specified."""
+        project = Project(name="p")
+        assert project.repo is None
+
+    def test_project_repo_set(self) -> None:
+        """Project.repo stores the value when explicitly set."""
+        project = Project(name="p", repo="joy")
+        assert project.repo == "joy"
+
+    def test_project_to_dict_with_repo(self) -> None:
+        """Project.to_dict() includes 'repo' key when repo is set."""
+        project = Project(name="p", repo="joy", created=date(2026, 1, 1))
+        result = project.to_dict()
+        assert "repo" in result
+        assert result["repo"] == "joy"
+
+    def test_project_to_dict_without_repo(self) -> None:
+        """Project.to_dict() does NOT include 'repo' key when repo is None."""
+        project = Project(name="p", created=date(2026, 1, 1))
+        result = project.to_dict()
+        assert "repo" not in result
+
 
 class TestConfig:
     """Tests for the Config dataclass."""
