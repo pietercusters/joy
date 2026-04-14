@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 Phase: —
 Plan: —
 Status: v1.1 Workspace Intelligence shipped ✅
-Last activity: 2026-04-14
+Last activity: 2026-04-14 - Completed quick task 260414-qk4: bug: in the Worktree overview, when there's an MR available we should go to the MR when clicking Enter. If not, we should go to the worktree.
 
 Progress: ████████████████████ 100% (8/8 phases)
 
@@ -70,6 +70,7 @@ None — clean milestone close.
 | 260414-c4g | Mark slow TUI/filter tests with pytest.mark.slow, exclude by default — suite drops from ~264s to 25.84s | 2026-04-14 | cf15821 | [260414-c4g-the-unit-test-suite-take-too-long-to-run](./quick/260414-c4g-the-unit-test-suite-take-too-long-to-run/) |
 | 260414-nrt | Details pane redesign: columnar layout, repo field, whitespace, legend popup | 2026-04-14 | 9d13330 | [260414-nrt-details-pane-redesign-columnar-layout-re](./quick/260414-nrt-details-pane-redesign-columnar-layout-re/) |
 | 260414-pob | Details pane fixes: open icon restored, legend toggle, semantic grouping, repo as object, indent all panes | 2026-04-14 | b39bf2d | [260414-pob-details-pane-fixes-and-improvements-open](./quick/260414-pob-details-pane-fixes-and-improvements-open/) |
+| 260414-qk4 | bug: in the Worktree overview, when there's an MR available we should go to the MR when clicking Enter. If not, we should go to the worktree. | 2026-04-14 | 7ae1811 | [260414-qk4-bug-in-the-worktree-overview-when-there-](./quick/260414-qk4-bug-in-the-worktree-overview-when-there-/) |
 
 ## Session Continuity
 
