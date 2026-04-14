@@ -62,7 +62,7 @@ class ProjectRow(Static):
 
     def __init__(self, project: Project, **kwargs) -> None:
         self.project = project
-        super().__init__(project.name, **kwargs)
+        super().__init__(f" {project.name}", **kwargs)
 
 
 # ---------------------------------------------------------------------------
