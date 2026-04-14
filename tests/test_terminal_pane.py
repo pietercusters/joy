@@ -44,12 +44,14 @@ def _make_session(
 def _claude_session(
     session_id: str = "c1",
     session_name: str = "claude-joy",
+    foreground_process: str = "claude",
 ) -> TerminalSession:
-    return _make_session(
+    return TerminalSession(
         session_id=session_id,
         session_name=session_name,
-        foreground_process="claude",
+        foreground_process=foreground_process,
         cwd="/Users/pieter/Github/joy",
+        is_claude=True,  # explicitly set — pane uses is_claude, not foreground_process matching
     )
 
 

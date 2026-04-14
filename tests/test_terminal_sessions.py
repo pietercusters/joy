@@ -6,7 +6,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from joy.terminal_sessions import _SHELL_PROCESSES, activate_session, fetch_sessions
+from joy.terminal_sessions import (
+    _SHELL_PROCESSES,
+    _tty_has_claude,
+    activate_session,
+    fetch_sessions,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -19,6 +24,7 @@ def _make_mock_session(
     name: str = "Session 1",
     job_name: str = "zsh",
     cwd: str = "/Users/test",
+    tty: str = "/dev/ttys000",
 ) -> MagicMock:
     """Return a mock iterm2 Session object."""
     session = MagicMock()
@@ -30,6 +36,8 @@ def _make_mock_session(
             return job_name
         if var_name == "path":
             return cwd
+        if var_name == "tty":
+            return tty
         return None
 
     session.async_get_variable = _async_get_variable
@@ -89,6 +97,7 @@ class TestFetchSessions:
                 "iterm2.connection.Connection.run_until_complete",
                 side_effect=run_until_complete,
             ),
+            patch("joy.terminal_sessions._tty_has_claude", return_value=False),
         ):
             result = fetch_sessions()
 
@@ -99,6 +108,7 @@ class TestFetchSessions:
         assert ts.session_name == "Main"
         assert ts.foreground_process == "claude"
         assert ts.cwd == "/Users/test/project"
+        assert ts.is_claude is True  # job_name "claude" matches case-insensitive check
 
     def test_fetch_sessions_returns_none_on_connection_refused(self):
         """fetch_sessions() returns None when Connection raises ConnectionRefusedError."""
@@ -146,6 +156,7 @@ class TestFetchSessions:
                 "iterm2.connection.Connection.run_until_complete",
                 side_effect=run_until_complete,
             ),
+            patch("joy.terminal_sessions._tty_has_claude", return_value=False),
         ):
             result = fetch_sessions()
 
@@ -243,3 +254,132 @@ class TestShellProcesses:
     def test_shell_processes_is_frozenset(self):
         """_SHELL_PROCESSES is a frozenset (immutable)."""
         assert isinstance(_SHELL_PROCESSES, frozenset)
+
+
+# ---------------------------------------------------------------------------
+# _tty_has_claude and _detect_claude tests
+# ---------------------------------------------------------------------------
+
+
+class TestDetectClaude:
+    def test_tty_has_claude_returns_true_when_ps_output_contains_claude(self):
+        """_tty_has_claude returns True when ps lists a process with 'claude' in args."""
+        from joy.terminal_sessions import _tty_has_claude
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                stdout="/usr/local/bin/node /usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js\nzsh\n",
+                returncode=0,
+            )
+            assert _tty_has_claude("/dev/ttys001") is True
+
+    def test_tty_has_claude_returns_false_when_no_claude_in_ps_output(self):
+        """_tty_has_claude returns False when ps output has no claude process."""
+        from joy.terminal_sessions import _tty_has_claude
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(stdout="zsh\nvim\n", returncode=0)
+            assert _tty_has_claude("/dev/ttys001") is False
+
+    def test_tty_has_claude_returns_false_on_empty_tty(self):
+        """_tty_has_claude returns False when tty is empty string."""
+        from joy.terminal_sessions import _tty_has_claude
+        assert _tty_has_claude("") is False
+
+    def test_tty_has_claude_returns_false_on_subprocess_error(self):
+        """_tty_has_claude returns False when subprocess raises."""
+        from joy.terminal_sessions import _tty_has_claude
+        with patch("subprocess.run", side_effect=OSError("not found")):
+            assert _tty_has_claude("/dev/ttys001") is False
+
+    def test_fetch_sessions_detects_claude_via_node_process(self):
+        """fetch_sessions sets is_claude=True when TTY has claude in node args (Node.js case)."""
+        mock_session = _make_mock_session(
+            session_id="w0t0p0:node",
+            name="Work",
+            job_name="node",  # Claude CLI running via Node.js
+            cwd="/Users/test/project",
+            tty="/dev/ttys002",
+        )
+        mock_app = _make_mock_app([mock_session])
+
+        def run_until_complete(coro_fn, retry=False):
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(coro_fn(MagicMock()))
+            finally:
+                loop.close()
+
+        with (
+            patch("iterm2.async_get_app", AsyncMock(return_value=mock_app)),
+            patch(
+                "iterm2.connection.Connection.run_until_complete",
+                side_effect=run_until_complete,
+            ),
+            # TTY probe finds claude in process args
+            patch("joy.terminal_sessions._tty_has_claude", return_value=True),
+        ):
+            result = fetch_sessions()
+
+        assert result is not None
+        assert len(result) == 1
+        assert result[0].is_claude is True
+        assert result[0].foreground_process == "node"  # job name unchanged
+
+    def test_fetch_sessions_detects_claude_via_session_name(self):
+        """fetch_sessions sets is_claude=True when session name contains 'claude'."""
+        mock_session = _make_mock_session(
+            session_id="w0t0p0:named",
+            name="claude-project",  # session named with claude
+            job_name="zsh",
+            cwd="/Users/test",
+        )
+        mock_app = _make_mock_app([mock_session])
+
+        def run_until_complete(coro_fn, retry=False):
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(coro_fn(MagicMock()))
+            finally:
+                loop.close()
+
+        with (
+            patch("iterm2.async_get_app", AsyncMock(return_value=mock_app)),
+            patch(
+                "iterm2.connection.Connection.run_until_complete",
+                side_effect=run_until_complete,
+            ),
+            patch("joy.terminal_sessions._tty_has_claude", return_value=False),
+        ):
+            result = fetch_sessions()
+
+        assert result is not None
+        assert result[0].is_claude is True
+
+    def test_fetch_sessions_is_claude_false_for_plain_shell(self):
+        """fetch_sessions sets is_claude=False for a plain shell session."""
+        mock_session = _make_mock_session(
+            session_id="w0t0p0:shell",
+            name="General",
+            job_name="zsh",
+            cwd="/Users/test",
+        )
+        mock_app = _make_mock_app([mock_session])
+
+        def run_until_complete(coro_fn, retry=False):
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(coro_fn(MagicMock()))
+            finally:
+                loop.close()
+
+        with (
+            patch("iterm2.async_get_app", AsyncMock(return_value=mock_app)),
+            patch(
+                "iterm2.connection.Connection.run_until_complete",
+                side_effect=run_until_complete,
+            ),
+            patch("joy.terminal_sessions._tty_has_claude", return_value=False),
+        ):
+            result = fetch_sessions()
+
+        assert result is not None
+        assert result[0].is_claude is False

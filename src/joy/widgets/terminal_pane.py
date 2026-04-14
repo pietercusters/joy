@@ -228,13 +228,20 @@ class TerminalPane(Widget, can_focus=True):
             scroll.call_after_refresh(lambda: scroll.scroll_to(y=saved_scroll_y, animate=False))
             return
 
-        # Split into Claude sessions (foreground_process == "claude") vs. other
-        claude_sessions = [s for s in sessions if s.foreground_process == "claude"]
-        other_sessions = [s for s in sessions if s.foreground_process != "claude"]
+        from joy.terminal_sessions import _SHELL_PROCESSES  # noqa: PLC0415
 
-        # Sort Claude sessions alphabetically by session_name.
-        # All Claude-group sessions have foreground_process=="claude", so all are "busy".
-        claude_sessions.sort(key=lambda s: s.session_name.lower())
+        # Split into Claude sessions vs. other using the is_claude flag set at fetch time.
+        # is_claude uses multi-signal detection: job name, session name, TTY process list.
+        claude_sessions = [s for s in sessions if s.is_claude]
+        other_sessions = [s for s in sessions if not s.is_claude]
+
+        # Within Claude group: busy (Claude/node is foreground) sorts before waiting
+        # (shell is foreground — Claude is paused/backgrounded), then alpha by name.
+        def _claude_sort_key(s: TerminalSession) -> tuple[int, str]:
+            is_busy = s.foreground_process.lower() not in _SHELL_PROCESSES
+            return (0 if is_busy else 1, s.session_name.lower())
+
+        claude_sessions.sort(key=_claude_sort_key)
 
         # Sort Other sessions alphabetically by session_name
         other_sessions.sort(key=lambda s: s.session_name.lower())
@@ -245,7 +252,8 @@ class TerminalPane(Widget, can_focus=True):
         if claude_sessions:
             scroll.mount(GroupHeader("Claude"))
             for session in claude_sessions:
-                row = SessionRow(session, is_claude=True, is_busy=True)
+                is_busy = session.foreground_process.lower() not in _SHELL_PROCESSES
+                row = SessionRow(session, is_claude=True, is_busy=is_busy)
                 scroll.mount(row)
                 new_rows.append(row)
 

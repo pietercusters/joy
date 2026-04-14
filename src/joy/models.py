@@ -164,6 +164,7 @@ class TerminalSession:
     session_name: str
     foreground_process: str
     cwd: str
+    is_claude: bool = False  # True when claude is detected via multi-signal heuristic
 
 
 def detect_forge(remote_url: str) -> str:
