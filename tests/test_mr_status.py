@@ -26,6 +26,7 @@ GITHUB_PR_JSON = [
         "statusCheckRollup": [
             {"status": "COMPLETED", "conclusion": "SUCCESS", "name": "build"}
         ],
+        "url": "https://github.com/owner/repo/pull/42",
     }
 ]
 
@@ -41,6 +42,7 @@ GITHUB_PR_JSON_MULTI = [
         "statusCheckRollup": [
             {"status": "COMPLETED", "conclusion": "SUCCESS", "name": "build"}
         ],
+        "url": "https://github.com/owner/repo/pull/42",
     },
     {
         "number": 99,
@@ -51,6 +53,7 @@ GITHUB_PR_JSON_MULTI = [
             {"oid": "zzz9999aaa0000", "messageHeadline": "chore: unrelated"}
         ],
         "statusCheckRollup": [],
+        "url": "https://github.com/owner/repo/pull/99",
     },
 ]
 
@@ -61,6 +64,7 @@ GITLAB_MR_JSON = [
         "draft": True,
         "author": {"username": "pieter"},
         "sha": "abcdef0123456789",
+        "web_url": "https://gitlab.com/owner/repo/-/merge_requests/43",
     }
 ]
 
@@ -285,6 +289,7 @@ class TestFetchGithubMrs:
         assert info.author == "@pieter"
         assert info.last_commit_hash == "abc1234"
         assert info.last_commit_msg == "fix: login redirect"
+        assert info.url == "https://github.com/owner/repo/pull/42"
 
     @patch("joy.mr_status.subprocess.run")
     def test_filters_out_non_matching_branches(self, mock_run: MagicMock) -> None:
@@ -336,6 +341,7 @@ class TestFetchGithubMrs:
                 "author": {"login": "dev"},
                 "commits": [],
                 "statusCheckRollup": [],
+                "url": "https://github.com/owner/repo/pull/10",
             }
         ]
         mock_run.return_value = _mock_result(stdout=json.dumps(pr_data))
@@ -350,6 +356,7 @@ class TestFetchGithubMrs:
         info = result[("myrepo", "empty-commits")]
         assert info.last_commit_hash == ""
         assert info.last_commit_msg == ""
+        assert info.url == "https://github.com/owner/repo/pull/10"
 
 
 # ---------------------------------------------------------------------------
@@ -386,6 +393,7 @@ class TestFetchGitlabMrs:
         assert info.author == "@pieter"
         assert info.last_commit_hash == "abcdef0"  # sha[:7] from list endpoint
         assert info.last_commit_msg == ""
+        assert info.url == "https://gitlab.com/owner/repo/-/merge_requests/43"
 
     @patch("joy.mr_status.subprocess.run")
     def test_calls_glab_ci_get_per_branch_with_mr(self, mock_run: MagicMock) -> None:
@@ -398,12 +406,14 @@ class TestFetchGitlabMrs:
                 "source_branch": "branch-a",
                 "draft": False,
                 "author": {"username": "dev1"},
+                "web_url": "https://gitlab.com/owner/repo/-/merge_requests/10",
             },
             {
                 "iid": 11,
                 "source_branch": "branch-b",
                 "draft": False,
                 "author": {"username": "dev2"},
+                "web_url": "https://gitlab.com/owner/repo/-/merge_requests/11",
             },
         ]
         mock_run.side_effect = [
