@@ -109,6 +109,7 @@ class SessionRow(Static):
         **kwargs,
     ) -> None:
         self.session_id = session.session_id
+        self.session_name = session.session_name  # FOUND-04: identity field for cursor preservation
         content = self._build_content(session, is_claude=is_claude, is_busy=is_busy)
         super().__init__(content, **kwargs)
 
@@ -215,6 +216,11 @@ class TerminalPane(Widget, can_focus=True):
         """
         scroll = self.query_one("#terminal-scroll", _TerminalScroll)
         saved_scroll_y = scroll.scroll_y
+        # FOUND-04: save cursor identity before DOM rebuild (D-12, D-13)
+        saved_name: str | None = None
+        saved_index = self._cursor
+        if 0 <= self._cursor < len(self._rows):
+            saved_name = self._rows[self._cursor].session_name
         await scroll.remove_children()
 
         if sessions is None:
@@ -274,7 +280,19 @@ class TerminalPane(Widget, can_focus=True):
                 new_rows.append(row)
 
         self._rows = new_rows
-        self._cursor = 0 if new_rows else -1
+        # FOUND-04: restore cursor by session_name identity (D-13, D-14)
+        if saved_name is not None and new_rows:
+            for i, row in enumerate(new_rows):
+                if row.session_name == saved_name:
+                    self._cursor = i
+                    break
+            else:
+                # Session gone: clamp to saved index (D-14)
+                self._cursor = min(saved_index, len(new_rows) - 1)
+        elif new_rows:
+            self._cursor = 0
+        else:
+            self._cursor = -1
         self._update_highlight()
 
         scroll.call_after_refresh(lambda: scroll.scroll_to(y=saved_scroll_y, animate=False))

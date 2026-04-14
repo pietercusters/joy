@@ -308,6 +308,12 @@ class WorktreePane(Widget, can_focus=True):
             mr_data = {}
         scroll = self.query_one("#worktree-scroll", _WorktreeScroll)
         saved_scroll_y = scroll.scroll_y
+        # FOUND-03: save cursor identity before DOM rebuild (D-12, D-13)
+        saved_identity: tuple[str, str] | None = None
+        saved_index = self._cursor
+        if 0 <= self._cursor < len(self._rows):
+            row = self._rows[self._cursor]
+            saved_identity = (row.repo_name, row.branch)
         await scroll.remove_children()
         self._loaded = True
         new_rows: list[WorktreeRow] = []
@@ -358,7 +364,19 @@ class WorktreePane(Widget, can_focus=True):
                 new_rows.append(row)
 
         self._rows = new_rows
-        self._cursor = 0 if new_rows else -1
+        # FOUND-03: restore cursor by identity (D-13, D-14)
+        if saved_identity is not None and new_rows:
+            for i, row in enumerate(new_rows):
+                if (row.repo_name, row.branch) == saved_identity:
+                    self._cursor = i
+                    break
+            else:
+                # Item gone: clamp to saved index (D-14) — never reset to 0
+                self._cursor = min(saved_index, len(new_rows) - 1)
+        elif new_rows:
+            self._cursor = 0
+        else:
+            self._cursor = -1
         self._update_highlight()
 
         scroll.call_after_refresh(lambda: scroll.scroll_to(y=saved_scroll_y, animate=False))

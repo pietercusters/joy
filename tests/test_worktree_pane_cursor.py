@@ -8,6 +8,8 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import patch
 
+import pytest
+
 from joy.models import MRInfo, WorktreeInfo
 from joy.widgets.worktree_pane import WorktreePane
 
@@ -217,5 +219,102 @@ def test_enter_noop_when_no_rows():
                 await pilot.pause(0.1)
                 mock_wb.open.assert_not_called()
                 mock_sp.run.assert_not_called()
+
+    asyncio.run(_run())
+
+
+@pytest.mark.slow
+def test_cursor_identity_preserved_across_set_worktrees_rebuild():
+    """After a DOM rebuild, cursor stays on same (repo_name, branch) identity (FOUND-03).
+
+    Scenario:
+      1. Load 3 worktrees; navigate to index 1 (feat-2)
+      2. Call set_worktrees() again with same data in different order
+      3. Cursor must still point to the row with branch=='feat-2', not index 1
+    """
+    from textual.app import App, ComposeResult
+
+    from joy.models import WorktreeInfo
+    from joy.widgets.worktree_pane import WorktreePane
+
+    class _TestApp(App):
+        def compose(self) -> ComposeResult:
+            yield WorktreePane()
+
+    async def _run():
+        app = _TestApp()
+        async with app.run_test() as pilot:
+            pane = app.query_one(WorktreePane)
+            worktrees_v1 = [
+                WorktreeInfo("repo-a", "feat-1", "/tmp/wt1"),
+                WorktreeInfo("repo-a", "feat-2", "/tmp/wt2"),
+                WorktreeInfo("repo-a", "feat-3", "/tmp/wt3"),
+            ]
+            await pane.set_worktrees(worktrees_v1)
+            await pilot.pause(0.1)
+            # Navigate to feat-2 (index 1)
+            pane.focus()
+            await pilot.press("j")
+            assert pane._cursor == 1
+            assert pane._rows[1].branch == "feat-2"
+
+            # Rebuild with same worktrees in different order (feat-3 first)
+            worktrees_v2 = [
+                WorktreeInfo("repo-a", "feat-3", "/tmp/wt3"),
+                WorktreeInfo("repo-a", "feat-1", "/tmp/wt1"),
+                WorktreeInfo("repo-a", "feat-2", "/tmp/wt2"),  # now at index 2
+            ]
+            await pane.set_worktrees(worktrees_v2)
+            await pilot.pause(0.1)
+            # Cursor must land on feat-2, which is now at index 2
+            assert pane._rows[pane._cursor].branch == "feat-2", (
+                f"Expected cursor on feat-2, got: {pane._rows[pane._cursor].branch!r} at index {pane._cursor}"
+            )
+
+    asyncio.run(_run())
+
+
+@pytest.mark.slow
+def test_cursor_clamps_when_item_gone_after_rebuild():
+    """When highlighted worktree disappears, cursor clamps to min(saved_index, len-1) (D-14).
+
+    Scenario:
+      1. Load 3 worktrees; navigate to index 2 (last)
+      2. Rebuild with only 1 worktree (last item removed)
+      3. Cursor must be at index 0 (clamped, NOT -1)
+    """
+    from textual.app import App, ComposeResult
+
+    from joy.models import WorktreeInfo
+    from joy.widgets.worktree_pane import WorktreePane
+
+    class _TestApp(App):
+        def compose(self) -> ComposeResult:
+            yield WorktreePane()
+
+    async def _run():
+        app = _TestApp()
+        async with app.run_test() as pilot:
+            pane = app.query_one(WorktreePane)
+            worktrees_v1 = [
+                WorktreeInfo("repo-a", "feat-1", "/tmp/wt1"),
+                WorktreeInfo("repo-a", "feat-2", "/tmp/wt2"),
+                WorktreeInfo("repo-a", "feat-3", "/tmp/wt3"),
+            ]
+            await pane.set_worktrees(worktrees_v1)
+            await pilot.pause(0.1)
+            pane.focus()
+            await pilot.press("j")
+            await pilot.press("j")
+            assert pane._cursor == 2  # at feat-3
+
+            # Rebuild: feat-3 is gone, only feat-1 remains
+            worktrees_v2 = [WorktreeInfo("repo-a", "feat-1", "/tmp/wt1")]
+            await pane.set_worktrees(worktrees_v2)
+            await pilot.pause(0.1)
+            # Clamped to min(2, 0) = 0
+            assert pane._cursor == 0, (
+                f"Expected cursor clamped to 0, got {pane._cursor}"
+            )
 
     asyncio.run(_run())
