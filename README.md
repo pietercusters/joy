@@ -2,6 +2,50 @@
 
 Keyboard-driven Python TUI for managing coding project artifacts. See all your branches, MRs, tickets, worktrees, notes, and more for the active project -- and open any of them with a single keystroke.
 
+## Prerequisites
+
+joy requires these tools for full functionality. Core features (project list, object management) work without them, but worktree discovery, MR status, and terminal integration need:
+
+### 1. iTerm2 with Python API enabled
+
+Open iTerm2 and enable the Python API:
+
+**Preferences -> General -> Magic -> Enable Python API**
+
+This is required for the terminal pane to display active sessions.
+
+### 2. iTerm2 shell integration
+
+Install shell integration for your shell:
+
+```bash
+curl -L https://iterm2.com/shell_integration/zsh -o ~/.iterm2_shell_integration.zsh && source ~/.iterm2_shell_integration.zsh
+```
+
+Add to your `~/.zshrc` to persist:
+
+```bash
+source ~/.iterm2_shell_integration.zsh
+```
+
+### 3. GitHub CLI (`gh`)
+
+Required for MR/CI status on GitHub repositories.
+
+```bash
+brew install gh
+gh auth login
+```
+
+### 4. GitLab CLI (`glab`) -- for GitLab repos
+
+Required for MR/CI status on GitLab repositories. Skip if you only use GitHub.
+
+```bash
+brew install glab
+glab auth login
+```
+
 ## Installation
 
 Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).
