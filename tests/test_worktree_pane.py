@@ -473,6 +473,7 @@ def _sample_mr_info(
     author: str = "@pieter",
     last_commit_hash: str = "abc1234",
     last_commit_msg: str = "fix: login redirect",
+    url: str = "https://github.com/example/repo/pull/42",
 ) -> MRInfo:
     return MRInfo(
         mr_number=mr_number,
@@ -481,6 +482,7 @@ def _sample_mr_info(
         author=author,
         last_commit_hash=last_commit_hash,
         last_commit_msg=last_commit_msg,
+        url=url,
     )
 
 

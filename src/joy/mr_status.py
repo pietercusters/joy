@@ -182,7 +182,7 @@ def _fetch_glab_ci_status(repo: Repo, branch: str) -> str | None:
             return None
         data = json.loads(result.stdout)
         return _map_glab_ci_status(data.get("status"))
-    except (json.JSONDecodeError, Exception):
+    except Exception:
         return None
 
 

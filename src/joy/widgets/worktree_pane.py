@@ -300,7 +300,7 @@ class WorktreePane(Widget, can_focus=True):
             self._cursor = -1
             if repo_count == 0:
                 # D-15: no repos registered at all
-                scroll.mount(
+                await scroll.mount(
                     Static(
                         "No repos registered. Add one via settings.",
                         classes="empty-state",
@@ -308,7 +308,7 @@ class WorktreePane(Widget, can_focus=True):
                 )
             else:
                 # D-16: repos exist but all worktrees filtered or errored (D-17)
-                scroll.mount(
+                await scroll.mount(
                     Static(
                         f"No active worktrees. (filtered: {branch_filter})",
                         classes="empty-state",
@@ -326,14 +326,14 @@ class WorktreePane(Widget, can_focus=True):
 
         # Render repo sections alphabetically (D-11)
         for repo_name in sorted(grouped, key=str.lower):
-            scroll.mount(GroupHeader(repo_name))
+            await scroll.mount(GroupHeader(repo_name))
             # Sort worktrees within repo by branch, case-insensitive (D-12)
             for wt in sorted(grouped[repo_name], key=lambda w: w.branch.lower()):
                 display_path = abbreviate_home(wt.path)
                 display_path = middle_truncate(display_path, available_width)
                 mr_info = mr_data.get((wt.repo_name, wt.branch))
                 row = WorktreeRow(wt, display_path=display_path, mr_info=mr_info)
-                scroll.mount(row)
+                await scroll.mount(row)
                 new_rows.append(row)
 
         self._rows = new_rows
@@ -386,10 +386,15 @@ class WorktreePane(Widget, can_focus=True):
         row = self._rows[self._cursor]
         mr_info = row.mr_info
         if mr_info is not None and mr_info.url:
-            webbrowser.open(mr_info.url)
+            from urllib.parse import urlparse
+            parsed = urlparse(mr_info.url)
+            if parsed.scheme in ("https", "http"):
+                webbrowser.open(mr_info.url)
         else:
+            config = getattr(self.app, "_config", None)
+            ide = config.ide if config else "Cursor"
             subprocess.run(
-                ["open", "-a", self.app._config.ide, row.path],
+                ["open", "-a", ide, row.path],
                 check=False,
             )
 
