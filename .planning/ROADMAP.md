@@ -41,7 +41,7 @@ Full details: `.planning/milestones/v1.1-ROADMAP.md`
 
 **Milestone Goal:** Connect the four panes through a shared relationship model so selecting any item syncs related items across panes, and live refresh automatically propagates changes to project data.
 
-- [ ] **Phase 14: Relationship Foundation & Badges** — Resolver computes cross-pane relationships; cursor preservation survives DOM rebuilds; badge counts prove the index works
+- [x] **Phase 14: Relationship Foundation & Badges** — Resolver computes cross-pane relationships; cursor preservation survives DOM rebuilds; badge counts prove the index works (completed 2026-04-14)
 - [ ] **Phase 15: Cross-Pane Selection Sync** — Selecting any item in any pane syncs cursors across all other panes, with keyboard toggle
 - [ ] **Phase 16: Live Data Propagation** — Background refresh auto-propagates worktree/MR/agent changes to project data
 
@@ -59,9 +59,9 @@ Full details: `.planning/milestones/v1.1-ROADMAP.md`
 **Plans**: 3 plans
 
 Plans:
-- [ ] 14-01-PLAN.md — Relationship resolver: compute_relationships() and RelationshipIndex (TDD)
-- [ ] 14-02-PLAN.md — Cursor identity preservation: WorktreePane and TerminalPane (parallel with 14-01)
-- [ ] 14-03-PLAN.md — Badge wiring: ProjectRow counts, app orchestration, human verify
+- [x] 14-01-PLAN.md — Relationship resolver: compute_relationships() and RelationshipIndex (TDD)
+- [x] 14-02-PLAN.md — Cursor identity preservation: WorktreePane and TerminalPane (parallel with 14-01)
+- [x] 14-03-PLAN.md — Badge wiring: ProjectRow counts, app orchestration, human verify
 
 ### Phase 15: Cross-Pane Selection Sync
 **Goal**: Users can navigate any pane and see all other panes automatically track to related items, with a toggle to turn sync on or off
@@ -112,6 +112,6 @@ Plans:
 | 11. MR & CI Status | v1.1 | 3/3 | ✓ Complete | 2026-04-13 |
 | 12. iTerm2 Integration & Terminal Pane | v1.1 | 3/3 | ✓ Complete | 2026-04-14 |
 | 13. Project Workflow, Settings & Docs | v1.1 | 4/4 | ✓ Complete | 2026-04-14 |
-| 14. Relationship Foundation & Badges | v1.2 | 0/? | Not started | - |
+| 14. Relationship Foundation & Badges | v1.2 | 3/1 | Complete    | 2026-04-14 |
 | 15. Cross-Pane Selection Sync | v1.2 | 0/? | Not started | - |
 | 16. Live Data Propagation | v1.2 | 0/? | Not started | - |
