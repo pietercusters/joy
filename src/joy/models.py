@@ -75,14 +75,18 @@ class Project:
     name: str
     objects: list[ObjectItem] = field(default_factory=list)
     created: date = field(default_factory=date.today)
+    repo: str | None = None
 
     def to_dict(self) -> dict:
         """Serialize to a TOML-compatible dict for the keyed schema."""
-        return {
+        d = {
             "name": self.name,
             "created": self.created,
             "objects": [obj.to_dict() for obj in self.objects],
         }
+        if self.repo is not None:
+            d["repo"] = self.repo
+        return d
 
 
 @dataclass

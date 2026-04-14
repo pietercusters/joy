@@ -90,7 +90,8 @@ def _toml_to_projects(data: dict) -> list[Project]:
                 created = date.today()
         else:
             created = date.today()
-        projects.append(Project(name=name, objects=objects, created=created))
+        repo = proj_data.get("repo")  # None if absent (backward compat)
+        projects.append(Project(name=name, objects=objects, created=created, repo=repo))
     return projects
 
 
