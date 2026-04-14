@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Cross-Pane Intelligence
-status: ready_to_plan
-stopped_at: Roadmap created for v1.2 Cross-Pane Intelligence
-last_updated: "2026-04-14T00:00:00.000Z"
-last_activity: 2026-04-14
+status: planning
+stopped_at: Phase 14 context gathered (discuss mode)
+last_updated: "2026-04-14T18:59:36.046Z"
+last_activity: 2026-04-14 — Roadmap created for v1.2 Cross-Pane Intelligence
 progress:
   total_phases: 3
   completed_phases: 0
@@ -39,12 +39,14 @@ Progress: [░░░░░░░░░░] 0% (v1.2 starting)
 Decisions are logged in PROJECT.md Key Decisions table.
 
 Key decisions carried from v1.1:
+
 - list-form subprocess for all external calls (security)
 - cursor/_rows/--highlight pattern for all scrollable panes
 - lazy import + catch-all for iTerm2 graceful fallback
 - pytest.mark.slow for TUI/integration tests
 
 Key decisions for v1.2:
+
 - Branch is king: branch objects on a project never change automatically
 - MR and Worktree objects follow the branch (auto-add/remove/move)
 - Agents are marked stale (not deleted) when session disappears
@@ -65,6 +67,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-14
-Stopped at: Roadmap created for v1.2 milestone
-Resume file: None
+Last session: 2026-04-14T18:59:36.042Z
+Stopped at: Phase 14 context gathered (discuss mode)
+Resume file: .planning/phases/14-relationship-foundation-badges/14-CONTEXT.md
