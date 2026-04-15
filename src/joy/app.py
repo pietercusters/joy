@@ -221,6 +221,7 @@ class JoyApp(App):
             )
         finally:
             self._is_syncing = False
+        self._apply_worktree_link_status_fast(worktrees)
         self._maybe_compute_relationships()
 
     async def _set_terminal_sessions(self, sessions: list[TerminalSession] | None) -> None:
@@ -347,6 +348,28 @@ class JoyApp(App):
                     self.query_one(ProjectDetail).set_project(current)
             finally:
                 self._is_syncing = False
+
+    def _apply_worktree_link_status_fast(self, worktrees: list[WorktreeInfo]) -> None:
+        """Apply linked/unlinked CSS immediately after worktrees load, without waiting for _rel_index.
+
+        Replicates the worktree-matching passes of compute_relationships so dim styling
+        appears on first render instead of after terminal sessions also complete.
+        """
+        from joy.widgets.worktree_pane import WorktreePane as _WorktreePane  # noqa: PLC0415
+        linked_paths: set[str] = set()
+        linked_branches: set[tuple[str, str]] = set()
+        for project in self._projects:
+            for obj in project.objects:
+                if obj.kind == PresetKind.WORKTREE:
+                    if any(wt.path == obj.value for wt in worktrees):
+                        linked_paths.add(obj.value)
+                elif obj.kind == PresetKind.BRANCH and project.repo is not None:
+                    if any(wt.repo_name == project.repo and wt.branch == obj.value for wt in worktrees):
+                        linked_branches.add((project.repo, obj.value))
+        try:
+            self.query_one(_WorktreePane).set_linked_paths(linked_paths, linked_branches)
+        except Exception:
+            pass
 
     def _update_worktree_link_status(self) -> None:
         """Push linked/unlinked status to WorktreePane rows after rel_index is computed."""
