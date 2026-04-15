@@ -26,7 +26,7 @@ _PANE_HINTS: dict[str, str] = {
     "project-list":   "n: New  e: Rename  D: Delete  R: Assign repo  /: Filter",
     "project-detail": "o: Open  n: Add  e: Edit  d: Delete  D: Force del  space: Toggle",
     "terminal-pane":  "o: Open",
-    "worktrees-pane": "",
+    "worktrees-pane": "i/Enter: Open IDE",
 }
 
 
@@ -256,6 +256,7 @@ class JoyApp(App):
         )
         self._update_badges()
         self._propagate_changes(self._current_mr_data)
+        self._update_worktree_link_status()
 
     def _propagate_mr_auto_add(self, mr_data: dict) -> list[str]:
         """Auto-add MR objects for detected PRs (PROP-02, D-02, D-03, D-05).
@@ -346,6 +347,19 @@ class JoyApp(App):
                     self.query_one(ProjectDetail).set_project(current)
             finally:
                 self._is_syncing = False
+
+    def _update_worktree_link_status(self) -> None:
+        """Push linked/unlinked status to WorktreePane rows after rel_index is computed."""
+        if self._rel_index is None:
+            return
+        from joy.widgets.worktree_pane import WorktreePane as _WorktreePane  # noqa: PLC0415
+        linked_paths: set[str] = set(self._rel_index._project_for_wt_path.keys())
+        linked_branches: set[tuple[str, str]] = set(self._rel_index._project_for_wt_branch.keys())
+        try:
+            pane = self.query_one(_WorktreePane)
+            pane.set_linked_paths(linked_paths, linked_branches)
+        except Exception:
+            pass
 
     def _update_badges(self) -> None:
         """Push RelationshipIndex badge counts to ProjectList rows (D-08, D-11, BADGE-03)."""
@@ -698,7 +712,31 @@ class JoyApp(App):
         self._open_first_of_kind(PresetKind.MR)
 
     def action_open_ide(self) -> None:
-        self._open_first_of_kind(PresetKind.WORKTREE)
+        """Open the highlighted worktree in the IDE (i key — global binding)."""
+        from joy.widgets.worktree_pane import WorktreePane as _WorktreePane  # noqa: PLC0415
+        try:
+            pane = self.query_one(_WorktreePane)
+        except Exception:
+            self.notify("Worktrees pane not available", markup=False)
+            return
+        if pane._cursor < 0 or not pane._rows:
+            self.notify("No worktree selected", markup=False)
+            return
+        self._open_worktree_path(pane._rows[pane._cursor].path)
+
+    @work(thread=True, exit_on_error=False)
+    def _open_worktree_path(self, path: str) -> None:
+        """Open a worktree directory in the configured IDE (background thread)."""
+        import subprocess as _subprocess  # noqa: PLC0415
+        from pathlib import Path as _Path  # noqa: PLC0415
+        if not _Path(path).exists():
+            self.notify(f"Worktree path not found: {path}", severity="warning", markup=False)
+            return
+        ide = self._config.ide or "Cursor"
+        try:
+            _subprocess.run(["open", "-a", ide, path], check=False)
+        except Exception as exc:
+            self.notify(f"Failed to open IDE: {exc}", severity="error", markup=False)
 
     def action_open_ticket(self) -> None:
         self._open_first_of_kind(PresetKind.TICKET)

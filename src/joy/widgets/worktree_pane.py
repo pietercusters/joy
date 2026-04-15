@@ -1,8 +1,6 @@
 """Bottom-right pane: grouped worktree list with status indicators."""
 from __future__ import annotations
 
-import subprocess
-import webbrowser
 from pathlib import Path
 
 from rich.text import Text
@@ -272,6 +270,10 @@ class WorktreePane(Widget, can_focus=True):
     WorktreeRow.--highlight {
         background: $accent 30%;
     }
+    WorktreeRow.--unlinked {
+        color: $text-muted;
+        text-style: dim;
+    }
     WorktreePane .section-spacer {
         height: 1;
     }
@@ -450,22 +452,31 @@ class WorktreePane(Widget, can_focus=True):
         self.app.query_one("#project-list").focus()
 
     def action_activate_row(self) -> None:
+        """Open the highlighted worktree in the IDE (Enter key — delegates to app)."""
         if self._cursor < 0 or self._cursor >= len(self._rows):
             return
-        row = self._rows[self._cursor]
-        mr_info = row.mr_info
-        if mr_info is not None and mr_info.url:
-            from urllib.parse import urlparse
-            parsed = urlparse(mr_info.url)
-            if parsed.scheme in ("https", "http"):
-                webbrowser.open(mr_info.url)
-        else:
-            config = getattr(self.app, "_config", None)
-            ide = config.ide if config else "Cursor"
-            subprocess.run(
-                ["open", "-a", ide, row.path],
-                check=False,
+        self.app.action_open_ide()
+
+    def set_linked_paths(
+        self,
+        linked_paths: set[str],
+        linked_branches: set[tuple[str, str]],
+    ) -> None:
+        """Mark rows as linked or unlinked based on RelationshipIndex data.
+
+        Called from app._update_worktree_link_status after rel_index is computed.
+        Rows not found in either linked_paths or linked_branches get the
+        .--unlinked CSS class; others have it removed.
+        """
+        for row in self._rows:
+            is_linked = (
+                row.path in linked_paths
+                or (row.repo_name, row.branch) in linked_branches
             )
+            if is_linked:
+                row.remove_class("--unlinked")
+            else:
+                row.add_class("--unlinked")
 
     def _get_available_width(self) -> int:
         """Return usable content width for path truncation (Pitfall 3 mitigation)."""

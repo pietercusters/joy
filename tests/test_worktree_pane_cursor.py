@@ -126,88 +126,96 @@ def test_cursor_navigation_k_moves_up():
     asyncio.run(_run())
 
 
-def test_enter_opens_mr_url():
-    """Enter on row with mr_info.url calls webbrowser.open with the URL."""
+def test_enter_always_opens_ide_even_with_mr():
+    """Enter on row with mr_info.url still delegates to action_open_ide (not webbrowser).
+
+    After the mh6 refactor, Enter always opens IDE regardless of MR presence.
+    The old 'Enter -> MR URL' path was removed in favour of a single code path.
+    """
     from textual.app import App, ComposeResult
+
+    from joy.models import Config
+
+    ide_calls: list = []
 
     class _TestApp(App):
         def compose(self) -> ComposeResult:
             yield WorktreePane()
 
+        def action_open_ide(self) -> None:
+            ide_calls.append("called")
+
     async def _run():
         app = _TestApp()
-        with patch("joy.widgets.worktree_pane.webbrowser") as mock_wb:
-            async with app.run_test() as pilot:
-                pane = app.query_one(WorktreePane)
-                wt = _make_worktree("repo-a", "feat-1", "/tmp/wt1")
-                mr = _make_mr_info(url="https://github.com/x/y/pull/1")
-                mr_data = {("repo-a", "feat-1"): mr}
-                await pane.set_worktrees([wt], mr_data=mr_data)
-                await pilot.pause(0.1)
-                pane.focus()
-                await pilot.press("enter")
-                await pilot.pause(0.1)
-                mock_wb.open.assert_called_once_with("https://github.com/x/y/pull/1")
+        app._config = Config(ide="Cursor")
+        async with app.run_test() as pilot:
+            pane = app.query_one(WorktreePane)
+            wt = _make_worktree("repo-a", "feat-1", "/tmp/wt1")
+            mr = _make_mr_info(url="https://github.com/x/y/pull/1")
+            mr_data = {("repo-a", "feat-1"): mr}
+            await pane.set_worktrees([wt], mr_data=mr_data)
+            await pilot.pause(0.1)
+            pane.focus()
+            await pilot.press("enter")
+            await pilot.pause(0.1)
+            assert ide_calls, "Expected action_open_ide to be called when Enter pressed on row with MR"
 
     asyncio.run(_run())
 
 
 def test_enter_opens_ide_when_no_mr():
-    """Enter on row with mr_info=None calls subprocess.run with open -a."""
+    """Enter on row with mr_info=None delegates to action_open_ide."""
     from textual.app import App, ComposeResult
 
     from joy.models import Config
+
+    ide_calls: list = []
 
     class _TestApp(App):
         def compose(self) -> ComposeResult:
             yield WorktreePane()
 
+        def action_open_ide(self) -> None:
+            ide_calls.append("called")
+
     async def _run():
         app = _TestApp()
         app._config = Config(ide="PyCharm")
-        with patch("joy.widgets.worktree_pane.subprocess") as mock_sp:
-            async with app.run_test() as pilot:
-                pane = app.query_one(WorktreePane)
-                wt = _make_worktree("repo-a", "feat-1", "/tmp/wt1")
-                await pane.set_worktrees([wt])
-                await pilot.pause(0.1)
-                pane.focus()
-                await pilot.press("enter")
-                await pilot.pause(0.1)
-                mock_sp.run.assert_called_once()
-                call_args = mock_sp.run.call_args[0][0]
-                assert call_args[:3] == ["open", "-a", "PyCharm"], (
-                    f"Expected open -a PyCharm, got: {call_args}"
-                )
-                assert "/tmp/wt1" in call_args, (
-                    f"Expected worktree path in args, got: {call_args}"
-                )
+        async with app.run_test() as pilot:
+            pane = app.query_one(WorktreePane)
+            wt = _make_worktree("repo-a", "feat-1", "/tmp/wt1")
+            await pane.set_worktrees([wt])
+            await pilot.pause(0.1)
+            pane.focus()
+            await pilot.press("enter")
+            await pilot.pause(0.1)
+            assert ide_calls, "Expected action_open_ide to be called when Enter pressed"
 
     asyncio.run(_run())
 
 
 def test_enter_noop_when_no_rows():
-    """With _cursor == -1 (no rows), Enter does not call webbrowser.open or subprocess.run."""
+    """With _cursor == -1 (no rows), Enter does not call action_open_ide."""
     from textual.app import App, ComposeResult
+
+    ide_calls: list = []
 
     class _TestApp(App):
         def compose(self) -> ComposeResult:
             yield WorktreePane()
 
+        def action_open_ide(self) -> None:
+            ide_calls.append("called")
+
     async def _run():
         app = _TestApp()
-        with (
-            patch("joy.widgets.worktree_pane.webbrowser") as mock_wb,
-            patch("joy.widgets.worktree_pane.subprocess") as mock_sp,
-        ):
-            async with app.run_test() as pilot:
-                pane = app.query_one(WorktreePane)
-                # No set_worktrees call — _cursor remains -1
-                assert pane._cursor == -1
-                pane.focus()
-                await pilot.press("enter")
-                await pilot.pause(0.1)
-                mock_wb.open.assert_not_called()
-                mock_sp.run.assert_not_called()
+        async with app.run_test() as pilot:
+            pane = app.query_one(WorktreePane)
+            # No set_worktrees call — _cursor remains -1
+            assert pane._cursor == -1
+            pane.focus()
+            await pilot.press("enter")
+            await pilot.pause(0.1)
+            assert not ide_calls, "Expected no action_open_ide call when no rows"
 
     asyncio.run(_run())
