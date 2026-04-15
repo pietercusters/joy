@@ -311,6 +311,41 @@ def test_config_backward_compat_missing_new_fields(tmp_path: Path) -> None:
     loaded = load_config(path=config_path)
     assert loaded.refresh_interval == 30
     assert loaded.branch_filter == ["main", "testing"]
+    # backward compat: "agents" should be read as "terminals"
+    assert loaded.default_open_kinds == ["worktree", "terminals"]
+
+
+def test_backward_compat_agents_kind_loads_as_terminals(tmp_path: Path) -> None:
+    """Old TOML files with kind='agents' should produce PresetKind.TERMINALS objects."""
+    from joy.store import load_projects
+    from joy.models import PresetKind
+
+    projects_path = tmp_path / "projects.toml"
+    raw_toml = (
+        '[projects.legacy]\n'
+        'name = "legacy"\n'
+        'created = 2026-01-01\n'
+        '[[projects.legacy.objects]]\n'
+        'kind = "agents"\n'
+        'value = "my-session"\n'
+    )
+    projects_path.write_bytes(raw_toml.encode("utf-8"))
+    loaded = load_projects(path=projects_path)
+
+    assert len(loaded) == 1
+    assert len(loaded[0].objects) == 1
+    assert loaded[0].objects[0].kind == PresetKind.TERMINALS
+    assert loaded[0].objects[0].value == "my-session"
+
+
+def test_backward_compat_config_agents_replaced_with_terminals(tmp_path: Path) -> None:
+    """Old config.toml with 'agents' in default_open_kinds reads as 'terminals'."""
+    from joy.store import load_config
+
+    config_path = tmp_path / "config.toml"
+    config_path.write_bytes(b'default_open_kinds = ["worktree", "agents"]')
+    loaded = load_config(path=config_path)
+    assert loaded.default_open_kinds == ["worktree", "terminals"]
 
 
 # ---------------------------------------------------------------------------

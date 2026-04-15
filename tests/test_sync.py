@@ -103,7 +103,7 @@ def _make_project_with_worktree(
 ) -> Project:
     objects = [ObjectItem(kind=PresetKind.WORKTREE, value=wt_path, label="wt")]
     if agents_session is not None:
-        objects.append(ObjectItem(kind=PresetKind.AGENTS, value=agents_session, label="agents"))
+        objects.append(ObjectItem(kind=PresetKind.TERMINALS, value=agents_session, label="agents"))
     return Project(name=name, repo=repo, objects=objects)
 
 
@@ -175,7 +175,7 @@ def test_sync_project_to_terminal():
     proj = Project(
         name="myproject",
         repo="myrepo",
-        objects=[ObjectItem(kind=PresetKind.AGENTS, value="myrepo-agents", label="agents")],
+        objects=[ObjectItem(kind=PresetKind.TERMINALS, value="myrepo-agents", label="agents")],
     )
     session = _make_session("s1", "myrepo-agents")
     index = compute_relationships([proj], [], [session], [])
@@ -186,7 +186,7 @@ def test_sync_project_to_terminal():
     row2 = FakeSessionRow(session_name="third-session")
     pane = FakeTerminalPane([row0, row1, row2])
 
-    agents = index.agents_for(proj)
+    agents = index.terminals_for(proj)
     assert len(agents) == 1, "resolver must find the agent session"
 
     # Happy path: sync_to should move cursor to index 1
@@ -245,7 +245,7 @@ def test_sync_worktree_to_terminal():
     """SYNC-04: selecting a worktree moves TerminalPane cursor to the agent session of the owning project.
 
     After Plan 02: when a worktree row is highlighted, find its project via
-    project_for_worktree(), then find agents_for(project) and sync TerminalPane.
+    project_for_worktree(), then find terminals_for(project) and sync TerminalPane.
     """
     # Project owns both a worktree and an agent session
     proj = _make_project_with_worktree(
@@ -263,7 +263,7 @@ def test_sync_worktree_to_terminal():
 
     matched_project = index.project_for_worktree(wt)
     assert matched_project is not None
-    agents = index.agents_for(matched_project)
+    agents = index.terminals_for(matched_project)
     assert len(agents) == 1
 
     # Happy path: sync_to should move cursor to index 1
@@ -284,7 +284,7 @@ def test_sync_agent_to_project():
     proj = Project(
         name="myproject",
         repo="myrepo",
-        objects=[ObjectItem(kind=PresetKind.AGENTS, value="myrepo-agents", label="agents")],
+        objects=[ObjectItem(kind=PresetKind.TERMINALS, value="myrepo-agents", label="agents")],
     )
     session = _make_session("s1", "myrepo-agents")
     index = compute_relationships([proj], [], [session], [])
@@ -297,7 +297,7 @@ def test_sync_agent_to_project():
     row2 = FakeProjectRow(project=proj_third)
     pane = FakeProjectList([row0, row1, row2])
 
-    matched_project = index.project_for_agent(session.session_name)
+    matched_project = index.project_for_terminal(session.session_name)
     assert matched_project is not None
 
     # Happy path: sync_to should move cursor to index 1
@@ -333,7 +333,7 @@ def test_sync_agent_to_worktree():
     row2 = FakeRow(repo_name="third-repo", branch="develop", path="/tmp/third")
     pane = FakeWorktreePane([row0, row1, row2])
 
-    matched_project = index.project_for_agent(session.session_name)
+    matched_project = index.project_for_terminal(session.session_name)
     assert matched_project is not None
     worktrees = index.worktrees_for(matched_project)
     assert len(worktrees) == 1

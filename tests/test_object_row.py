@@ -175,6 +175,6 @@ def test_success_message_worktree(sample_config):
 
 def test_success_message_iterm(sample_config):
     """Test 16: _success_message for ITERM type returns 'Opened in iTerm2: {display}'."""
-    item = ObjectItem(kind=PresetKind.AGENTS, value="project-agents", label="Agents")
+    item = ObjectItem(kind=PresetKind.TERMINALS, value="project-agents", label="Terminals")
     msg = _success_message(item, sample_config)
-    assert msg == "Opened in iTerm2: Agents"
+    assert msg == "Opened in iTerm2: Terminals"

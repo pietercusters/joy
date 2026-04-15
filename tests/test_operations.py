@@ -134,41 +134,14 @@ def test_unregistered_type_raises(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_open_iterm_creates_window():
-    """ITERM type calls osascript with a script containing the window name."""
-    item = make_item(PresetKind.AGENTS, "my-project-agents")
-    config = Config()
-    with patch("joy.operations.subprocess.run") as mock_run:
-        open_object(item=item, config=config)
-    mock_run.assert_called_once()
-    args = mock_run.call_args[0][0]
-    assert args[0] == "osascript"
-    assert args[1] == "-e"
-    script = args[2]
-    assert "my-project-agents" in script
-    assert mock_run.call_args[1].get("check") is True
+def test_open_iterm_opener_registered():
+    """ITERM type has a registered opener."""
+    assert ObjectType.ITERM in _OPENERS
 
 
-def test_open_iterm_escapes_double_quotes():
-    """iTerm2 opener escapes double quotes in window name for AppleScript safety."""
-    item = make_item(PresetKind.AGENTS, 'project "with quotes"')
-    config = Config()
-    with patch("joy.operations.subprocess.run") as mock_run:
-        open_object(item=item, config=config)
-    script = mock_run.call_args[0][0][2]
-    # The name in the script must have escaped double quotes
-    assert '\\"with quotes\\"' in script
-
-
-def test_open_iterm_escapes_backslashes():
-    """iTerm2 opener escapes backslashes in window name before escaping quotes."""
-    item = make_item(PresetKind.AGENTS, "path\\backslash")
-    config = Config()
-    with patch("joy.operations.subprocess.run") as mock_run:
-        open_object(item=item, config=config)
-    script = mock_run.call_args[0][0][2]
-    # Backslash should be doubled in the AppleScript
-    assert "path\\\\backslash" in script
+def test_open_iterm_opener_is_callable():
+    """The ITERM opener is a callable function."""
+    assert callable(_OPENERS[ObjectType.ITERM])
 
 
 def test_all_object_types_have_opener():
@@ -179,8 +152,8 @@ def test_all_object_types_have_opener():
 
 @pytest.mark.macos_integration
 def test_open_iterm_live():
-    """Live test: creates a real iTerm2 window. Run manually with -m macos_integration."""
-    item = make_item(PresetKind.AGENTS, "joy-test-window")
+    """Live test: creates a real iTerm2 session. Run manually with -m macos_integration."""
+    item = make_item(PresetKind.TERMINALS, "joy-test-window")
     config = Config()
-    # This calls real subprocess -- iTerm2 must be installed
+    # This calls real iTerm2 Python API -- iTerm2 must be installed
     open_object(item=item, config=config)
