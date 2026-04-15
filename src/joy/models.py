@@ -159,9 +159,6 @@ class MRInfo:
     mr_number: int
     is_draft: bool
     ci_status: str | None  # "pass" | "fail" | "pending" | None
-    author: str  # "@login" format
-    last_commit_hash: str  # 7-char short hash, or "" if unavailable
-    last_commit_msg: str  # commit headline, or "" if unavailable
     url: str = ""  # Full MR/PR web URL, e.g. https://github.com/x/y/pull/1
 
 

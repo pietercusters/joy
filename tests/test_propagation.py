@@ -34,15 +34,7 @@ def _project_with_branch(repo: str | None, branch: str) -> Project:
 def _mr_data(repo: str, branch: str, url: str, number: int) -> dict:
     """Return an mr_data dict with a single entry."""
     return {
-        (repo, branch): MRInfo(
-            mr_number=number,
-            is_draft=False,
-            ci_status=None,
-            author="@user",
-            last_commit_hash="abc1234",
-            last_commit_msg="feat: something",
-            url=url,
-        )
+        (repo, branch): MRInfo(mr_number=number, is_draft=False, ci_status=None, url=url)
     }
 
 

@@ -26,15 +26,7 @@ def _make_worktree(
 
 
 def _make_mr_info(url: str = "https://github.com/x/y/pull/1") -> MRInfo:
-    return MRInfo(
-        mr_number=1,
-        is_draft=False,
-        ci_status=None,
-        author="@dev",
-        last_commit_hash="abc1234",
-        last_commit_msg="feat: thing",
-        url=url,
-    )
+    return MRInfo(mr_number=1, is_draft=False, ci_status=None, url=url)
 
 
 # ---------------------------------------------------------------------------

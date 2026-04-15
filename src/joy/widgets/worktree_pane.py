@@ -207,19 +207,7 @@ class WorktreeRow(Static):
             t.append(f" {ICON_NO_UPSTREAM}", style="dim")
         t.append("\n")
 
-        # D-01: Line 2 is context-sensitive
-        if mr_info is not None and (mr_info.author or mr_info.last_commit_hash):
-            parts = []
-            if mr_info.author:
-                parts.append(mr_info.author)
-            if mr_info.last_commit_hash:
-                commit_text = mr_info.last_commit_hash
-                if mr_info.last_commit_msg:
-                    commit_text += f" {mr_info.last_commit_msg}"
-                parts.append(commit_text)
-            t.append(f"  {'  '.join(parts)}", style="dim")
-        else:
-            t.append(f"  {display_path}", style="dim")
+        t.append(f"  {display_path}", style="dim")
 
         return t
 

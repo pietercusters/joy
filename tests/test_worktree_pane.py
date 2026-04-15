@@ -452,17 +452,11 @@ def _sample_mr_info(
     mr_number: int = 42,
     is_draft: bool = False,
     ci_status: str | None = "pass",
-    author: str = "@pieter",
-    last_commit_hash: str = "abc1234",
-    last_commit_msg: str = "fix: login redirect",
 ) -> MRInfo:
     return MRInfo(
         mr_number=mr_number,
         is_draft=is_draft,
         ci_status=ci_status,
-        author=author,
-        last_commit_hash=last_commit_hash,
-        last_commit_msg=last_commit_msg,
     )
 
 
@@ -541,24 +535,13 @@ def test_build_content_ci_none_blank():
     assert ICON_CI_PENDING not in text
 
 
-def test_build_content_mr_author_on_line2():
-    """MR present -> line 2 shows @author."""
+def test_build_content_mr_path_on_line2():
+    """MR present -> line 2 still shows path (never author/commit)."""
     content = WorktreeRow.build_content(
-        "feat-x", False, True, "~/path", mr_info=_sample_mr_info(author="@pieter")
+        "feat-x", False, True, "~/path", mr_info=_sample_mr_info()
     )
     lines = str(content).split("\n")
-    assert "@pieter" in lines[1], f"Expected @pieter on line 2, got: {lines[1]}"
-
-
-def test_build_content_mr_commit_on_line2():
-    """MR present -> line 2 shows commit hash + message."""
-    content = WorktreeRow.build_content(
-        "feat-x", False, True, "~/path",
-        mr_info=_sample_mr_info(last_commit_hash="abc1234", last_commit_msg="fix: login redirect"),
-    )
-    lines = str(content).split("\n")
-    assert "abc1234" in lines[1], f"Expected commit hash on line 2, got: {lines[1]}"
-    assert "fix: login redirect" in lines[1], f"Expected commit msg on line 2, got: {lines[1]}"
+    assert "~/path" in lines[1], f"Expected path on line 2, got: {lines[1]}"
 
 
 def test_build_content_no_mr_path_on_line2():

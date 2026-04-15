@@ -94,32 +94,21 @@ class TestMRInfoDataclass:
     """Verify MRInfo dataclass has correct fields per D-08."""
 
     def test_mrinfo_has_all_fields(self) -> None:
-        """MRInfo has mr_number, is_draft, ci_status, author, last_commit_hash, last_commit_msg."""
+        """MRInfo has mr_number, is_draft, ci_status, url."""
         info = MRInfo(
             mr_number=42,
             is_draft=False,
             ci_status="pass",
-            author="@pieter",
-            last_commit_hash="abc1234",
-            last_commit_msg="fix: login redirect",
+            url="https://github.com/x/y/pull/42",
         )
         assert info.mr_number == 42
         assert info.is_draft is False
         assert info.ci_status == "pass"
-        assert info.author == "@pieter"
-        assert info.last_commit_hash == "abc1234"
-        assert info.last_commit_msg == "fix: login redirect"
+        assert info.url == "https://github.com/x/y/pull/42"
 
     def test_mrinfo_ci_status_none(self) -> None:
         """MRInfo ci_status can be None."""
-        info = MRInfo(
-            mr_number=1,
-            is_draft=False,
-            ci_status=None,
-            author="@test",
-            last_commit_hash="",
-            last_commit_msg="",
-        )
+        info = MRInfo(mr_number=1, is_draft=False, ci_status=None)
         assert info.ci_status is None
 
 
@@ -286,9 +275,6 @@ class TestFetchGithubMrs:
         assert info.mr_number == 42
         assert info.is_draft is False
         assert info.ci_status == "pass"
-        assert info.author == "@pieter"
-        assert info.last_commit_hash == "abc1234"
-        assert info.last_commit_msg == "fix: login redirect"
         assert info.url == "https://github.com/owner/repo/pull/42"
 
     @patch("joy.mr_status.subprocess.run")
@@ -328,35 +314,6 @@ class TestFetchGithubMrs:
         with pytest.raises(RuntimeError, match="not authenticated"):
             _fetch_github_mrs(repo, {"feat-login"})
 
-    @patch("joy.mr_status.subprocess.run")
-    def test_empty_commits_list(self, mock_run: MagicMock) -> None:
-        """PR with empty commits list returns empty hash and msg."""
-        from joy.mr_status import _fetch_github_mrs
-
-        pr_data = [
-            {
-                "number": 10,
-                "headRefName": "empty-commits",
-                "isDraft": False,
-                "author": {"login": "dev"},
-                "commits": [],
-                "statusCheckRollup": [],
-                "url": "https://github.com/owner/repo/pull/10",
-            }
-        ]
-        mock_run.return_value = _mock_result(stdout=json.dumps(pr_data))
-        repo = Repo(
-            name="myrepo",
-            local_path="/tmp/repo",
-            remote_url="https://github.com/owner/repo",
-            forge="github",
-        )
-        result = _fetch_github_mrs(repo, {"empty-commits"})
-
-        info = result[("myrepo", "empty-commits")]
-        assert info.last_commit_hash == ""
-        assert info.last_commit_msg == ""
-        assert info.url == "https://github.com/owner/repo/pull/10"
 
 
 # ---------------------------------------------------------------------------
@@ -390,9 +347,6 @@ class TestFetchGitlabMrs:
         assert info.mr_number == 43
         assert info.is_draft is True
         assert info.ci_status == "pass"  # "success" maps to "pass"
-        assert info.author == "@pieter"
-        assert info.last_commit_hash == "abcdef0"  # sha[:7] from list endpoint
-        assert info.last_commit_msg == ""
         assert info.url == "https://gitlab.com/owner/repo/-/merge_requests/43"
 
     @patch("joy.mr_status.subprocess.run")

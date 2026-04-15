@@ -529,19 +529,13 @@ class JoyApp(App):
 
     @work(thread=True)
     def action_open_ide(self) -> None:
-        """Open the IDE on the first detected worktree for the active project ('i' binding)."""
-        detail = self.query_one(ProjectDetail)
-        project = detail._project
-        if project is None:
-            return  # data not loaded yet
+        """Open the IDE on the highlighted worktree row ('i' binding)."""
+        wt_pane = self.query_one(WorktreePane)
+        if wt_pane._cursor < 0 or wt_pane._cursor >= len(wt_pane._rows):
+            return
+        row = wt_pane._rows[wt_pane._cursor]
         ide = self._config.ide or "Cursor"
-        if self._rel_index is None:
-            return  # worktrees not loaded yet
-        worktrees = self._rel_index.worktrees_for(project)
-        if not worktrees:
-            return  # no worktree detected for this project
-        wt = worktrees[0]
-        subprocess.run(["open", "-a", ide, wt.path], check=False)
+        subprocess.run(["open", "-a", ide, row.path], check=False)
 
     def action_open_all_defaults(self) -> None:
         """Open all open_by_default objects for the current project (ACT-02, D-10)."""
