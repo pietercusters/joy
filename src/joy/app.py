@@ -194,9 +194,13 @@ class JoyApp(App):
         # Phase 14: store for resolver and set ready-flag (D-07, D-08)
         self._current_worktrees = worktrees
         self._worktrees_ready = True
-        await self.query_one(WorktreePane).set_worktrees(
-            worktrees, repo_count=repo_count, branch_filter=branch_filter, mr_data=mr_data
-        )
+        self._is_syncing = True  # suppress cross-pane sync during pane rebuild
+        try:
+            await self.query_one(WorktreePane).set_worktrees(
+                worktrees, repo_count=repo_count, branch_filter=branch_filter, mr_data=mr_data
+            )
+        finally:
+            self._is_syncing = False
         self._maybe_compute_relationships()
 
     async def _set_terminal_sessions(self, sessions: list[TerminalSession] | None) -> None:
@@ -204,7 +208,11 @@ class JoyApp(App):
         # Phase 14: store for resolver (treat None as empty — pitfall 2 avoidance)
         self._current_sessions = sessions or []
         self._sessions_ready = True
-        await self.query_one(TerminalPane).set_sessions(sessions)
+        self._is_syncing = True  # suppress cross-pane sync during pane rebuild
+        try:
+            await self.query_one(TerminalPane).set_sessions(sessions)
+        finally:
+            self._is_syncing = False
         self._maybe_compute_relationships()
 
     def _maybe_compute_relationships(self) -> None:
