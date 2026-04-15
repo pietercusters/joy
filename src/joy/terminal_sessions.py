@@ -118,7 +118,7 @@ def create_session(name: str) -> str | None:
         if window is None:
             return
         tab = await window.async_create_tab()
-        if tab is None:
+        if tab is None or not tab.sessions:
             return
         session = tab.sessions[0]
         await session.async_set_name(name)

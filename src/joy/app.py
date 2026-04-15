@@ -306,7 +306,11 @@ class JoyApp(App):
         """
         messages: list[str] = []
         if not self._current_sessions:
-            return messages  # empty/None = iTerm2 hiccup; skip removal
+            # Empty list = either iTerm2 hiccup or genuinely no sessions.
+            # Per decision #2 (simplest option): skip auto-removal in both cases.
+            # Objects linked to sessions that are all-gone simultaneously are preserved
+            # until at least one other session is present (low-risk edge case).
+            return messages
         active_sessions = {s.session_name for s in self._current_sessions}
         for project in self._projects:
             removed_names = [

@@ -96,12 +96,15 @@ def _open_iterm(item: ObjectItem, config: Config) -> None:
         if window is None:
             return
         tab = await window.async_create_tab()
-        if tab is None:
+        if tab is None or not tab.sessions:
             return
         session = tab.sessions[0]
         await session.async_set_name(name)
         success = True
 
-    Connection().run_until_complete(_open, retry=False)
+    try:
+        Connection().run_until_complete(_open, retry=False)
+    except Exception:
+        pass
     if not success:
         raise RuntimeError(f"Failed to open iTerm2 session '{name}'")

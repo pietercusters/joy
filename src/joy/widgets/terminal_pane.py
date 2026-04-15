@@ -483,15 +483,19 @@ class TerminalPane(Widget, can_focus=True):
         if self._cursor < 0 or self._cursor >= len(self._rows):
             return
         row = self._rows[self._cursor]
+        # Capture by value before pushing modal — row may be replaced by a background refresh
+        # before the user confirms, causing the closure to reference stale widget state (WR-02).
+        session_id = row.session_id
+        session_name = row.session_name
         from joy.screens import ConfirmationModal  # noqa: PLC0415
 
         def on_confirm(confirmed: bool) -> None:
             if not confirmed:
                 return
-            self._do_close_session(row.session_id, row.session_name, force=False)
+            self._do_close_session(session_id, session_name, force=False)
 
         self.app.push_screen(
-            ConfirmationModal("Close Session", f"Close '{row.session_name}'?", hint="Enter to close, Escape to cancel"),
+            ConfirmationModal("Close Session", f"Close '{session_name}'?", hint="Enter to close, Escape to cancel"),
             on_confirm,
         )
 
@@ -532,17 +536,20 @@ class TerminalPane(Widget, can_focus=True):
         if self._cursor < 0 or self._cursor >= len(self._rows):
             return
         row = self._rows[self._cursor]
+        # Capture by value before pushing modal — row may be replaced by a background refresh.
+        session_id = row.session_id
+        session_name = row.session_name
         from joy.screens import ConfirmationModal  # noqa: PLC0415
 
         def on_confirm(confirmed: bool) -> None:
             if not confirmed:
                 return
-            self._do_close_session(row.session_id, row.session_name, force=True)
+            self._do_close_session(session_id, session_name, force=True)
 
         self.app.push_screen(
             ConfirmationModal(
                 "Force Close Session",
-                f"Force close '{row.session_name}'?",
+                f"Force close '{session_name}'?",
                 hint="Enter to force close, Escape to cancel",
             ),
             on_confirm,
