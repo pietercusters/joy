@@ -105,6 +105,7 @@ class ProjectList(Widget, can_focus=True):
         Binding("j", "cursor_down", "Down", show=False),
         Binding("k", "cursor_up", "Up", show=False),
         Binding("enter", "select_project", "Open"),
+        Binding("n", "new_project", "New", show=True),
         Binding("e", "rename_project", "Rename", show=True),
         Binding("D", "delete_project", "Delete", show=True),
         Binding("delete", "delete_project", "Delete", show=False),
@@ -352,6 +353,10 @@ class ProjectList(Widget, can_focus=True):
             RepoPickerModal(self._repos, current_repo=project.repo),
             on_pick,
         )
+
+    def action_new_project(self) -> None:
+        """Delegate to JoyApp.action_new_project (n only fires from project list focus)."""
+        self.app.action_new_project()
 
     def action_filter(self) -> None:
         """Enter filter mode: mount Input above the scroll container (D-06)."""

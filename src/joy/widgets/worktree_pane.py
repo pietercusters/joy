@@ -179,6 +179,7 @@ class WorktreeRow(Static):
         if is_default_branch:
             t.append(f" {ICON_BRANCH} ", style="dim")
             t.append(branch, style="dim")
+            t.append("  [i]", style="dim")
             t.append("\n")
             t.append(f"  {display_path}", style="dim")
             return t
@@ -205,6 +206,7 @@ class WorktreeRow(Static):
             t.append(f" {ICON_DIRTY}", style="yellow")
         if not has_upstream:
             t.append(f" {ICON_NO_UPSTREAM}", style="dim")
+        t.append("  [i]", style="dim")
         t.append("\n")
 
         # D-01: Line 2 is context-sensitive
@@ -250,6 +252,7 @@ class WorktreePane(Widget, can_focus=True):
         Binding("k", "cursor_up", "Up"),
         Binding("j", "cursor_down", "Down"),
         Binding("enter", "activate_row", "Open"),
+        Binding("o", "activate_row", "Open", show=False),
     ]
 
     DEFAULT_CSS = """

@@ -4,6 +4,8 @@ from __future__ import annotations
 import pytest
 from unittest.mock import patch
 
+from textual.binding import Binding
+
 from joy.app import JoyApp
 from joy.models import ObjectItem, PresetKind, Project
 
@@ -657,3 +659,65 @@ async def test_s_save_persists_config(mock_store):
             await pilot.pause(0.2)
             await app.workers.wait_for_complete()
             assert mock_cfg.called, "save_config should have been called"
+
+
+# ---------------------------------------------------------------------------
+# Bug fix: n key should only fire new-project from ProjectList focus
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_n_does_not_fire_from_terminal_pane(mock_store, mock_save):
+    """Bug fix: n should NOT trigger new-project when TerminalPane has focus."""
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        initial_count = len(app._projects)
+        # Focus the terminal pane by clicking or tab navigation
+        terminal = app.query_one("#terminal-pane")
+        terminal.focus()
+        await pilot.pause(0.1)
+        # Press n — should NOT open the new-project modal
+        await pilot.press("n")
+        await pilot.pause(0.2)
+        # No modal should be on the screen stack (just the default screen)
+        assert len(app.screen_stack) == 1, "n should not open modal from TerminalPane"
+        assert len(app._projects) == initial_count
+
+
+# ---------------------------------------------------------------------------
+# Bug fix: o key should open in WorktreePane and TerminalPane
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_o_opens_in_worktree_pane(mock_store, mock_save):
+    """Bug fix: o should trigger activate_row (same as Enter) in WorktreePane."""
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        wt_pane = app.query_one("#worktrees-pane")
+        wt_pane.focus()
+        await pilot.pause(0.1)
+        # Verify o binding exists and maps to activate_row
+        bindings = [b for b in wt_pane.BINDINGS if isinstance(b, Binding) and b.key == "o"]
+        assert len(bindings) == 1, "WorktreePane should have an 'o' binding"
+        assert bindings[0].action == "activate_row"
+
+
+@pytest.mark.asyncio
+async def test_o_opens_in_terminal_pane(mock_store, mock_save):
+    """Bug fix: o should trigger focus_session (same as Enter) in TerminalPane."""
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        tp = app.query_one("#terminal-pane")
+        tp.focus()
+        await pilot.pause(0.1)
+        # Verify o binding exists and maps to focus_session
+        bindings = [b for b in tp.BINDINGS if isinstance(b, Binding) and b.key == "o"]
+        assert len(bindings) == 1, "TerminalPane should have an 'o' binding"
+        assert bindings[0].action == "focus_session"

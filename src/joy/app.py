@@ -51,7 +51,6 @@ class JoyApp(App):
     BINDINGS = [
         ("q", "quit", "Quit"),
         Binding("shift+o,O", "open_all_defaults", "Open All", priority=True),
-        Binding("n", "new_project", "New", priority=True),
         Binding("s", "settings", "Settings", priority=True),
         Binding("r", "refresh_worktrees", "Refresh", priority=True),
         Binding("l", "legend", "Legend", priority=True),

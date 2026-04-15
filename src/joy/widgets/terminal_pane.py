@@ -141,6 +141,9 @@ class SessionRow(Static):
         cwd = _abbreviate_home(session.cwd)
         t.append(f"  {cwd}", style="dim")
 
+        # Global shortcut hint
+        t.append("  [h]", style="dim")
+
         return t
 
 
@@ -171,6 +174,7 @@ class TerminalPane(Widget, can_focus=True):
         Binding("k", "cursor_up", "Up"),
         Binding("j", "cursor_down", "Down"),
         Binding("enter", "focus_session", "Focus"),
+        Binding("o", "focus_session", "Open", show=False),
     ]
 
     DEFAULT_CSS = """
