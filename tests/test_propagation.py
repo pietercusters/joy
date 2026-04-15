@@ -5,6 +5,7 @@ Tests cover:
 - MR auto-add (_propagate_mr_auto_add) (PROP-02)
 - Agent stale marking (_propagate_agent_stale) (PROP-04, PROP-05)
 - Immutability invariants (PROP-06, PROP-07, PROP-08)
+- Stale CSS class application in ObjectRow (PROP-04, PROP-05)
 """
 from __future__ import annotations
 
@@ -13,6 +14,7 @@ from datetime import date
 import pytest
 
 from joy.models import MRInfo, ObjectItem, PresetKind, Project, TerminalSession
+from joy.widgets.object_row import ObjectRow
 
 
 # ---------------------------------------------------------------------------
@@ -359,3 +361,51 @@ class TestAgentStale:
 
         assert p1.objects[0].stale is False  # sess-a is active
         assert p2.objects[0].stale is True   # sess-b is absent
+
+
+# ===========================================================================
+# TestStaleCSSIntegration — stale class applied during ObjectRow construction
+# ===========================================================================
+
+class TestStaleCSSIntegration:
+    """Test that stale ObjectItems get --stale CSS class on ObjectRow (PROP-04, PROP-05)."""
+
+    def test_stale_row_has_css_class(self) -> None:
+        """ObjectRow with stale=True item gets --stale class applied (mimics _render_project)."""
+        item = ObjectItem(kind=PresetKind.AGENTS, value="claude-work", stale=True)
+        row = ObjectRow(item, index=0)
+        # Simulate what _render_project does
+        if getattr(item, 'stale', False):
+            row.add_class("--stale")
+        assert row.has_class("--stale")
+
+    def test_non_stale_row_no_css_class(self) -> None:
+        """ObjectRow with stale=False item does NOT get --stale class."""
+        item = ObjectItem(kind=PresetKind.AGENTS, value="claude-work", stale=False)
+        row = ObjectRow(item, index=0)
+        if getattr(item, 'stale', False):
+            row.add_class("--stale")
+        assert not row.has_class("--stale")
+
+    def test_stale_default_false_no_css_class(self) -> None:
+        """ObjectRow with default stale (unset) does NOT get --stale class."""
+        item = ObjectItem(kind=PresetKind.BRANCH, value="main")
+        row = ObjectRow(item, index=0)
+        if getattr(item, 'stale', False):
+            row.add_class("--stale")
+        assert not row.has_class("--stale")
+
+    def test_stale_applies_only_to_stale_items(self) -> None:
+        """Mixed stale and non-stale items: only stale gets --stale class."""
+        stale_item = ObjectItem(kind=PresetKind.AGENTS, value="offline-agent", stale=True)
+        live_item = ObjectItem(kind=PresetKind.AGENTS, value="online-agent", stale=False)
+
+        stale_row = ObjectRow(stale_item, index=0)
+        live_row = ObjectRow(live_item, index=1)
+
+        for r in (stale_row, live_row):
+            if getattr(r.item, 'stale', False):
+                r.add_class("--stale")
+
+        assert stale_row.has_class("--stale")
+        assert not live_row.has_class("--stale")

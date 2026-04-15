@@ -154,6 +154,8 @@ class ProjectDetail(Widget, can_focus=True):
             scroll.mount(GroupHeader(group_label))
             for item in group_items:
                 row = ObjectRow(item, index=row_index)
+                if getattr(item, 'stale', False):
+                    row.add_class("--stale")
                 scroll.mount(row)
                 new_rows.append(row)
                 row_index += 1

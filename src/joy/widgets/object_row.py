@@ -74,6 +74,17 @@ class ObjectRow(Horizontal):
     ObjectRow .col-icon  { width: 5; }
     ObjectRow .col-value { width: 1fr; }
     ObjectRow .col-kind  { width: 12; text-align: right; color: $text-muted; }
+    ObjectRow.--stale .col-value {
+        text-style: italic;
+        color: $text-muted;
+    }
+    ObjectRow.--stale .col-icon {
+        color: $text-muted;
+    }
+    ObjectRow.--stale .col-kind {
+        text-style: italic;
+        color: $text-muted;
+    }
     """
 
     def __init__(self, item: ObjectItem, *, index: int = 0, **kwargs) -> None:
