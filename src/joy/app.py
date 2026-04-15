@@ -55,6 +55,8 @@ class JoyApp(App):
         Binding("s", "settings", "Settings", priority=True),
         Binding("r", "refresh_worktrees", "Refresh", priority=True),
         Binding("l", "legend", "Legend", priority=True),
+        Binding("x", "toggle_sync", "Sync: on"),   # shown when sync is ON (D-11, D-13)
+        Binding("x", "disable_sync", "Sync: off"),  # shown when sync is OFF
     ]
 
     def __init__(self, **kwargs) -> None:
@@ -79,6 +81,18 @@ class JoyApp(App):
         self._is_syncing: bool = False
         # Phase 15: sync toggle state (D-12, D-14) — toggle binding added in Plan 03
         self._sync_enabled: bool = True
+
+    def check_action(self, action: str, parameters: tuple) -> bool | None:
+        """Control which sync toggle binding is visible in the footer. (D-13, SYNC-09)
+
+        Returns True to show the binding, False to hide it from the footer entirely.
+        At most one of toggle_sync / disable_sync is True at any time.
+        """
+        if action == "toggle_sync":
+            return self._sync_enabled      # show "Sync: on" only when sync is enabled
+        if action == "disable_sync":
+            return not self._sync_enabled  # show "Sync: off" only when sync is disabled
+        return super().check_action(action, parameters)
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -497,6 +511,16 @@ class JoyApp(App):
                 screen.dismiss(None)
                 return
         self.push_screen(LegendModal())
+
+    def action_toggle_sync(self) -> None:
+        """Disable cross-pane sync (called when sync is currently ON, key x). (SYNC-08, D-11)"""
+        self._sync_enabled = False
+        self.refresh_bindings()  # triggers Footer recompose via bindings_updated_signal
+
+    def action_disable_sync(self) -> None:
+        """Re-enable cross-pane sync (called when sync is currently OFF, key x). (SYNC-08)"""
+        self._sync_enabled = True
+        self.refresh_bindings()
 
     @work(thread=True, exit_on_error=False)
     def _save_config_bg(self) -> None:

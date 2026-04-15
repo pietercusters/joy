@@ -418,10 +418,33 @@ def test_sync_does_not_steal_focus():
 def test_toggle_sync_key():
     """SYNC-08: pressing 'x' toggles sync mode on/off.
 
-    Requires TUI pilot (app.run_async + Pilot.press). Stub — Plan 03 will
-    implement the full TUI pilot test with app.check_action() verification.
+    Verifies action_toggle_sync disables sync (_sync_enabled = False)
+    and action_disable_sync re-enables it (_sync_enabled = True).
+    Does not require a TUI pilot — tests the action method logic directly.
     """
-    pytest.fail("not implemented — requires TUI pilot in Plan 03")
+    try:
+        from joy.app import JoyApp
+    except ImportError:
+        pytest.skip("Textual app import failed")
+
+    app = JoyApp()
+
+    # Default state: sync enabled
+    assert app._sync_enabled is True, "Default state must be sync ON (D-12)"
+
+    # action_toggle_sync: disables sync (called when sync is ON)
+    app.action_toggle_sync()
+    assert app._sync_enabled is False, "action_toggle_sync must set _sync_enabled = False"
+
+    # action_disable_sync: re-enables sync (called when sync is OFF)
+    app.action_disable_sync()
+    assert app._sync_enabled is True, "action_disable_sync must set _sync_enabled = True"
+
+    # Toggle again to confirm round-trip
+    app.action_toggle_sync()
+    assert app._sync_enabled is False
+    app.action_disable_sync()
+    assert app._sync_enabled is True
 
 
 # ---------------------------------------------------------------------------
@@ -432,7 +455,40 @@ def test_toggle_sync_key():
 def test_toggle_sync_footer_visibility():
     """SYNC-09: footer shows 'Sync: on' / 'Sync: off' based on sync toggle state.
 
-    Requires app.check_action() and footer label inspection. Stub — Plan 03
-    will implement full footer visibility test.
+    Tests check_action() return values directly:
+    - When sync is ON: check_action("toggle_sync", ()) returns True,
+      check_action("disable_sync", ()) returns False.
+    - When sync is OFF: check_action("toggle_sync", ()) returns False,
+      check_action("disable_sync", ()) returns True.
+    Exactly one binding is True at any time, so only one label shows in footer.
     """
-    pytest.fail("not implemented — requires app.check_action() in Plan 03")
+    try:
+        from joy.app import JoyApp
+    except ImportError:
+        pytest.skip("Textual app import failed")
+
+    app = JoyApp()
+
+    # Default state: sync ON
+    assert app._sync_enabled is True
+    assert app.check_action("toggle_sync", ()) is True, (
+        "check_action('toggle_sync') must return True when sync is ON — 'Sync: on' shown"
+    )
+    assert app.check_action("disable_sync", ()) is False, (
+        "check_action('disable_sync') must return False when sync is ON — 'Sync: off' hidden"
+    )
+
+    # After toggle: sync OFF
+    app._sync_enabled = False
+    assert app.check_action("toggle_sync", ()) is False, (
+        "check_action('toggle_sync') must return False when sync is OFF — 'Sync: on' hidden"
+    )
+    assert app.check_action("disable_sync", ()) is True, (
+        "check_action('disable_sync') must return True when sync is OFF — 'Sync: off' shown"
+    )
+
+    # Verify check_action delegates non-sync actions to super (must not return True/False for "quit")
+    result = app.check_action("quit", ())
+    assert result is None or isinstance(result, bool), (
+        "check_action('quit') must delegate to super and return bool | None"
+    )
