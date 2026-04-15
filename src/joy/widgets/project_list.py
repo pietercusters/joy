@@ -451,5 +451,5 @@ class ProjectList(Widget, can_focus=True):
         from joy.resolver import RelationshipIndex  # noqa: PLC0415 — avoid circular at module level
         for row in self._rows:
             wt_count = len(index.worktrees_for(row.project))  # type: ignore[union-attr]
-            agent_count = len(index.agents_for(row.project))  # type: ignore[union-attr]
+            agent_count = len(index.terminals_for(row.project))  # type: ignore[union-attr]
             row.set_counts(wt_count, agent_count)
