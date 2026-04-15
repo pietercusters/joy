@@ -11,6 +11,7 @@ from textual.containers import Grid
 from textual.widgets import Footer, Header
 
 from joy.models import Config, ObjectItem, PresetKind, Project, Repo, TerminalSession, WorktreeInfo
+from joy.resolver import RelationshipIndex
 from joy.screens import NameInputModal, PresetPickerModal, SettingsModal, ValueInputModal
 from joy.widgets.object_row import _success_message, _truncate
 from joy.widgets.project_detail import SEMANTIC_GROUPS, ProjectDetail
@@ -70,8 +71,8 @@ class JoyApp(App):
         self._label_timer: object | None = None
         self._terminal_last_refresh_at: datetime | None = None
         self._terminal_refresh_failed: bool = False
-        # Phase 14: relationship resolver state (D-06, D-07) — resolver removed in Phase 16
-        self._rel_index: object | None = None
+        # Phase 14: relationship resolver state (D-06, D-07)
+        self._rel_index: RelationshipIndex | None = None
         self._worktrees_ready: bool = False
         self._sessions_ready: bool = False
         self._current_worktrees: list[WorktreeInfo] = []
@@ -218,7 +219,7 @@ class JoyApp(App):
         self._maybe_compute_relationships()
 
     def _maybe_compute_relationships(self) -> None:
-        """Fire when both workers have completed their cycle (D-07, D-08, Phase 16).
+        """Compute RelationshipIndex and run propagation when both workers complete (D-07, D-08, Phase 16).
 
         Called from _set_worktrees and _set_terminal_sessions — both run on the main thread
         via call_from_thread, so no asyncio coordination needed. Uses two boolean flags.
@@ -229,6 +230,13 @@ class JoyApp(App):
         # Reset flags before computing (prevents stale-data on next cycle)
         self._worktrees_ready = False
         self._sessions_ready = False
+        from joy.resolver import compute_relationships  # noqa: PLC0415 — lazy import avoids import cycle
+        self._rel_index = compute_relationships(
+            self._projects,
+            self._current_worktrees,
+            self._current_sessions,
+            self._repos,
+        )
         self._update_badges()
         self._propagate_changes(self._current_mr_data)
 
