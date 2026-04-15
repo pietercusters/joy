@@ -27,7 +27,7 @@ class PresetKind(str, Enum):
     FILE = "file"
     NOTE = "note"
     WORKTREE = "worktree"
-    AGENTS = "agents"
+    TERMINALS = "terminals"
     URL = "url"
     REPO = "repo"
 
@@ -40,7 +40,7 @@ PRESET_MAP: dict[PresetKind, ObjectType] = {
     PresetKind.FILE: ObjectType.FILE,
     PresetKind.NOTE: ObjectType.OBSIDIAN,
     PresetKind.WORKTREE: ObjectType.WORKTREE,
-    PresetKind.AGENTS: ObjectType.ITERM,
+    PresetKind.TERMINALS: ObjectType.ITERM,
     PresetKind.URL: ObjectType.URL,
     PresetKind.REPO: ObjectType.URL,
 }
@@ -54,8 +54,6 @@ class ObjectItem:
     value: str
     label: str = ""
     open_by_default: bool = False
-    stale: bool = False  # Runtime-only; not serialized to TOML (D-07)
-
     @property
     def object_type(self) -> ObjectType:
         """Resolve this item's operation type via PRESET_MAP."""
@@ -101,7 +99,7 @@ class Config:
     obsidian_vault: str = ""
     terminal: str = "iTerm2"
     default_open_kinds: list[str] = field(
-        default_factory=lambda: ["worktree", "agents"]
+        default_factory=lambda: ["worktree", "terminals"]
     )
     refresh_interval: int = 30
     branch_filter: list[str] = field(

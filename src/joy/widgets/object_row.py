@@ -16,7 +16,7 @@ KIND_SHORTCUT: dict[PresetKind, str] = {
     PresetKind.TICKET: "y",
     PresetKind.NOTE: "u",
     PresetKind.THREAD: "t",
-    PresetKind.AGENTS: "h",
+    PresetKind.TERMINALS: "h",
 }
 
 # Nerd Font icons for each preset type
@@ -28,7 +28,7 @@ PRESET_ICONS: dict[PresetKind, str] = {
     PresetKind.FILE: "\uf15b",     #  (nf-fa-file)
     PresetKind.NOTE: "\uf040",     #  (nf-fa-pencil)
     PresetKind.WORKTREE: "\uf07b", #  (nf-fa-folder)
-    PresetKind.AGENTS: "\uf120",   #  (nf-fa-terminal)
+    PresetKind.TERMINALS: "\uf120",   #  (nf-fa-terminal)
     PresetKind.URL: "\uf0ac",      #  (nf-fa-globe)
     PresetKind.REPO: "\uf401",     #  (nf-oct-repo)
 }
@@ -86,21 +86,6 @@ class ObjectRow(Horizontal):
     ObjectRow .col-value { width: 1fr; }
     ObjectRow .col-kind  { width: 12; text-align: right; color: $text-muted; }
     ObjectRow .col-shortcut { width: 5; text-align: right; color: $text-muted; }
-    ObjectRow.--stale .col-value {
-        text-style: italic;
-        color: $text-muted;
-    }
-    ObjectRow.--stale .col-icon {
-        color: $text-muted;
-    }
-    ObjectRow.--stale .col-kind {
-        text-style: italic;
-        color: $text-muted;
-    }
-    ObjectRow.--stale .col-shortcut {
-        color: $text-muted;
-        text-style: italic;
-    }
     """
 
     def __init__(self, item: ObjectItem, *, index: int = 0, show_shortcut: bool = False, **kwargs) -> None:

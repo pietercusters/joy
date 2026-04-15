@@ -24,7 +24,7 @@ from joy.widgets.object_row import KIND_SHORTCUT, ObjectRow, _success_message, _
 SEMANTIC_GROUPS: list[tuple[str, list[PresetKind]]] = [
     ("Code", [PresetKind.REPO, PresetKind.WORKTREE, PresetKind.MR, PresetKind.BRANCH]),
     ("Docs", [PresetKind.TICKET, PresetKind.NOTE, PresetKind.URL, PresetKind.FILE, PresetKind.THREAD]),
-    ("Agents", [PresetKind.AGENTS]),
+    ("Terminals", [PresetKind.TERMINALS]),
 ]
 
 
@@ -159,8 +159,6 @@ class ProjectDetail(Widget, can_focus=True):
                 if show_sc:
                     shortcut_kinds_shown.add(item.kind)
                 row = ObjectRow(item, index=row_index, show_shortcut=show_sc)
-                if getattr(item, 'stale', False):
-                    row.add_class("--stale")
                 scroll.mount(row)
                 new_rows.append(row)
                 row_index += 1
