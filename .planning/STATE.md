@@ -77,6 +77,7 @@ None — clean milestone close.
 | 260415-jab | Add global 'i' binding to open IDE on active project's first worktree — restores IDE access when worktree row has an MR | 2026-04-15 | 0b12320 | | [260415-jab-fix-opening-ide-on-worktree-fails-when-m](./quick/260415-jab-fix-opening-ide-on-worktree-fails-when-m/) |
 | 260415-gw0 | Rethink all keyboard shortcuts and add two rows of keyboard hints at the bottom | 2026-04-15 | 85c7bfc | | [260415-gw0-rethink-all-keyboard-shortcuts-and-add-t](./quick/260415-gw0-rethink-all-keyboard-shortcuts-and-add-t/) |
 | 260415-mh6 | Refactor worktree logic and Worktrees pane: auto-detect worktrees by branch, fix 'i' key IDE open, enter opens IDE, investigate bugs | 2026-04-15 | b7d5a98 | Needs Review | [260415-mh6-refactor-worktree-logic-and-worktrees-pa](./quick/260415-mh6-refactor-worktree-logic-and-worktrees-pa/) |
+| 260415-qqx | Build full iTerm2 terminal session control: rename Agent→Terminal, n/e/d/D bindings, auto-create/auto-remove, project-link flag | 2026-04-15 | 251fcf8 | Verified | [260415-qqx-build-full-iterm2-terminal-session-contr](./quick/260415-qqx-build-full-iterm2-terminal-session-contr/) |
 
 ## Session Continuity
 
