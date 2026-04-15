@@ -21,7 +21,7 @@ _DETAIL_ICONS: list[tuple[str, str, str]] = [
     (PRESET_ICONS.get(PresetKind.FILE, ""), "File", ""),
     (PRESET_ICONS.get(PresetKind.NOTE, ""), "Note", ""),
     (PRESET_ICONS.get(PresetKind.WORKTREE, ""), "Worktree", ""),
-    (PRESET_ICONS.get(PresetKind.AGENTS, ""), "Agents", ""),
+    (PRESET_ICONS.get(PresetKind.TERMINALS, ""), "Terminals", ""),
     (PRESET_ICONS.get(PresetKind.URL, ""), "URL", ""),
 ]
 
