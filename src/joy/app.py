@@ -11,7 +11,6 @@ from textual.containers import Grid
 from textual.widgets import Footer, Header
 
 from joy.models import Config, ObjectItem, PresetKind, Project, Repo, TerminalSession, WorktreeInfo
-from joy.resolver import RelationshipIndex
 from joy.screens import NameInputModal, PresetPickerModal, SettingsModal, ValueInputModal
 from joy.widgets.object_row import _success_message, _truncate
 from joy.widgets.project_detail import SEMANTIC_GROUPS, ProjectDetail
@@ -71,8 +70,8 @@ class JoyApp(App):
         self._label_timer: object | None = None
         self._terminal_last_refresh_at: datetime | None = None
         self._terminal_refresh_failed: bool = False
-        # Phase 14: relationship resolver state (D-06, D-07)
-        self._rel_index: RelationshipIndex | None = None
+        # Phase 14: relationship resolver state (D-06, D-07) — resolver removed in Phase 16
+        self._rel_index: object | None = None
         self._worktrees_ready: bool = False
         self._sessions_ready: bool = False
         self._current_worktrees: list[WorktreeInfo] = []
@@ -81,6 +80,8 @@ class JoyApp(App):
         self._is_syncing: bool = False
         # Phase 15: sync toggle state (D-12, D-14) — toggle binding added in Plan 03
         self._sync_enabled: bool = True
+        # Phase 16: propagation state
+        self._current_mr_data: dict = {}
 
     def check_action(self, action: str, parameters: tuple) -> bool | None:
         """Control which sync toggle binding is visible in the footer. (D-13, SYNC-09)
@@ -193,6 +194,7 @@ class JoyApp(App):
         self._mr_fetch_failed = mr_failed
         # Phase 14: store for resolver and set ready-flag (D-07, D-08)
         self._current_worktrees = worktrees
+        self._current_mr_data = mr_data or {}
         self._worktrees_ready = True
         self._is_syncing = True  # suppress cross-pane sync during pane rebuild
         try:
@@ -216,7 +218,7 @@ class JoyApp(App):
         self._maybe_compute_relationships()
 
     def _maybe_compute_relationships(self) -> None:
-        """Compute RelationshipIndex when both workers have completed their cycle (D-07, D-08).
+        """Fire when both workers have completed their cycle (D-07, D-08, Phase 16).
 
         Called from _set_worktrees and _set_terminal_sessions — both run on the main thread
         via call_from_thread, so no asyncio coordination needed. Uses two boolean flags.
@@ -227,14 +229,98 @@ class JoyApp(App):
         # Reset flags before computing (prevents stale-data on next cycle)
         self._worktrees_ready = False
         self._sessions_ready = False
-        from joy.resolver import compute_relationships  # noqa: PLC0415 — lazy import avoids import cycle
-        self._rel_index = compute_relationships(
-            self._projects,
-            self._current_worktrees,
-            self._current_sessions,
-            self._repos,
-        )
         self._update_badges()
+        self._propagate_changes(self._current_mr_data)
+
+    def _propagate_mr_auto_add(self, mr_data: dict) -> list[str]:
+        """Auto-add MR objects for detected PRs (PROP-02, D-02, D-03, D-05).
+
+        Returns list of notification messages for each MR added.
+        """
+        messages: list[str] = []
+        if not mr_data:
+            return messages
+        for (repo_name, branch), mr_info in mr_data.items():
+            if not mr_info.url:
+                continue
+            for project in self._projects:
+                if project.repo is None:
+                    continue  # PROP-08 / D-05
+                if project.repo != repo_name:
+                    continue
+                has_branch = any(
+                    obj.kind == PresetKind.BRANCH and obj.value == branch
+                    for obj in project.objects
+                )
+                if not has_branch:
+                    continue
+                already_has_mr = any(
+                    obj.kind == PresetKind.MR and obj.value == mr_info.url
+                    for obj in project.objects
+                )
+                if already_has_mr:
+                    continue
+                new_mr = ObjectItem(
+                    kind=PresetKind.MR,
+                    value=mr_info.url,
+                    label=f"PR #{mr_info.mr_number}",
+                    open_by_default=False,
+                )
+                project.objects.append(new_mr)
+                messages.append(f"\u2295 Added PR #{mr_info.mr_number} to {project.name}")
+        return messages
+
+    def _propagate_agent_stale(self) -> list[str]:
+        """Mark/unmark agent objects as stale (PROP-04, PROP-05, D-06, D-07).
+
+        Returns list of notification messages for each transition.
+        stale field is runtime-only; never persisted (D-07).
+        """
+        messages: list[str] = []
+        active_sessions = {s.session_name for s in self._current_sessions}
+        for project in self._projects:
+            for obj in project.objects:
+                if obj.kind != PresetKind.AGENTS:
+                    continue
+                was_stale = obj.stale
+                is_now_absent = obj.value not in active_sessions
+                obj.stale = is_now_absent
+                if is_now_absent and not was_stale:
+                    messages.append(f"\u25cf Agent '{obj.value}' offline in {project.name}")
+                elif not is_now_absent and was_stale:
+                    messages.append(f"\u25cf Agent '{obj.value}' back online in {project.name}")
+        return messages
+
+    def _propagate_changes(self, mr_data: dict) -> None:
+        """Run propagation after both data sources are ready (D-09, D-10, D-11, D-12).
+
+        Calls _propagate_mr_auto_add and _propagate_agent_stale, batches
+        TOML saves (D-10: only when MRs were added), and emits notifications (D-11).
+        """
+        messages: list[str] = []
+        messages.extend(self._propagate_mr_auto_add(mr_data))
+        messages.extend(self._propagate_agent_stale())
+
+        # D-10: batch save — only when TOML-persistent mutations occurred (MR adds)
+        mr_added = any("\u2295 Added PR" in m for m in messages)
+        if mr_added:
+            self._save_projects_bg()
+
+        # D-11: notify per mutation
+        for msg in messages:
+            self.notify(msg, markup=False)
+
+        # D-12: rebuild panes if anything changed, guarded by _is_syncing
+        if messages:
+            self._is_syncing = True
+            try:
+                project_list = self.query_one(ProjectList)
+                project_list.set_projects(self._projects, self._repos)
+                if project_list._cursor >= 0 and project_list._cursor < len(project_list._rows):
+                    current = project_list._rows[project_list._cursor].project
+                    self.query_one(ProjectDetail).set_project(current)
+            finally:
+                self._is_syncing = False
 
     def _update_badges(self) -> None:
         """Push RelationshipIndex badge counts to ProjectList rows (D-08, D-11, BADGE-03)."""
