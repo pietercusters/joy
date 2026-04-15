@@ -301,11 +301,11 @@ class TerminalPane(Widget, can_focus=True):
             self._cursor = 0
         else:
             self._cursor = -1
-        self._update_highlight()
+        self._update_highlight(emit=False)  # refresh restore — no sync message
 
         scroll.call_after_refresh(lambda: scroll.scroll_to(y=saved_scroll_y, animate=False))
 
-    def _update_highlight(self) -> None:
+    def _update_highlight(self, *, emit: bool = True) -> None:
         """Apply '--highlight' CSS class to the row at the current cursor position."""
         for row in self._rows:
             row.remove_class("--highlight")

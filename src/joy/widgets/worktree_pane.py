@@ -385,7 +385,7 @@ class WorktreePane(Widget, can_focus=True):
             self._cursor = 0
         else:
             self._cursor = -1
-        self._update_highlight()
+        self._update_highlight(emit=False)  # refresh restore — no sync message
 
         scroll.call_after_refresh(lambda: scroll.scroll_to(y=saved_scroll_y, animate=False))
 
@@ -407,14 +407,14 @@ class WorktreePane(Widget, can_focus=True):
         parts.append(timestamp)
         self.border_title = "  ".join(parts)
 
-    def _update_highlight(self) -> None:
+    def _update_highlight(self, *, emit: bool = True) -> None:
         for row in self._rows:
             row.remove_class("--highlight")
         if 0 <= self._cursor < len(self._rows):
             self._rows[self._cursor].add_class("--highlight")
             self._rows[self._cursor].scroll_visible()
-            # Post message only when not in a sync operation (D-03, Pitfall 1 prevention)
-            if not getattr(self.app, "_is_syncing", False):
+            # Post message only on user navigation, not during refresh or sync (D-03, Pitfall 1)
+            if emit and not getattr(self.app, "_is_syncing", False):
                 row = self._rows[self._cursor]
                 wt = WorktreeInfo(
                     repo_name=row.repo_name,
