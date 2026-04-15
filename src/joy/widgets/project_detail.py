@@ -18,7 +18,7 @@ class _DetailScroll(VerticalScroll, can_focus=False):
     """
 
 from joy.models import ObjectItem, PresetKind, Project
-from joy.widgets.object_row import ObjectRow, _success_message, _truncate
+from joy.widgets.object_row import KIND_SHORTCUT, ObjectRow, _success_message, _truncate
 
 # Semantic group structure for Details pane
 SEMANTIC_GROUPS: list[tuple[str, list[PresetKind]]] = [
@@ -143,6 +143,7 @@ class ProjectDetail(Widget, can_focus=True):
         new_rows: list[ObjectRow] = []
         row_index = 0
         first_group = True
+        shortcut_kinds_shown: set[PresetKind] = set()
         for group_label, kinds in SEMANTIC_GROUPS:
             group_items: list[ObjectItem] = []
             for kind in kinds:
@@ -154,7 +155,10 @@ class ProjectDetail(Widget, can_focus=True):
             first_group = False
             scroll.mount(GroupHeader(group_label))
             for item in group_items:
-                row = ObjectRow(item, index=row_index)
+                show_sc = item.kind in KIND_SHORTCUT and item.kind not in shortcut_kinds_shown
+                if show_sc:
+                    shortcut_kinds_shown.add(item.kind)
+                row = ObjectRow(item, index=row_index, show_shortcut=show_sc)
                 if getattr(item, 'stale', False):
                     row.add_class("--stale")
                 scroll.mount(row)

@@ -103,9 +103,10 @@ class ObjectRow(Horizontal):
     }
     """
 
-    def __init__(self, item: ObjectItem, *, index: int = 0, **kwargs) -> None:
+    def __init__(self, item: ObjectItem, *, index: int = 0, show_shortcut: bool = False, **kwargs) -> None:
         self.item = item
         self.index = index
+        self.show_shortcut = show_shortcut
         super().__init__(**kwargs)
 
     @staticmethod
@@ -123,10 +124,15 @@ class ObjectRow(Horizontal):
         value = self.item.label if self.item.label else self.item.value
         kind = self.item.kind.value
         shortcut = KIND_SHORTCUT.get(self.item.kind)
+        hint: Text
+        if self.show_shortcut and shortcut:
+            hint = Text(f"[{shortcut}]")  # Text bypasses Rich markup parsing
+        else:
+            hint = Text("")
         yield Static(self._build_icon_text(self.item), classes="col-icon")
         yield Static(value, classes="col-value")
         yield Static(kind, classes="col-kind")
-        yield Static(f"[{shortcut}]" if shortcut else "", classes="col-shortcut")
+        yield Static(hint, classes="col-shortcut")
 
     def refresh_indicator(self) -> None:
         """Update icon and value columns in-place after toggle or edit."""
