@@ -379,6 +379,7 @@ class JoyApp(App):
             project = self._rel_index.project_for_worktree(worktree)
             if project is not None:
                 self.query_one(ProjectList).sync_to(project.name)
+                self.query_one(ProjectDetail).set_project(project)
                 agents = self._rel_index.agents_for(project)
                 if agents:
                     self.query_one(TerminalPane).sync_to(agents[0].session_name)
@@ -402,6 +403,7 @@ class JoyApp(App):
             project = self._rel_index.project_for_agent(session_name)
             if project is not None:
                 self.query_one(ProjectList).sync_to(project.name)
+                self.query_one(ProjectDetail).set_project(project)
                 worktrees = self._rel_index.worktrees_for(project)
                 if worktrees:
                     wt = worktrees[0]
