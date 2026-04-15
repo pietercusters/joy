@@ -8,6 +8,17 @@ from textual.widgets import Static
 
 from joy.models import Config, ObjectItem, ObjectType, PresetKind
 
+# Global shortcut keys for each kind (shown as hints on rows)
+KIND_SHORTCUT: dict[PresetKind, str] = {
+    PresetKind.BRANCH: "b",
+    PresetKind.MR: "m",
+    PresetKind.WORKTREE: "i",
+    PresetKind.TICKET: "y",
+    PresetKind.NOTE: "u",
+    PresetKind.THREAD: "t",
+    PresetKind.AGENTS: "h",
+}
+
 # Nerd Font icons for each preset type
 PRESET_ICONS: dict[PresetKind, str] = {
     PresetKind.MR: "\ue725",       #  (nf-dev-git_merge)
@@ -74,6 +85,7 @@ class ObjectRow(Horizontal):
     ObjectRow .col-icon  { width: 5; }
     ObjectRow .col-value { width: 1fr; }
     ObjectRow .col-kind  { width: 12; text-align: right; color: $text-muted; }
+    ObjectRow .col-shortcut { width: 5; text-align: right; color: $text-muted; }
     ObjectRow.--stale .col-value {
         text-style: italic;
         color: $text-muted;
@@ -85,11 +97,16 @@ class ObjectRow(Horizontal):
         text-style: italic;
         color: $text-muted;
     }
+    ObjectRow.--stale .col-shortcut {
+        color: $text-muted;
+        text-style: italic;
+    }
     """
 
-    def __init__(self, item: ObjectItem, *, index: int = 0, **kwargs) -> None:
+    def __init__(self, item: ObjectItem, *, index: int = 0, show_shortcut: bool = False, **kwargs) -> None:
         self.item = item
         self.index = index
+        self.show_shortcut = show_shortcut
         super().__init__(**kwargs)
 
     @staticmethod
@@ -106,9 +123,16 @@ class ObjectRow(Horizontal):
     def compose(self) -> ComposeResult:
         value = self.item.label if self.item.label else self.item.value
         kind = self.item.kind.value
+        shortcut = KIND_SHORTCUT.get(self.item.kind)
+        hint: Text
+        if self.show_shortcut and shortcut:
+            hint = Text(f"[{shortcut}]")  # Text bypasses Rich markup parsing
+        else:
+            hint = Text("")
         yield Static(self._build_icon_text(self.item), classes="col-icon")
         yield Static(value, classes="col-value")
         yield Static(kind, classes="col-kind")
+        yield Static(hint, classes="col-shortcut")
 
     def refresh_indicator(self) -> None:
         """Update icon and value columns in-place after toggle or edit."""

@@ -107,11 +107,12 @@ class SessionRow(Static):
         *,
         is_claude: bool = False,
         is_busy: bool = False,
+        show_shortcut: bool = False,
         **kwargs,
     ) -> None:
         self.session_id = session.session_id
         self.session_name = session.session_name  # FOUND-04: identity field for cursor preservation
-        content = self._build_content(session, is_claude=is_claude, is_busy=is_busy)
+        content = self._build_content(session, is_claude=is_claude, is_busy=is_busy, show_shortcut=show_shortcut)
         super().__init__(content, **kwargs)
 
     @staticmethod
@@ -120,6 +121,7 @@ class SessionRow(Static):
         *,
         is_claude: bool = False,
         is_busy: bool = False,
+        show_shortcut: bool = False,
     ) -> Text:
         """Build the rich.Text renderable for a single-line session row."""
         t = Text(no_wrap=True, overflow="ellipsis")
@@ -140,6 +142,9 @@ class SessionRow(Static):
         # Abbreviated cwd
         cwd = _abbreviate_home(session.cwd)
         t.append(f"  {cwd}", style="dim")
+
+        if show_shortcut:
+            t.append("  [h]", style="dim")
 
         return t
 
@@ -171,6 +176,7 @@ class TerminalPane(Widget, can_focus=True):
         Binding("k", "cursor_up", "Up"),
         Binding("j", "cursor_down", "Down"),
         Binding("enter", "focus_session", "Focus"),
+        Binding("o", "focus_session", "Open", show=False),
     ]
 
     DEFAULT_CSS = """
@@ -272,7 +278,7 @@ class TerminalPane(Widget, can_focus=True):
             scroll.mount(GroupHeader("Claude"))
             for session in claude_sessions:
                 is_busy = session.foreground_process.lower() not in _SHELL_PROCESSES
-                row = SessionRow(session, is_claude=True, is_busy=is_busy)
+                row = SessionRow(session, is_claude=True, is_busy=is_busy, show_shortcut=len(new_rows) == 0)
                 scroll.mount(row)
                 new_rows.append(row)
 
@@ -283,7 +289,7 @@ class TerminalPane(Widget, can_focus=True):
             first_group = False
             scroll.mount(GroupHeader("Other"))
             for session in other_sessions:
-                row = SessionRow(session, is_claude=False)
+                row = SessionRow(session, is_claude=False, show_shortcut=len(new_rows) == 0)
                 scroll.mount(row)
                 new_rows.append(row)
 

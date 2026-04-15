@@ -74,6 +74,7 @@ None — clean milestone close.
 | 260414-pob | Details pane fixes: open icon restored, legend toggle, semantic grouping, repo as object, indent all panes | 2026-04-14 | b39bf2d | [260414-pob-details-pane-fixes-and-improvements-open](./quick/260414-pob-details-pane-fixes-and-improvements-open/) |
 | 260414-qk4 | bug: in the Worktree overview, when there's an MR available we should go to the MR when clicking Enter. If not, we should go to the worktree. | 2026-04-14 | 7ae1811 | [260414-qk4-bug-in-the-worktree-overview-when-there-](./quick/260414-qk4-bug-in-the-worktree-overview-when-there-/) |
 | 260414-rim | Few small requests: rename on e, 1-space indent, default branch display, branch filter editor | 2026-04-14 | 04f9c72 | [260414-rim-few-small-requests-rename-project-on-e-k](./quick/260414-rim-few-small-requests-rename-project-on-e-k/) |
+| 260415-gw0 | Rethink all keyboard shortcuts and add two rows of keyboard hints at the bottom | 2026-04-15 | 85c7bfc | [260415-gw0-rethink-all-keyboard-shortcuts-and-add-t](./quick/260415-gw0-rethink-all-keyboard-shortcuts-and-add-t/) |
 
 ## Session Continuity
 

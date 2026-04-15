@@ -138,6 +138,7 @@ class WorktreeRow(Static):
         *,
         display_path: str | None = None,
         mr_info: MRInfo | None = None,
+        show_shortcut: bool = False,
         **kwargs,
     ) -> None:
         self.repo_name: str = worktree.repo_name
@@ -153,6 +154,7 @@ class WorktreeRow(Static):
             path,
             mr_info=mr_info,
             is_default_branch=worktree.is_default_branch,
+            show_shortcut=show_shortcut,
         )
         super().__init__(content, **kwargs)
 
@@ -164,6 +166,7 @@ class WorktreeRow(Static):
         display_path: str,
         mr_info: MRInfo | None = None,
         is_default_branch: bool = False,
+        show_shortcut: bool = False,
     ) -> Text:
         """Build the rich.Text renderable for a two-line worktree row.
 
@@ -179,6 +182,8 @@ class WorktreeRow(Static):
         if is_default_branch:
             t.append(f" {ICON_BRANCH} ", style="dim")
             t.append(branch, style="dim")
+            if show_shortcut:
+                t.append("  [i]", style="dim")
             t.append("\n")
             t.append(f"  {display_path}", style="dim")
             return t
@@ -205,6 +210,8 @@ class WorktreeRow(Static):
             t.append(f" {ICON_DIRTY}", style="yellow")
         if not has_upstream:
             t.append(f" {ICON_NO_UPSTREAM}", style="dim")
+        if show_shortcut:
+            t.append("  [i]", style="dim")
         t.append("\n")
 
         # D-01: Line 2 is context-sensitive
@@ -250,6 +257,7 @@ class WorktreePane(Widget, can_focus=True):
         Binding("k", "cursor_up", "Up"),
         Binding("j", "cursor_down", "Down"),
         Binding("enter", "activate_row", "Open"),
+        Binding("o", "activate_row", "Open", show=False),
     ]
 
     DEFAULT_CSS = """
@@ -367,7 +375,7 @@ class WorktreePane(Widget, can_focus=True):
                 display_path = abbreviate_home(wt.path)
                 display_path = middle_truncate(display_path, available_width)
                 mr_info = mr_data.get((wt.repo_name, wt.branch))
-                row = WorktreeRow(wt, display_path=display_path, mr_info=mr_info)
+                row = WorktreeRow(wt, display_path=display_path, mr_info=mr_info, show_shortcut=len(new_rows) == 0)
                 await scroll.mount(row)
                 new_rows.append(row)
 
