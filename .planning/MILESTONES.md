@@ -1,5 +1,20 @@
 # Milestones
 
+## v1.2 Cross-Pane Intelligence (Shipped: 2026-04-15)
+
+**Phases completed:** 3 phases (14-16), 8 plans, all complete
+
+**Key accomplishments:**
+
+- RelationshipIndex: pure-function bidirectional worktree↔project and agent↔project matching with O(n) two-pass dict construction
+- Identity-based cursor preservation in WorktreePane and TerminalPane: survives DOM rebuilds via (repo+branch) / session_name tracking
+- Live badge counts on every ProjectRow (worktree count + agent count), updating after each background refresh
+- All 6 cross-pane sync directions wired (SYNC-01..06): selecting project/worktree/agent drives the other two panes with `_is_syncing` guard
+- `x` toggle for cross-pane sync on/off with Footer hint — sync state visible at all times
+- MR auto-add propagation (URL-deduped) + agent stale marking/clearing with transition-only notifications
+
+---
+
 ## v1.1 Workspace Intelligence (Shipped: 2026-04-14)
 
 **Phases completed:** 8 phases, 19 plans, 30 tasks
