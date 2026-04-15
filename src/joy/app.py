@@ -11,6 +11,7 @@ from textual.containers import Grid
 from textual.widgets import Footer, Header
 
 from joy.models import Config, ObjectItem, PresetKind, Project, Repo, TerminalSession, WorktreeInfo
+from joy.resolver import RelationshipIndex
 from joy.screens import NameInputModal, PresetPickerModal, SettingsModal, ValueInputModal
 from joy.widgets.object_row import _success_message, _truncate
 from joy.widgets.project_detail import SEMANTIC_GROUPS, ProjectDetail
@@ -69,7 +70,7 @@ class JoyApp(App):
         self._terminal_last_refresh_at: datetime | None = None
         self._terminal_refresh_failed: bool = False
         # Phase 14: relationship resolver state (D-06, D-07)
-        self._rel_index: object | None = None  # RelationshipIndex | None
+        self._rel_index: RelationshipIndex | None = None
         self._worktrees_ready: bool = False
         self._sessions_ready: bool = False
         self._current_worktrees: list[WorktreeInfo] = []
@@ -204,7 +205,7 @@ class JoyApp(App):
         # Reset flags before computing (prevents stale-data on next cycle)
         self._worktrees_ready = False
         self._sessions_ready = False
-        from joy.resolver import compute_relationships  # noqa: PLC0415 — lazy import
+        from joy.resolver import compute_relationships  # noqa: PLC0415 — lazy import avoids import cycle
         self._rel_index = compute_relationships(
             self._projects,
             self._current_worktrees,
@@ -322,8 +323,77 @@ class JoyApp(App):
     def on_project_list_project_highlighted(
         self, message: ProjectList.ProjectHighlighted
     ) -> None:
-        """When highlight moves, update detail pane immediately."""
+        """When highlight moves, update detail pane and drive cross-pane sync. (SYNC-01, SYNC-02)"""
+        if self._is_syncing:
+            return
         self.query_one(ProjectDetail).set_project(message.project)
+        if self._sync_enabled and self._rel_index is not None:
+            self._sync_from_project(message.project)
+
+    def _sync_from_project(self, project: Project) -> None:
+        """Drive WorktreePane and TerminalPane to first items related to project. (D-04)
+
+        Called with _is_syncing guard. Uses try/finally to always clear the guard.
+        """
+        self._is_syncing = True
+        try:
+            assert self._rel_index is not None
+            worktrees = self._rel_index.worktrees_for(project)
+            if worktrees:
+                wt = worktrees[0]
+                self.query_one(WorktreePane).sync_to(wt.repo_name, wt.branch)
+            agents = self._rel_index.agents_for(project)
+            if agents:
+                self.query_one(TerminalPane).sync_to(agents[0].session_name)
+        finally:
+            self._is_syncing = False
+
+    def on_worktree_pane_worktree_highlighted(
+        self, message: WorktreePane.WorktreeHighlighted
+    ) -> None:
+        """Worktree cursor moved: sync ProjectList and TerminalPane. (SYNC-03, SYNC-04)"""
+        if self._is_syncing:
+            return
+        if self._sync_enabled and self._rel_index is not None:
+            self._sync_from_worktree(message.worktree)
+
+    def _sync_from_worktree(self, worktree: WorktreeInfo) -> None:
+        """Drive ProjectList and TerminalPane based on a highlighted worktree. (D-05)"""
+        self._is_syncing = True
+        try:
+            assert self._rel_index is not None
+            project = self._rel_index.project_for_worktree(worktree)
+            if project is not None:
+                self.query_one(ProjectList).sync_to(project.name)
+                agents = self._rel_index.agents_for(project)
+                if agents:
+                    self.query_one(TerminalPane).sync_to(agents[0].session_name)
+        finally:
+            self._is_syncing = False
+
+    def on_terminal_pane_session_highlighted(
+        self, message: TerminalPane.SessionHighlighted
+    ) -> None:
+        """Agent session cursor moved: sync ProjectList and WorktreePane. (SYNC-05, SYNC-06)"""
+        if self._is_syncing:
+            return
+        if self._sync_enabled and self._rel_index is not None:
+            self._sync_from_session(message.session_name)
+
+    def _sync_from_session(self, session_name: str) -> None:
+        """Drive ProjectList and WorktreePane based on a highlighted agent session. (D-06)"""
+        self._is_syncing = True
+        try:
+            assert self._rel_index is not None
+            project = self._rel_index.project_for_agent(session_name)
+            if project is not None:
+                self.query_one(ProjectList).sync_to(project.name)
+                worktrees = self._rel_index.worktrees_for(project)
+                if worktrees:
+                    wt = worktrees[0]
+                    self.query_one(WorktreePane).sync_to(wt.repo_name, wt.branch)
+        finally:
+            self._is_syncing = False
 
     def on_project_list_project_selected(
         self, message: ProjectList.ProjectSelected
