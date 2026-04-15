@@ -74,6 +74,7 @@ None — clean milestone close.
 | 260414-pob | Details pane fixes: open icon restored, legend toggle, semantic grouping, repo as object, indent all panes | 2026-04-14 | b39bf2d | [260414-pob-details-pane-fixes-and-improvements-open](./quick/260414-pob-details-pane-fixes-and-improvements-open/) |
 | 260414-qk4 | bug: in the Worktree overview, when there's an MR available we should go to the MR when clicking Enter. If not, we should go to the worktree. | 2026-04-14 | 7ae1811 | [260414-qk4-bug-in-the-worktree-overview-when-there-](./quick/260414-qk4-bug-in-the-worktree-overview-when-there-/) |
 | 260414-rim | Few small requests: rename on e, 1-space indent, default branch display, branch filter editor | 2026-04-14 | 04f9c72 | [260414-rim-few-small-requests-rename-project-on-e-k](./quick/260414-rim-few-small-requests-rename-project-on-e-k/) |
+| 260415-jab | Add global 'i' binding to open IDE on active project's first worktree — restores IDE access when worktree row has an MR | 2026-04-15 | 0b12320 | [260415-jab-fix-opening-ide-on-worktree-fails-when-m](./quick/260415-jab-fix-opening-ide-on-worktree-fails-when-m/) |
 
 ## Session Continuity
 
