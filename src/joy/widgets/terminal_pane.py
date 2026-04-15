@@ -171,6 +171,7 @@ class TerminalPane(Widget, can_focus=True):
         Binding("k", "cursor_up", "Up"),
         Binding("j", "cursor_down", "Down"),
         Binding("enter", "focus_session", "Focus"),
+        Binding("e", "rename_session", "Rename"),
     ]
 
     DEFAULT_CSS = """
@@ -362,6 +363,52 @@ class TerminalPane(Widget, can_focus=True):
     def action_focus_projects(self) -> None:
         """Return focus to the projects pane (D-13)."""
         self.app.query_one("#project-list").focus()
+
+    def action_rename_session(self) -> None:
+        """Rename the highlighted terminal session via modal."""
+        if self._cursor < 0 or self._cursor >= len(self._rows):
+            return
+        row = self._rows[self._cursor]
+        current_name = row.session_name
+        session_id = row.session_id
+
+        from joy.screens.name_input import NameInputModal  # noqa: PLC0415
+
+        def on_name(new_name: str | None) -> None:
+            if new_name is None or new_name == current_name:
+                return
+            self._do_rename_session(session_id, new_name)
+
+        self.app.push_screen(
+            NameInputModal(title="Rename Session", initial_value=current_name),
+            on_name,
+        )
+
+    @work(thread=True, exit_on_error=False)
+    def _do_rename_session(self, session_id: str, new_name: str) -> None:
+        """Rename iTerm2 session via AppleScript in background thread."""
+        import subprocess  # noqa: PLC0415
+        # T-gw0-01: escape backslashes, double quotes, newlines, carriage returns
+        safe_name = new_name.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ").replace("\r", " ")
+        script = f'''
+        tell application "iTerm2"
+            repeat with w in windows
+                repeat with t in tabs of w
+                    repeat with s in sessions of t
+                        if unique ID of s is "{session_id}" then
+                            set name of s to "{safe_name}"
+                            return
+                        end if
+                    end repeat
+                end repeat
+            end repeat
+        end tell
+        '''
+        try:
+            subprocess.run(["osascript", "-e", script], check=True, capture_output=True)
+            self.app.notify(f"Renamed session to: {new_name}", markup=False)
+        except Exception as exc:
+            self.app.notify(f"Rename failed: {exc}", severity="error", markup=False)
 
     def set_refresh_label(self, timestamp: str, *, stale: bool = False) -> None:
         """Update border_title with refresh timestamp. stale adds warning icon (D-16).

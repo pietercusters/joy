@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.2
-milestone_name: Cross-Pane Intelligence
-status: milestone_complete
-stopped_at: v1.2 Cross-Pane Intelligence archived — 3 phases, 8 plans, 309 tests passing
-last_updated: "2026-04-15T12:00:00.000Z"
-last_activity: 2026-04-15 -- v1.2 milestone complete
+milestone: v1.0
+milestone_name: milestone
+status: phase_complete
+stopped_at: Phase 16 live-data-propagation complete — 2/2 plans, 309 tests passing
+last_updated: "2026-04-15T09:05:00.000Z"
+last_activity: 2026-04-15 -- Phase 16 live-data-propagation complete
 progress:
-  total_phases: 16
-  completed_phases: 16
-  total_plans: 8
-  completed_plans: 8
+  total_phases: 2
+  completed_phases: 1
+  total_plans: 2
+  completed_plans: 2
   percent: 100
 ---
 
@@ -18,29 +18,30 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-15)
+See: .planning/PROJECT.md (updated 2026-04-14)
 
 **Core value:** Every artifact for the active project, openable instantly from one keyboard-driven interface.
-**Current focus:** Planning next milestone (v1.3)
+**Current focus:** Phase 16 — live-data-propagation
 
 ## Current Position
 
 Phase: 16 (live-data-propagation) — COMPLETE
-Milestone: v1.2 Cross-Pane Intelligence — COMPLETE
-Status: All phases executed, verified, and archived
+Plan: 2 of 2
+Status: Phase 16 complete — all plans executed, 309 tests passing
+Last activity: 2026-04-15 -- Phase 16 live-data-propagation complete
 
-Progress: ████████████████████ 100% (16/16 phases)
+Progress: ████████████████████ 100% (8/8 phases)
 
 ## Milestone Summary
 
-v1.2 Cross-Pane Intelligence shipped 2026-04-15:
+v1.1 Workspace Intelligence shipped 2026-04-14:
 
-- 3 phases (14-16), 8 plans
-- RelationshipIndex: bidirectional Project↔Worktree/Agent resolver
-- Cross-pane cursor sync with focus-non-steal guarantee
-- Project row badges: live worktree and agent counts
-- MR auto-add + agent stale detection via propagation
-- 309 fast tests, 3,541 src LOC + 7,208 test LOC
+- 8 phases (6-13), 19 plans
+- Live worktree pane with MR/CI badges
+- iTerm2 terminal pane with Claude agent detection
+- Background auto-refresh engine
+- Repo registry with project grouping
+- 276 fast tests, 3,606 src LOC + 5,883 test LOC
 
 ## Accumulated Context
 
@@ -48,14 +49,12 @@ v1.2 Cross-Pane Intelligence shipped 2026-04-15:
 
 Decisions are logged in PROJECT.md Key Decisions table.
 
-Key decisions from v1.2:
+Key decisions from v1.1:
 
-- Pure-function resolver with two-flag gate for relationship computation
-- _is_syncing boolean guard prevents sync cascade loops
-- sync_to() never calls .focus() — focus non-steal by API design
-- PROP-01/PROP-03 dropped: WorktreePane handles live worktree display
-- stale field not serialized to TOML (explicit key list in to_dict)
-- Batched single TOML save per propagation cycle
+- list-form subprocess for all external calls (security)
+- cursor/_rows/--highlight pattern for all scrollable panes
+- lazy import + catch-all for iTerm2 graceful fallback
+- pytest.mark.slow for TUI/integration tests
 
 ### Pending Todos
 
@@ -65,8 +64,19 @@ None.
 
 None — clean milestone close.
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260411-ivh | Fix three UAT bugs: project list selection after delete, detail pane focus dimming, Slack thread URL navigation | 2026-04-11 | 9f5e006 | [260411-ivh-fix-three-uat-bugs-project-list-selectio](./quick/260411-ivh-fix-three-uat-bugs-project-list-selectio/) |
+| 260414-c4g | Mark slow TUI/filter tests with pytest.mark.slow, exclude by default — suite drops from ~264s to 25.84s | 2026-04-14 | cf15821 | [260414-c4g-the-unit-test-suite-take-too-long-to-run](./quick/260414-c4g-the-unit-test-suite-take-too-long-to-run/) |
+| 260414-nrt | Details pane redesign: columnar layout, repo field, whitespace, legend popup | 2026-04-14 | 9d13330 | [260414-nrt-details-pane-redesign-columnar-layout-re](./quick/260414-nrt-details-pane-redesign-columnar-layout-re/) |
+| 260414-pob | Details pane fixes: open icon restored, legend toggle, semantic grouping, repo as object, indent all panes | 2026-04-14 | b39bf2d | [260414-pob-details-pane-fixes-and-improvements-open](./quick/260414-pob-details-pane-fixes-and-improvements-open/) |
+| 260414-qk4 | bug: in the Worktree overview, when there's an MR available we should go to the MR when clicking Enter. If not, we should go to the worktree. | 2026-04-14 | 7ae1811 | [260414-qk4-bug-in-the-worktree-overview-when-there-](./quick/260414-qk4-bug-in-the-worktree-overview-when-there-/) |
+| 260414-rim | Few small requests: rename on e, 1-space indent, default branch display, branch filter editor | 2026-04-14 | 04f9c72 | [260414-rim-few-small-requests-rename-project-on-e-k](./quick/260414-rim-few-small-requests-rename-project-on-e-k/) |
+
 ## Session Continuity
 
 Last session: 2026-04-15
-Stopped at: v1.2 milestone archived
-Resume: Start v1.3 with `/gsd-new-milestone`
+Stopped at: Phase 16 live-data-propagation complete — ObjectItem.stale, propagation methods, --stale CSS
+Resume: Phase 15 (cross-pane-selection-sync) still needs execution, then v1.2 milestone can close

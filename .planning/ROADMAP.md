@@ -4,7 +4,6 @@
 
 - ✅ **v1.0 MVP** — Phases 1-5 (shipped 2026-04-12)
 - ✅ **v1.1 Workspace Intelligence** — Phases 6-13 (shipped 2026-04-14)
-- ✅ **v1.2 Cross-Pane Intelligence** — Phases 14-16 (shipped 2026-04-15)
 
 ## Phases
 
@@ -37,17 +36,6 @@ Full details: `.planning/milestones/v1.1-ROADMAP.md`
 
 </details>
 
-<details>
-<summary>✅ v1.2 Cross-Pane Intelligence (Phases 14-16) — SHIPPED 2026-04-15</summary>
-
-- [x] Phase 14: Relationship Foundation & Badges (3/3 plans) — completed 2026-04-15
-- [x] Phase 15: Cross-Pane Selection Sync (3/3 plans) — completed 2026-04-15
-- [x] Phase 16: Live Data Propagation (2/2 plans) — completed 2026-04-15
-
-Full details: `.planning/milestones/v1.2-ROADMAP.md`
-
-</details>
-
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -65,6 +53,6 @@ Full details: `.planning/milestones/v1.2-ROADMAP.md`
 | 11. MR & CI Status | v1.1 | 3/3 | ✓ Complete | 2026-04-13 |
 | 12. iTerm2 Integration & Terminal Pane | v1.1 | 3/3 | ✓ Complete | 2026-04-14 |
 | 13. Project Workflow, Settings & Docs | v1.1 | 4/4 | ✓ Complete | 2026-04-14 |
-| 14. Relationship Foundation & Badges | v1.2 | 3/3 | ✓ Complete | 2026-04-15 |
-| 15. Cross-Pane Selection Sync | v1.2 | 3/3 | ✓ Complete | 2026-04-15 |
+| 14. (untracked) | v1.2 | — | — | — |
+| 15. Cross-Pane Selection Sync | v1.2 | — | ◆ In Progress | — |
 | 16. Live Data Propagation | v1.2 | 2/2 | ✓ Complete | 2026-04-15 |
