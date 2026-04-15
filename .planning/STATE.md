@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: Workspace Intelligence
-status: complete
-stopped_at: v1.1 milestone archived
-last_updated: "2026-04-14T14:00:00.000Z"
-last_activity: 2026-04-14
+milestone: v1.0
+milestone_name: milestone
+status: phase_complete
+stopped_at: Phase 16 live-data-propagation complete — 2/2 plans, 309 tests passing
+last_updated: "2026-04-15T09:05:00.000Z"
+last_activity: 2026-04-15 -- Phase 16 live-data-propagation complete
 progress:
-  total_phases: 8
-  completed_phases: 8
-  total_plans: 19
-  completed_plans: 19
+  total_phases: 2
+  completed_phases: 1
+  total_plans: 2
+  completed_plans: 2
   percent: 100
 ---
 
@@ -21,20 +21,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-14)
 
 **Core value:** Every artifact for the active project, openable instantly from one keyboard-driven interface.
-**Current focus:** Planning next milestone (v1.2)
+**Current focus:** Phase 16 — live-data-propagation
 
 ## Current Position
 
-Phase: —
-Plan: —
-Status: v1.1 Workspace Intelligence shipped ✅
-Last activity: 2026-04-14 - Completed quick task 260414-rim: rename on e, 1-space indent, default branch display, branch filter editor
+Phase: 16 (live-data-propagation) — COMPLETE
+Plan: 2 of 2
+Status: Phase 16 complete — all plans executed, 309 tests passing
+Last activity: 2026-04-15 -- Phase 16 live-data-propagation complete
 
 Progress: ████████████████████ 100% (8/8 phases)
 
 ## Milestone Summary
 
 v1.1 Workspace Intelligence shipped 2026-04-14:
+
 - 8 phases (6-13), 19 plans
 - Live worktree pane with MR/CI badges
 - iTerm2 terminal pane with Claude agent detection
@@ -49,6 +50,7 @@ v1.1 Workspace Intelligence shipped 2026-04-14:
 Decisions are logged in PROJECT.md Key Decisions table.
 
 Key decisions from v1.1:
+
 - list-form subprocess for all external calls (security)
 - cursor/_rows/--highlight pattern for all scrollable panes
 - lazy import + catch-all for iTerm2 graceful fallback
@@ -75,6 +77,6 @@ None — clean milestone close.
 
 ## Session Continuity
 
-Last session: 2026-04-14
-Stopped at: Completed 260414-rim quick task (rename, indent, dim branches, branch filter editor)
-Resume file: run `/gsd-new-milestone` to start v1.2 planning
+Last session: 2026-04-15
+Stopped at: Phase 16 live-data-propagation complete — ObjectItem.stale, propagation methods, --stale CSS
+Resume: Phase 15 (cross-pane-selection-sync) still needs execution, then v1.2 milestone can close

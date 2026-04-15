@@ -53,3 +53,6 @@ Full details: `.planning/milestones/v1.1-ROADMAP.md`
 | 11. MR & CI Status | v1.1 | 3/3 | ✓ Complete | 2026-04-13 |
 | 12. iTerm2 Integration & Terminal Pane | v1.1 | 3/3 | ✓ Complete | 2026-04-14 |
 | 13. Project Workflow, Settings & Docs | v1.1 | 4/4 | ✓ Complete | 2026-04-14 |
+| 14. (untracked) | v1.2 | — | — | — |
+| 15. Cross-Pane Selection Sync | v1.2 | — | ◆ In Progress | — |
+| 16. Live Data Propagation | v1.2 | 2/2 | ✓ Complete | 2026-04-15 |
