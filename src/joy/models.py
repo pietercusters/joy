@@ -54,6 +54,7 @@ class ObjectItem:
     value: str
     label: str = ""
     open_by_default: bool = False
+    stale: bool = False  # Runtime-only; not serialized to TOML (D-07)
 
     @property
     def object_type(self) -> ObjectType:

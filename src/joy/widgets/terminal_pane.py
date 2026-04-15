@@ -14,7 +14,6 @@ from textual import work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import VerticalScroll
-from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import Static
 
@@ -110,7 +109,6 @@ class SessionRow(Static):
         **kwargs,
     ) -> None:
         self.session_id = session.session_id
-        self.session_name = session.session_name  # FOUND-04: identity field for cursor preservation
         content = self._build_content(session, is_claude=is_claude, is_busy=is_busy)
         super().__init__(content, **kwargs)
 
@@ -156,13 +154,6 @@ class TerminalPane(Widget, can_focus=True):
     are grouped under a 'Claude' header; others appear under 'Other'. Cursor navigation
     via j/k/up/down, Enter activates highlighted session, Escape returns to projects pane.
     """
-
-    class SessionHighlighted(Message):
-        """Fired when highlight moves to a different session row. (D-01, D-02)"""
-
-        def __init__(self, session_name: str) -> None:
-            self.session_name = session_name
-            super().__init__()
 
     BINDINGS = [
         Binding("escape", "focus_projects", "Back"),
@@ -224,11 +215,6 @@ class TerminalPane(Widget, can_focus=True):
         """
         scroll = self.query_one("#terminal-scroll", _TerminalScroll)
         saved_scroll_y = scroll.scroll_y
-        # FOUND-04: save cursor identity before DOM rebuild (D-12, D-13)
-        saved_name: str | None = None
-        saved_index = self._cursor
-        if 0 <= self._cursor < len(self._rows):
-            saved_name = self._rows[self._cursor].session_name
         await scroll.remove_children()
 
         if sessions is None:
@@ -288,51 +274,18 @@ class TerminalPane(Widget, can_focus=True):
                 new_rows.append(row)
 
         self._rows = new_rows
-        # FOUND-04: restore cursor by session_name identity (D-13, D-14)
-        if saved_name is not None and new_rows:
-            for i, row in enumerate(new_rows):
-                if row.session_name == saved_name:
-                    self._cursor = i
-                    break
-            else:
-                # Session gone: clamp to saved index (D-14)
-                self._cursor = min(saved_index, len(new_rows) - 1)
-        elif new_rows:
-            self._cursor = 0
-        else:
-            self._cursor = -1
-        self._update_highlight(emit=False)  # refresh restore — no sync message
+        self._cursor = 0 if new_rows else -1
+        self._update_highlight()
 
         scroll.call_after_refresh(lambda: scroll.scroll_to(y=saved_scroll_y, animate=False))
 
-    def _update_highlight(self, *, emit: bool = True) -> None:
+    def _update_highlight(self) -> None:
         """Apply '--highlight' CSS class to the row at the current cursor position."""
         for row in self._rows:
             row.remove_class("--highlight")
         if 0 <= self._cursor < len(self._rows):
             self._rows[self._cursor].add_class("--highlight")
             self._rows[self._cursor].scroll_visible()
-            # Post message only when not in a sync operation (D-03, Pitfall 1 prevention)
-            if not getattr(self.app, "_is_syncing", False):
-                self.post_message(
-                    self.SessionHighlighted(self._rows[self._cursor].session_name)
-                )
-
-    def sync_to(self, session_name: str) -> None:
-        """Move cursor to matching session_name row without posting SessionHighlighted.
-
-        Silent cursor mutation for cross-pane sync. Does NOT call .focus(). (D-09, D-10)
-        If no row matches, _cursor is left unchanged. (D-08)
-        """
-        for i, row in enumerate(self._rows):
-            if row.session_name == session_name:
-                self._cursor = i
-                for r in self._rows:
-                    r.remove_class("--highlight")
-                row.add_class("--highlight")
-                row.scroll_visible()
-                return
-        # No match: leave _cursor unchanged (D-08)
 
     def action_cursor_up(self) -> None:
         """Move cursor up one row."""
