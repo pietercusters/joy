@@ -108,53 +108,6 @@
 
 ---
 
-## Milestone: v1.2 — Cross-Pane Intelligence
-
-**Shipped:** 2026-04-15
-**Phases:** 3 (14-16) | **Plans:** 8 | **Sessions:** 2 days (2026-04-14 to 2026-04-15)
-
-### What Was Built
-
-- **Relationship Foundation & Badges (Phase 14):** `RelationshipIndex` pure-function resolver with bidirectional Project↔Worktree (path-first, then branch) and Project↔Agent (session name) matching. Identity-based cursor preservation in WorktreePane/TerminalPane so cursor survives DOM rebuilds. Live badge counts on every project row via two-flag coordination pattern.
-- **Cross-Pane Selection Sync (Phase 15):** TDD red→green: 9 SYNC tests written first, then `_is_syncing` guard + `sync_to()` on all three panes. `check_action` + `refresh_bindings` for dynamic footer label (Sync: on / Sync: off). Focus non-steal enforced by API design — `sync_to()` never calls `.focus()`.
-- **Live Data Propagation (Phase 16):** `_propagate_changes` fires after each refresh cycle. MR auto-add when PR detected for project's branch (URL-deduplicated). Agent stale detection via `ObjectItem.stale` runtime field (not serialized) + `--stale` CSS modifier class on ObjectRow. Single batched TOML save per cycle.
-
-### What Worked
-
-- **TDD discipline for sync (Phase 15) was especially clean:** Writing 9 tests in Plan 01 (all RED) before any implementation meant the green phase had a clear contract. The `FakePane` stub pattern for pure-Python tests avoided Textual DOM entirely.
-- **Pure-function resolver was the right boundary:** `compute_relationships()` accepting only plain data with no I/O made it trivially testable and reusable across badges, sync, and propagation — three different consumers of the same index.
-- **Two-flag gate prevented partial-data badging:** `_worktrees_ready + _sessions_ready` ensures both background workers complete before computing the index. No half-baked badges from a single-worker cycle.
-- **Dropping PROP-01/PROP-03 mid-milestone was correct:** WorktreePane already shows live worktree state. Auto-removing/moving worktree objects would have created confusing double-bookkeeping. The drop was clean.
-- **`stale` as runtime-only field (not in to_dict):** Explicit key list in `ObjectItem.to_dict()` means adding runtime fields never accidentally serializes to disk. Good pattern for future ephemeral state.
-
-### What Was Inefficient
-
-- **ROADMAP.md tracking for Phase 14 was never set up:** Phase 14 showed as "(untracked)" and Phase 15 as "In Progress" at milestone close even though both were fully executed. The `roadmap analyze` tool returned empty results because it couldn't parse the current ROADMAP format. Progress table should be updated atomically with plan execution.
-- **STATE.md had stale session continuity note:** The note "Phase 15 still needs execution" persisted in STATE.md after Phase 15 completed — a stale artifact from a mid-milestone session that wasn't cleaned up. Continuity notes should be cleared on phase complete.
-- **MILESTONES.md auto-extraction produced noisy output:** gsd-tools `milestone complete` extracted raw summary content rather than curated one-liners, requiring manual cleanup post-archival. One-liner frontmatter field needs to be mandatory in SUMMARY.md files.
-
-### Patterns Established
-
-- **`FakePane` stub pattern for sync tests:** Pure-Python stubs with `_cursor`/`_rows` attributes allow testing sync logic without Textual DOM; `inspect.getsource()` + docstring stripping for static `.focus()` absence verification
-- **Two-flag ready gate for coordinated workers:** `_worktrees_ready + _sessions_ready` pattern before computing shared index — extensible to additional worker flags
-- **Runtime-only model fields via explicit `to_dict()` key list:** Never use `dataclasses.asdict()` for TOML serialization; explicit key list prevents runtime state from leaking to disk
-- **CSS modifier classes for state visualization:** `--stale` on ObjectRow dims all three columns atomically via CSS; single `add_class`/`remove_class` call drives the visual
-
-### Key Lessons
-
-1. **A pure-function resolver pays dividends across multiple consumers.** `compute_relationships()` fed badges (Phase 14), sync (Phase 15), and propagation (Phase 16) from the same index — zero duplication, trivially testable. Any shared cross-pane computation should be extracted to a pure function.
-2. **TDD red-phase should define the stub contract precisely.** The `FakePane` stubs in Phase 15 Plan 01 specified exactly what `sync_to()` needed to do, making Plan 02 implementation mechanical. Vague stubs produce vague implementations.
-3. **Track progress table atomically with plan completion.** Phase 14's "(untracked)" status in ROADMAP.md was invisible during execution and only noticed at milestone close. If a phase doesn't appear in the progress table before it starts, fix that first.
-4. **Stale session-continuity notes corrupt next-session routing.** The "Phase 15 still needs execution" note was stale but present, causing misleading state at `/gsd-next` time. The continuity note should be cleared (or updated) by the executor when it completes a phase.
-
-### Cost Observations
-
-- Model mix: ~80% opus (planning + execution), ~20% sonnet (orchestration)
-- Sessions: 2 active days (2026-04-14 to 2026-04-15), 56 commits
-- Notable: Smallest milestone (3 phases) but highest test density — 309 fast tests vs. 276 at v1.1 end
-
----
-
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -163,7 +116,6 @@
 |-----------|----------|--------|------------|
 | v1.0 MVP | 3 days | 5 | First milestone — baseline established |
 | v1.1 Workspace Intelligence | 3 days | 8 | Parallel phase execution (11+12); slow-test marker convention added |
-| v1.2 Cross-Pane Intelligence | 2 days | 3 | Smallest milestone; highest test density; TDD red-phase stub contract pattern established |
 
 ### Cumulative Quality
 
@@ -171,7 +123,6 @@
 |-----------|-------------|-----------------|---------|
 | v1.0 MVP | 131 | textual, tomli_w, pytest-asyncio | ~50 |
 | v1.1 Workspace Intelligence | 276 | iterm2>=2.15 | 158 |
-| v1.2 Cross-Pane Intelligence | 309 | none | 56 |
 
 ### Top Lessons (Verified Across Milestones)
 
@@ -179,5 +130,3 @@
 2. Async UI frameworks require explicit post-mutation focus management — plan for it from the first TUI phase
 3. Graceful degradation for optional integrations (iTerm2, gh, glab) must be specced in success criteria, not discovered in UAT
 4. Mark slow tests at the phase that creates them — accumulated test debt compounds silently and wastes every dev cycle until addressed
-5. Pure-function resolvers shared across multiple consumers pay dividends — extract shared cross-pane computation early
-6. TDD red-phase stub contracts eliminate implementation ambiguity — vague stubs produce vague implementations

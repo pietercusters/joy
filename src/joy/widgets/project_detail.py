@@ -58,9 +58,10 @@ class ProjectDetail(Widget, can_focus=True):
         Binding("j", "cursor_down", "Down"),
         Binding("o", "open_object", "Open"),
         Binding("space", "toggle_default", "Toggle"),
-        Binding("a", "add_object", "Add"),
+        Binding("n", "add_object", "Add"),
         Binding("e", "edit_object", "Edit"),
         Binding("d", "delete_object", "Delete"),
+        Binding("D", "force_delete_object", "Force Delete"),
     ]
 
     DEFAULT_CSS = """
@@ -294,6 +295,25 @@ class ProjectDetail(Widget, can_focus=True):
             ),
             on_confirm,
         )
+
+    def action_force_delete_object(self) -> None:
+        """Delete highlighted object without confirmation (force delete D)."""
+        item = self.highlighted_object
+        if item is None:
+            self.app.notify("No object selected", severity="error", markup=False)
+            return
+        prev_cursor = self._cursor
+        try:
+            idx = self._project.objects.index(item)
+            self._project.objects.pop(idx)
+        except ValueError:
+            return
+        self._save_toggle()
+        target_cursor = max(0, prev_cursor - 1)
+        self._set_project_with_cursor(self._project, target_cursor)
+        kind_val = item.kind.value
+        value_display = _truncate(item.label if item.label else item.value)
+        self.app.notify(f"Deleted: {kind_val} '{value_display}'", markup=False)
 
     @work(thread=True, exit_on_error=False)
     def _save_toggle(self) -> None:

@@ -1,22 +1,5 @@
 # Milestones
 
-## v1.2 Cross-Pane Intelligence (Shipped: 2026-04-15)
-
-**Phases completed:** 3 phases (14-16), 8 plans
-**Stats:** 56 commits, 49 files changed, 7,916 insertions — 3,541 src LOC, 7,208 test LOC, 309 fast tests
-
-**Key accomplishments:**
-
-- `RelationshipIndex` pure-function resolver: bidirectional Project↔Worktree and Project↔Agent matching in O(n) with path precedence over branch matching; no I/O, fully tested
-- Identity-based cursor preservation in WorktreePane and TerminalPane: cursor survives DOM rebuilds by tracking `(repo_name, branch)` and `session_name` with `min(saved_index, len-1)` clamp fallback
-- Live worktree and agent badge counts on every ProjectRow (`[branch] N  [robot] M`), updating after each background refresh cycle via two-flag coordination pattern
-- Cross-pane cursor sync: navigating any pane silently tracks all other panes to related items without stealing focus; `_is_syncing` guard prevents cascade loops
-- Sync toggle: `x` key switches cross-pane sync on/off with dynamic footer label (Sync: on / Sync: off) via `check_action` + `refresh_bindings`
-- Auto-add MR objects when background refresh detects a PR for a project's branch (URL-deduplicated); `_propagate_changes` batches mutations into a single TOML save
-- Agent stale detection: AGENTS objects acquire `--stale` CSS class when session disappears from iTerm2; styling clears when session reappears; runtime-only field not serialized to TOML
-
----
-
 ## v1.1 Workspace Intelligence (Shipped: 2026-04-14)
 
 **Phases completed:** 8 phases, 19 plans, 30 tasks

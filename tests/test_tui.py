@@ -396,8 +396,8 @@ async def test_n_persists(mock_store, mock_save):
 
 
 @pytest.mark.asyncio
-async def test_a_adds_object(mock_store, mock_save):
-    """MGMT-01: Pressing a from detail pane, selecting preset, entering value adds object."""
+async def test_n_adds_object(mock_store, mock_save):
+    """MGMT-01: Pressing n from detail pane, selecting preset, entering value adds object."""
     app = JoyApp()
     async with app.run_test() as pilot:
         await pilot.pause(0.2)
@@ -409,8 +409,8 @@ async def test_a_adds_object(mock_store, mock_save):
         project = detail._project
         assert project is not None
         initial_obj_count = len(project.objects)
-        # Press a to open add-object loop
-        await pilot.press("a")
+        # Press n to open add-object loop
+        await pilot.press("n")
         await pilot.pause(0.1)
         # Type "wo" to filter to worktree (single match)
         await pilot.press("w")
@@ -434,8 +434,8 @@ async def test_a_adds_object(mock_store, mock_save):
 
 
 @pytest.mark.asyncio
-async def test_a_escape_noop(mock_store, mock_save):
-    """MGMT-01: Pressing a then Escape in preset picker adds no object."""
+async def test_n_escape_noop(mock_store, mock_save):
+    """MGMT-01: Pressing n then Escape in preset picker adds no object."""
     app = JoyApp()
     async with app.run_test() as pilot:
         await pilot.pause(0.2)
@@ -447,8 +447,8 @@ async def test_a_escape_noop(mock_store, mock_save):
         project = detail._project
         assert project is not None
         initial_obj_count = len(project.objects)
-        # Press a then Escape immediately
-        await pilot.press("a")
+        # Press n then Escape immediately
+        await pilot.press("n")
         await pilot.pause(0.1)
         await pilot.press("escape")
         await pilot.pause(0.1)
@@ -549,6 +549,30 @@ async def test_d_escape_noop(mock_store, mock_save):
         await pilot.press("escape")
         await pilot.pause(0.1)
         assert len(detail._project.objects) == initial_count
+
+
+# ---------------------------------------------------------------------------
+# MGMT-04: D key force-deletes object from detail pane
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_D_force_deletes_object_in_detail(mock_store, mock_save):
+    """Force delete: Pressing D in detail pane deletes object without confirmation."""
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        await pilot.press("enter")
+        await pilot.pause(0.1)
+        detail = app.query_one("#project-detail")
+        initial_count = len(detail._project.objects)
+        # Press D to force-delete (no confirmation modal)
+        await pilot.press("D")
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        # Should delete immediately without needing Enter to confirm
+        assert len(detail._project.objects) == initial_count - 1
 
 
 # ---------------------------------------------------------------------------
@@ -721,3 +745,21 @@ async def test_o_opens_in_terminal_pane(mock_store, mock_save):
         bindings = [b for b in tp.BINDINGS if isinstance(b, Binding) and b.key == "o"]
         assert len(bindings) == 1, "TerminalPane should have an 'o' binding"
         assert bindings[0].action == "focus_session"
+
+
+# ---------------------------------------------------------------------------
+# HintBar widget presence test
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_hint_bar_present(mock_store):
+    """HintBar widget is mounted and visible in the app."""
+    from joy.widgets.hint_bar import HintBar
+    app = JoyApp()
+    async with app.run_test() as pilot:
+        await pilot.pause(0.2)
+        await app.workers.wait_for_complete()
+        hint_bar = app.query_one(HintBar)
+        assert hint_bar is not None
+        assert "Branch" in hint_bar.global_hints or "b:" in hint_bar.global_hints
