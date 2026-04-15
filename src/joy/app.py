@@ -9,9 +9,10 @@ from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Grid
-from textual.widgets import Footer, Header
+from textual.widgets import Header
 
 from joy.models import Config, ObjectItem, PresetKind, Project, Repo, TerminalSession, WorktreeInfo
+from joy.widgets.hint_bar import HintBar
 from joy.resolver import RelationshipIndex
 from joy.screens import NameInputModal, PresetPickerModal, SettingsModal, ValueInputModal
 from joy.widgets.object_row import _success_message, _truncate
@@ -19,6 +20,14 @@ from joy.widgets.project_detail import SEMANTIC_GROUPS, ProjectDetail
 from joy.widgets.project_list import ProjectList
 from joy.widgets.terminal_pane import TerminalPane
 from joy.widgets.worktree_pane import WorktreePane
+
+
+_PANE_HINTS: dict[str, str] = {
+    "project-list":   "n: New  e: Rename  D: Delete  R: Assign repo  /: Filter",
+    "project-detail": "o: Open  n: Add  e: Edit  d: Delete  D: Force del  space: Toggle",
+    "terminal-pane":  "o: Open",
+    "worktrees-pane": "",
+}
 
 
 class JoyApp(App):
@@ -52,13 +61,19 @@ class JoyApp(App):
     BINDINGS = [
         ("q", "quit", "Quit"),
         Binding("shift+o,O", "open_all_defaults", "Open All", priority=True),
-        Binding("n", "new_project", "New", priority=True),
         Binding("s", "settings", "Settings", priority=True),
         Binding("r", "refresh_worktrees", "Refresh", priority=True),
         Binding("l", "legend", "Legend", priority=True),
         Binding("x", "toggle_sync", "Sync: on"),   # shown when sync is ON (D-11, D-13)
         Binding("x", "disable_sync", "Sync: off"),  # shown when sync is OFF
-        Binding("i", "open_ide", "Open IDE", priority=True),
+        Binding("b", "open_branch", "Branch", show=False),
+        Binding("m", "open_mr", "MR", show=False),
+        Binding("i", "open_ide", "IDE", show=False),
+        Binding("y", "open_ticket", "Ticket", show=False),
+        Binding("u", "open_note", "Note", show=False),
+        Binding("t", "open_thread", "Thread", show=False),
+        Binding("h", "open_terminal", "Terminal", show=False),
+        Binding("R", "toggle_auto_refresh", "Auto-refresh", show=False),
     ]
 
     def __init__(self, **kwargs) -> None:
@@ -107,7 +122,7 @@ class JoyApp(App):
             WorktreePane(id="worktrees-pane"),
             id="pane-grid",
         )
-        yield Footer()
+        yield HintBar()
 
     def on_mount(self) -> None:
         self.sub_title = _get_version()
@@ -420,22 +435,29 @@ class JoyApp(App):
         return f"{hours}h ago"
 
     def on_descendant_focus(self, event) -> None:
-        """Update sub_title based on which pane has focus (D-08, D-13)."""
+        """Update sub_title and HintBar pane hints based on which pane has focus (D-08, D-13)."""
         node = event.widget
         while node is not None:
             if hasattr(node, "id"):
-                if node.id == "project-detail":
+                pane_id = node.id
+                if pane_id == "project-detail":
                     self.sub_title = "Detail"
-                    return
-                if node.id in ("project-list", "project-scroll"):
+                elif pane_id in ("project-list", "project-scroll"):
                     self.sub_title = "Projects"
-                    return
-                if node.id == "terminal-pane":
+                    pane_id = "project-list"  # normalize for hint lookup
+                elif pane_id == "terminal-pane":
                     self.sub_title = "Terminal"
-                    return
-                if node.id == "worktrees-pane":
+                elif pane_id == "worktrees-pane":
                     self.sub_title = "Worktrees"
-                    return
+                else:
+                    node = node.parent
+                    continue
+                # Update HintBar pane row
+                try:
+                    self.query_one(HintBar).pane_hints = _PANE_HINTS.get(pane_id, "")
+                except Exception:
+                    pass  # HintBar not yet mounted during early focus
+                return
             node = node.parent
 
     def on_project_list_project_highlighted(
@@ -526,16 +548,6 @@ class JoyApp(App):
         # children are removed and re-mounted. Scheduling after ensures focus
         # lands on ProjectDetail once the DOM is stable.
         detail.call_after_refresh(detail.focus)
-
-    @work(thread=True)
-    def action_open_ide(self) -> None:
-        """Open the IDE on the highlighted worktree row ('i' binding)."""
-        wt_pane = self.query_one(WorktreePane)
-        if wt_pane._cursor < 0 or wt_pane._cursor >= len(wt_pane._rows):
-            return
-        row = wt_pane._rows[wt_pane._cursor]
-        ide = self._config.ide or "Cursor"
-        subprocess.run(["open", "-a", ide, row.path], check=False)
 
     def action_open_all_defaults(self) -> None:
         """Open all open_by_default objects for the current project (ACT-02, D-10)."""
@@ -637,6 +649,84 @@ class JoyApp(App):
         """Re-enable cross-pane sync (called when sync is currently OFF, key x). (SYNC-08)"""
         self._sync_enabled = True
         self.refresh_bindings()
+
+    # ------------------------------------------------------------------
+    # Global quick-open shortcuts: b/m/i/y/u/t/h
+    # ------------------------------------------------------------------
+
+    def _open_first_of_kind(self, kind: PresetKind) -> None:
+        """Find the first object of *kind* in the active project and open/copy it."""
+        detail = self.query_one(ProjectDetail)
+        project = detail._project
+        if project is None:
+            self.notify("No project selected", markup=False)
+            return
+        item = next((obj for obj in project.objects if obj.kind == kind), None)
+        if item is None:
+            self.notify(f"No {kind.value} found for this project", markup=False)
+            return
+        # Branch copies to clipboard; all others use open_object
+        if kind == PresetKind.BRANCH:
+            self._copy_branch(item)
+        else:
+            self._do_open_global(item)
+
+    @work(thread=True, exit_on_error=False)
+    def _copy_branch(self, item: ObjectItem) -> None:
+        """Copy branch name to clipboard via pbcopy."""
+        import subprocess  # noqa: PLC0415
+        try:
+            subprocess.run(["pbcopy"], input=item.value.encode("utf-8"), check=True)
+            self.notify(f"Copied branch: {item.value}", markup=False)
+        except Exception as exc:
+            self.notify(f"Failed to copy: {exc}", severity="error", markup=False)
+
+    @work(thread=True, exit_on_error=False)
+    def _do_open_global(self, item: ObjectItem) -> None:
+        """Open an object globally (non-branch) in a background thread."""
+        from joy.operations import open_object  # noqa: PLC0415
+        try:
+            open_object(item=item, config=self._config)
+            self.notify(_success_message(item, self._config), markup=False)
+        except Exception as exc:
+            self.notify(f"Failed: {exc}", severity="error", markup=False)
+
+    def action_open_branch(self) -> None:
+        self._open_first_of_kind(PresetKind.BRANCH)
+
+    def action_open_mr(self) -> None:
+        self._open_first_of_kind(PresetKind.MR)
+
+    def action_open_ide(self) -> None:
+        self._open_first_of_kind(PresetKind.WORKTREE)
+
+    def action_open_ticket(self) -> None:
+        self._open_first_of_kind(PresetKind.TICKET)
+
+    def action_open_note(self) -> None:
+        self._open_first_of_kind(PresetKind.NOTE)
+
+    def action_open_thread(self) -> None:
+        self._open_first_of_kind(PresetKind.THREAD)
+
+    def action_open_terminal(self) -> None:
+        self._open_first_of_kind(PresetKind.AGENTS)
+
+    # ------------------------------------------------------------------
+    # R: toggle auto-refresh (from any pane except ProjectList where R = assign-repo)
+    # ------------------------------------------------------------------
+
+    def action_toggle_auto_refresh(self) -> None:
+        """Toggle the auto-refresh timer on/off."""
+        if self._refresh_timer is not None:
+            self._refresh_timer.stop()
+            self._refresh_timer = None
+            self.notify("Auto-refresh disabled", markup=False)
+        else:
+            self._refresh_timer = self.set_interval(
+                self._config.refresh_interval, self._trigger_worktree_refresh
+            )
+            self.notify("Auto-refresh enabled", markup=False)
 
     @work(thread=True, exit_on_error=False)
     def _save_config_bg(self) -> None:

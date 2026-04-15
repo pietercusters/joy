@@ -18,7 +18,7 @@ class _DetailScroll(VerticalScroll, can_focus=False):
     """
 
 from joy.models import ObjectItem, PresetKind, Project
-from joy.widgets.object_row import ObjectRow, _success_message, _truncate
+from joy.widgets.object_row import KIND_SHORTCUT, ObjectRow, _success_message, _truncate
 
 # Semantic group structure for Details pane
 SEMANTIC_GROUPS: list[tuple[str, list[PresetKind]]] = [
@@ -58,9 +58,10 @@ class ProjectDetail(Widget, can_focus=True):
         Binding("j", "cursor_down", "Down"),
         Binding("o", "open_object", "Open"),
         Binding("space", "toggle_default", "Toggle"),
-        Binding("a", "add_object", "Add"),
+        Binding("n", "add_object", "Add"),
         Binding("e", "edit_object", "Edit"),
         Binding("d", "delete_object", "Delete"),
+        Binding("D", "force_delete_object", "Force Delete"),
     ]
 
     DEFAULT_CSS = """
@@ -142,6 +143,7 @@ class ProjectDetail(Widget, can_focus=True):
         new_rows: list[ObjectRow] = []
         row_index = 0
         first_group = True
+        shortcut_kinds_shown: set[PresetKind] = set()
         for group_label, kinds in SEMANTIC_GROUPS:
             group_items: list[ObjectItem] = []
             for kind in kinds:
@@ -153,7 +155,10 @@ class ProjectDetail(Widget, can_focus=True):
             first_group = False
             scroll.mount(GroupHeader(group_label))
             for item in group_items:
-                row = ObjectRow(item, index=row_index)
+                show_sc = item.kind in KIND_SHORTCUT and item.kind not in shortcut_kinds_shown
+                if show_sc:
+                    shortcut_kinds_shown.add(item.kind)
+                row = ObjectRow(item, index=row_index, show_shortcut=show_sc)
                 if getattr(item, 'stale', False):
                     row.add_class("--stale")
                 scroll.mount(row)
@@ -294,6 +299,25 @@ class ProjectDetail(Widget, can_focus=True):
             ),
             on_confirm,
         )
+
+    def action_force_delete_object(self) -> None:
+        """Delete highlighted object without confirmation (force delete D)."""
+        item = self.highlighted_object
+        if item is None:
+            self.app.notify("No object selected", severity="error", markup=False)
+            return
+        prev_cursor = self._cursor
+        try:
+            idx = self._project.objects.index(item)
+            self._project.objects.pop(idx)
+        except ValueError:
+            return
+        self._save_toggle()
+        target_cursor = max(0, prev_cursor - 1)
+        self._set_project_with_cursor(self._project, target_cursor)
+        kind_val = item.kind.value
+        value_display = _truncate(item.label if item.label else item.value)
+        self.app.notify(f"Deleted: {kind_val} '{value_display}'", markup=False)
 
     @work(thread=True, exit_on_error=False)
     def _save_toggle(self) -> None:
