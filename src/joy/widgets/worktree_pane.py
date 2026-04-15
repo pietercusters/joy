@@ -9,6 +9,7 @@ from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import VerticalScroll
+from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import Static
 
@@ -235,6 +236,13 @@ class WorktreePane(Widget, can_focus=True):
     Data is pushed via set_worktrees().
     """
 
+    class WorktreeHighlighted(Message):
+        """Fired when highlight moves to a different worktree row. (D-01, D-02)"""
+
+        def __init__(self, worktree: WorktreeInfo) -> None:
+            self.worktree = worktree
+            super().__init__()
+
     BINDINGS = [
         Binding("escape", "focus_projects", "Back"),
         Binding("up", "cursor_up", "Up"),
@@ -405,6 +413,32 @@ class WorktreePane(Widget, can_focus=True):
         if 0 <= self._cursor < len(self._rows):
             self._rows[self._cursor].add_class("--highlight")
             self._rows[self._cursor].scroll_visible()
+            # Post message only when not in a sync operation (D-03, Pitfall 1 prevention)
+            if not getattr(self.app, "_is_syncing", False):
+                row = self._rows[self._cursor]
+                wt = WorktreeInfo(
+                    repo_name=row.repo_name,
+                    branch=row.branch,
+                    path=row.path,
+                )
+                self.post_message(self.WorktreeHighlighted(wt))
+
+    def sync_to(self, repo_name: str, branch: str) -> None:
+        """Move cursor to matching (repo_name, branch) row without posting WorktreeHighlighted.
+
+        Silent cursor mutation for cross-pane sync. Does NOT call .focus(). (D-09, D-10)
+        If no row matches, _cursor is left unchanged. (D-08)
+        """
+        for i, row in enumerate(self._rows):
+            if row.repo_name == repo_name and row.branch == branch:
+                self._cursor = i
+                # Inline highlight-only path: CSS + scroll, no post_message (Pitfall 1)
+                for r in self._rows:
+                    r.remove_class("--highlight")
+                row.add_class("--highlight")
+                row.scroll_visible()
+                return
+        # No match: leave _cursor unchanged (D-08)
 
     def action_cursor_up(self) -> None:
         if self._cursor > 0:

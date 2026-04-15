@@ -74,6 +74,10 @@ class JoyApp(App):
         self._sessions_ready: bool = False
         self._current_worktrees: list[WorktreeInfo] = []
         self._current_sessions: list[TerminalSession] = []
+        # Phase 15: cross-pane sync guard (D-03)
+        self._is_syncing: bool = False
+        # Phase 15: sync toggle state (D-12, D-14) — toggle binding added in Plan 03
+        self._sync_enabled: bool = True
 
     def compose(self) -> ComposeResult:
         yield Header()

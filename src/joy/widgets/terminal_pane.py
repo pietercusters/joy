@@ -14,6 +14,7 @@ from textual import work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import VerticalScroll
+from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import Static
 
@@ -155,6 +156,13 @@ class TerminalPane(Widget, can_focus=True):
     are grouped under a 'Claude' header; others appear under 'Other'. Cursor navigation
     via j/k/up/down, Enter activates highlighted session, Escape returns to projects pane.
     """
+
+    class SessionHighlighted(Message):
+        """Fired when highlight moves to a different session row. (D-01, D-02)"""
+
+        def __init__(self, session_name: str) -> None:
+            self.session_name = session_name
+            super().__init__()
 
     BINDINGS = [
         Binding("escape", "focus_projects", "Back"),
@@ -304,6 +312,27 @@ class TerminalPane(Widget, can_focus=True):
         if 0 <= self._cursor < len(self._rows):
             self._rows[self._cursor].add_class("--highlight")
             self._rows[self._cursor].scroll_visible()
+            # Post message only when not in a sync operation (D-03, Pitfall 1 prevention)
+            if not getattr(self.app, "_is_syncing", False):
+                self.post_message(
+                    self.SessionHighlighted(self._rows[self._cursor].session_name)
+                )
+
+    def sync_to(self, session_name: str) -> None:
+        """Move cursor to matching session_name row without posting SessionHighlighted.
+
+        Silent cursor mutation for cross-pane sync. Does NOT call .focus(). (D-09, D-10)
+        If no row matches, _cursor is left unchanged. (D-08)
+        """
+        for i, row in enumerate(self._rows):
+            if row.session_name == session_name:
+                self._cursor = i
+                for r in self._rows:
+                    r.remove_class("--highlight")
+                row.add_class("--highlight")
+                row.scroll_visible()
+                return
+        # No match: leave _cursor unchanged (D-08)
 
     def action_cursor_up(self) -> None:
         """Move cursor up one row."""

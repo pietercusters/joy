@@ -42,11 +42,10 @@ class FakeProjectRow:
 
 
 class FakeSyncablePane:
-    """Base stub pane with _cursor and _rows. sync_to() is not yet implemented.
+    """Base stub pane with _cursor and _rows.
 
-    Plan 02 will add sync_to() to the real WorktreePane, TerminalPane, and
-    ProjectList classes. These fakes replicate the pattern so tests can assert
-    on _cursor mutations without instantiating Textual widgets.
+    Mirrors the _cursor/_rows/sync_to pattern added by Plan 02 to the real widget
+    classes. Tests assert on _cursor mutations without instantiating Textual widgets.
     """
 
     def __init__(self, rows: list) -> None:
@@ -57,29 +56,41 @@ class FakeSyncablePane:
         """No-op stand-in for _update_highlight() — no DOM in tests."""
         pass
 
-    def sync_to(self, *args, **kwargs) -> None:
-        pytest.fail("not implemented — Plan 02 will implement sync_to()")
-
 
 class FakeWorktreePane(FakeSyncablePane):
     """Fake WorktreePane for SYNC-01, SYNC-06 cursor-position tests."""
 
     def sync_to(self, repo_name: str, branch: str) -> None:
-        pytest.fail("not implemented — Plan 02 will add WorktreePane.sync_to(repo_name, branch)")
+        """Mirror of WorktreePane.sync_to() — moves cursor to matching (repo_name, branch) row."""
+        for i, row in enumerate(self._rows):
+            if row.repo_name == repo_name and row.branch == branch:
+                self._cursor = i
+                return
+        # No match: leave _cursor unchanged (D-08)
 
 
 class FakeTerminalPane(FakeSyncablePane):
     """Fake TerminalPane for SYNC-02, SYNC-04 cursor-position tests."""
 
     def sync_to(self, session_name: str) -> None:
-        pytest.fail("not implemented — Plan 02 will add TerminalPane.sync_to(session_name)")
+        """Mirror of TerminalPane.sync_to() — moves cursor to matching session_name row."""
+        for i, row in enumerate(self._rows):
+            if row.session_name == session_name:
+                self._cursor = i
+                return
+        # No match: leave _cursor unchanged (D-08)
 
 
 class FakeProjectList(FakeSyncablePane):
     """Fake ProjectList for SYNC-03, SYNC-05 cursor-position tests."""
 
     def sync_to(self, project_name: str) -> None:
-        pytest.fail("not implemented — Plan 02 will add ProjectList.sync_to(project_name)")
+        """Mirror of ProjectList.sync_to() — moves cursor to matching project_name row."""
+        for i, row in enumerate(self._rows):
+            if row.project.name == project_name:
+                self._cursor = i
+                return
+        # No match: leave _cursor unchanged (D-08)
 
 
 # ---------------------------------------------------------------------------
@@ -340,29 +351,62 @@ def test_sync_agent_to_worktree():
 def test_sync_does_not_steal_focus():
     """SYNC-07: sync_to() moves the cursor but does NOT call focus().
 
-    This test verifies that the sync_to method exists on the real widget classes
-    after Plan 02 implements it. The full focus-non-interference assertion is
-    deferred to Plan 02 GREEN phase.
-
-    TODO (Plan 02 GREEN): assert that calling sync_to() on real WorktreePane,
-    TerminalPane, and ProjectList does NOT set app.focused or call .focus().
+    Verifies that sync_to() exists on all three real widget classes (Plan 02 GREEN),
+    and that the sync_to() implementations do not contain any .focus() call
+    (static source inspection — no TUI pilot required).
     """
-    # For now: verify the real widget classes will have sync_to after Plan 02.
-    # Import may fail if Textual requires a display — guarded with try/except.
-    # Plan 02 will add sync_to to these classes; at that point this import succeeds.
+    import inspect
+
     try:
         from joy.widgets.worktree_pane import WorktreePane
         from joy.widgets.terminal_pane import TerminalPane
         from joy.widgets.project_list import ProjectList
-
-        # After Plan 02 GREEN: these attributes must exist
-        # For now: fail to confirm RED state until Plan 02 adds sync_to
-        pytest.fail(
-            "not implemented yet — Plan 02 will add sync_to to WorktreePane, "
-            "TerminalPane, and ProjectList. This test becomes green in Plan 02."
-        )
     except ImportError:
         pytest.skip("Textual widget import failed (display not available)")
+
+    # All three classes must have sync_to (D-10)
+    assert hasattr(WorktreePane, "sync_to"), "WorktreePane must have sync_to()"
+    assert hasattr(TerminalPane, "sync_to"), "TerminalPane must have sync_to()"
+    assert hasattr(ProjectList, "sync_to"), "ProjectList must have sync_to()"
+
+    # sync_to() must not contain a .focus() call (SYNC-07, D-09)
+    # Strip docstrings and comments from source before checking
+    import ast
+    for cls, method_name in [
+        (WorktreePane, "sync_to"),
+        (TerminalPane, "sync_to"),
+        (ProjectList, "sync_to"),
+    ]:
+        source = inspect.getsource(getattr(cls, method_name))
+        # Strip leading indentation so ast.parse can process it
+        source_dedented = inspect.cleandoc(source) if source.startswith(" ") else source
+        # Remove comment lines; then check for .focus() calls in non-docstring parts.
+        # Use a simple approach: remove lines that are only inside a triple-quoted string.
+        in_docstring = False
+        code_lines = []
+        for line in source.splitlines():
+            stripped = line.lstrip()
+            if not in_docstring:
+                if stripped.startswith('"""') or stripped.startswith("'''"):
+                    delim = '"""' if stripped.startswith('"""') else "'''"
+                    # Count occurrences: if odd, we enter/exit docstring
+                    count = stripped.count(delim)
+                    if count == 1 or (count >= 2 and stripped.strip(delim) == ""):
+                        in_docstring = True
+                    # Don't add docstring lines to code_lines
+                    continue
+                if not stripped.startswith("#"):
+                    code_lines.append(line)
+            else:
+                # Check if docstring ends on this line
+                delim = '"""'  # assume same delimiter; handles most cases
+                if '"""' in line or "'''" in line:
+                    in_docstring = False
+                # Don't add docstring lines
+        code_only = "\n".join(code_lines)
+        assert ".focus()" not in code_only, (
+            f"{cls.__name__}.sync_to() must not call .focus() — SYNC-07 violation"
+        )
 
 
 # ---------------------------------------------------------------------------
