@@ -719,7 +719,7 @@ class JoyApp(App):
         except Exception:
             self.notify("Worktrees pane not available", markup=False)
             return
-        if pane._cursor < 0 or not pane._rows:
+        if pane._cursor < 0 or not pane._rows or pane._cursor >= len(pane._rows):
             self.notify("No worktree selected", markup=False)
             return
         self._open_worktree_path(pane._rows[pane._cursor].path)
@@ -730,13 +730,13 @@ class JoyApp(App):
         import subprocess as _subprocess  # noqa: PLC0415
         from pathlib import Path as _Path  # noqa: PLC0415
         if not _Path(path).exists():
-            self.notify(f"Worktree path not found: {path}", severity="warning", markup=False)
+            self.call_from_thread(self.notify, f"Worktree path not found: {path}", severity="warning", markup=False)
             return
         ide = self._config.ide or "Cursor"
         try:
             _subprocess.run(["open", "-a", ide, path], check=False)
         except Exception as exc:
-            self.notify(f"Failed to open IDE: {exc}", severity="error", markup=False)
+            self.call_from_thread(self.notify, f"Failed to open IDE: {exc}", severity="error", markup=False)
 
     def action_open_ticket(self) -> None:
         self._open_first_of_kind(PresetKind.TICKET)

@@ -134,8 +134,6 @@ def test_enter_always_opens_ide_even_with_mr():
     """
     from textual.app import App, ComposeResult
 
-    from joy.models import Config
-
     ide_calls: list = []
 
     class _TestApp(App):
@@ -147,7 +145,6 @@ def test_enter_always_opens_ide_even_with_mr():
 
     async def _run():
         app = _TestApp()
-        app._config = Config(ide="Cursor")
         async with app.run_test() as pilot:
             pane = app.query_one(WorktreePane)
             wt = _make_worktree("repo-a", "feat-1", "/tmp/wt1")
@@ -167,8 +164,6 @@ def test_enter_opens_ide_when_no_mr():
     """Enter on row with mr_info=None delegates to action_open_ide."""
     from textual.app import App, ComposeResult
 
-    from joy.models import Config
-
     ide_calls: list = []
 
     class _TestApp(App):
@@ -180,7 +175,6 @@ def test_enter_opens_ide_when_no_mr():
 
     async def _run():
         app = _TestApp()
-        app._config = Config(ide="PyCharm")
         async with app.run_test() as pilot:
             pane = app.query_one(WorktreePane)
             wt = _make_worktree("repo-a", "feat-1", "/tmp/wt1")
