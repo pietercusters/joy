@@ -222,6 +222,37 @@ def close_session(session_id: str, force: bool = False) -> bool:
     return success
 
 
+def close_tab(tab_id: str, force: bool = False) -> bool:
+    """Close an entire iTerm2 tab by tab_id. Returns True on success, False on failure.
+
+    force=False for graceful close, force=True to skip iTerm2's confirmation.
+    If tab is already gone (not found in any window), returns True.
+    All iterm2 imports are lazy to avoid startup overhead.
+    """
+    import iterm2
+    from iterm2.connection import Connection
+
+    success = False
+
+    async def _close(connection):
+        nonlocal success
+        app = await iterm2.async_get_app(connection)
+        for window in app.terminal_windows:
+            for tab in window.tabs:
+                if tab.tab_id == tab_id:
+                    await tab.async_close(force=force)
+                    success = True
+                    return
+        # Tab not found in any window — already gone
+        success = True
+
+    try:
+        Connection().run_until_complete(_close, retry=False)
+    except Exception:
+        pass
+    return success
+
+
 def activate_session(session_id: str) -> bool:
     """Focus an iTerm2 session by ID. Returns True on success, False on failure.
 
