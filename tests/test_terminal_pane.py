@@ -32,12 +32,14 @@ def _make_session(
     session_name: str = "session-1",
     foreground_process: str = "zsh",
     cwd: str = "/Users/pieter/Github/joy",
+    tab_id: str = "",
 ) -> TerminalSession:
     return TerminalSession(
         session_id=session_id,
         session_name=session_name,
         foreground_process=foreground_process,
         cwd=cwd,
+        tab_id=tab_id,
     )
 
 
@@ -45,12 +47,14 @@ def _claude_session(
     session_id: str = "c1",
     session_name: str = "claude-joy",
     foreground_process: str = "claude",
+    tab_id: str = "",
 ) -> TerminalSession:
     return TerminalSession(
         session_id=session_id,
         session_name=session_name,
         foreground_process=foreground_process,
         cwd="/Users/pieter/Github/joy",
+        tab_id=tab_id,
         is_claude=True,  # explicitly set — pane uses is_claude, not foreground_process matching
     )
 
@@ -59,12 +63,14 @@ def _other_session(
     session_id: str = "o1",
     session_name: str = "shell-joy",
     foreground_process: str = "zsh",
+    tab_id: str = "",
 ) -> TerminalSession:
     return _make_session(
         session_id=session_id,
         session_name=session_name,
         foreground_process=foreground_process,
         cwd="/Users/pieter/Github/joy",
+        tab_id=tab_id,
     )
 
 
@@ -209,8 +215,8 @@ def test_set_sessions_renders_session_rows():
     asyncio.run(_run())
 
 
-def test_set_sessions_groups_claude_sessions():
-    """Claude sessions (foreground_process=='claude') appear under 'Claude' group header."""
+def test_set_sessions_groups_by_tab_id():
+    """Sessions with a matching tab_id appear under the project's group header."""
     from textual.app import App, ComposeResult
 
     class _TestApp(App):
@@ -222,15 +228,20 @@ def test_set_sessions_groups_claude_sessions():
         async with app.run_test() as pilot:
             pane = app.query_one(TerminalPane)
             sessions = [
-                _claude_session("c1", "claude-joy"),
-                _other_session("o1", "shell-1"),
+                _claude_session("c1", "claude-joy", tab_id="tab-proj-001"),
+                _other_session("o1", "shell-1", tab_id="tab-proj-001"),
+                _other_session("o2", "shell-other"),  # no matching tab_id
             ]
-            await pane.set_sessions(sessions)
+            tab_groups = [("my-project", "tab-proj-001")]
+            await pane.set_sessions(sessions, tab_groups=tab_groups)
             await pilot.pause(0.1)
             headers = pane.query(GroupHeader)
             header_texts = [str(h.content) for h in headers]
-            assert any("Claude" in t for t in header_texts), (
-                f"Expected 'Claude' header, got: {header_texts}"
+            assert any("my-project" in t for t in header_texts), (
+                f"Expected 'my-project' header, got: {header_texts}"
+            )
+            assert any("Other" in t for t in header_texts), (
+                f"Expected 'Other' header for unlinked session, got: {header_texts}"
             )
 
     asyncio.run(_run())
@@ -672,5 +683,95 @@ def test_other_sessions_sorted_alphabetically():
             assert row_ids == ["o1", "o2", "o3"], (
                 f"Expected alpha order by name, got: {row_ids}"
             )
+
+    asyncio.run(_run())
+
+
+def test_set_sessions_no_tab_groups_all_go_to_other():
+    """With tab_groups=None, all sessions appear under 'Other' regardless of tab_id."""
+    from textual.app import App, ComposeResult
+
+    class _TestApp(App):
+        def compose(self) -> ComposeResult:
+            yield TerminalPane()
+
+    async def _run():
+        app = _TestApp()
+        async with app.run_test() as pilot:
+            pane = app.query_one(TerminalPane)
+            sessions = [
+                _claude_session("c1", "claude-joy", tab_id="tab-001"),
+                _other_session("o1", "shell-1", tab_id="tab-001"),
+            ]
+            # No tab_groups provided
+            await pane.set_sessions(sessions, tab_groups=None)
+            await pilot.pause(0.1)
+            headers = pane.query(GroupHeader)
+            header_texts = [str(h.content) for h in headers]
+            assert any("Other" in t for t in header_texts), (
+                f"Expected 'Other' header, got: {header_texts}"
+            )
+            # No project-named header
+            assert not any("tab-001" in t for t in header_texts)
+            rows = pane.query(SessionRow)
+            assert len(rows) == 2
+
+    asyncio.run(_run())
+
+
+def test_set_sessions_claude_dot_marker_preserved_in_project_group():
+    """Claude sessions within a project group still show INDICATOR_BUSY or INDICATOR_WAITING."""
+    from textual.app import App, ComposeResult
+
+    class _TestApp(App):
+        def compose(self) -> ComposeResult:
+            yield TerminalPane()
+
+    async def _run():
+        app = _TestApp()
+        async with app.run_test() as pilot:
+            pane = app.query_one(TerminalPane)
+            sessions = [
+                _claude_session("c1", "claude-joy", foreground_process="claude", tab_id="tab-proj"),
+            ]
+            tab_groups = [("myproject", "tab-proj")]
+            await pane.set_sessions(sessions, tab_groups=tab_groups)
+            await pilot.pause(0.1)
+            rows = pane.query(SessionRow)
+            assert len(rows) == 1
+            content = str(rows[0].content)
+            assert ICON_CLAUDE in content, "Expected Claude icon in row content"
+            assert (INDICATOR_BUSY in content or INDICATOR_WAITING in content), (
+                "Expected Claude busy/waiting indicator in row content"
+            )
+
+    asyncio.run(_run())
+
+
+def test_set_sessions_empty_project_group_not_shown():
+    """A project tab group with no matching sessions shows no header for that project."""
+    from textual.app import App, ComposeResult
+
+    class _TestApp(App):
+        def compose(self) -> ComposeResult:
+            yield TerminalPane()
+
+    async def _run():
+        app = _TestApp()
+        async with app.run_test() as pilot:
+            pane = app.query_one(TerminalPane)
+            sessions = [
+                _other_session("o1", "shell-1"),  # no tab_id
+            ]
+            # project has a tab but no sessions match
+            tab_groups = [("ghost-project", "tab-ghost")]
+            await pane.set_sessions(sessions, tab_groups=tab_groups)
+            await pilot.pause(0.1)
+            headers = pane.query(GroupHeader)
+            header_texts = [str(h.content) for h in headers]
+            assert not any("ghost-project" in t for t in header_texts), (
+                f"Expected no 'ghost-project' header, got: {header_texts}"
+            )
+            assert any("Other" in t for t in header_texts)
 
     asyncio.run(_run())

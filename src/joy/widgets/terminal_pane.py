@@ -1,9 +1,9 @@
 """Bottom-left pane: interactive terminal session display with cursor navigation.
 
-Displays active iTerm2 sessions grouped into Claude/Other groups.
-Claude sessions (foreground_process=='claude') appear first under a 'Claude'
-header; all others appear under an 'Other' header. Navigation via j/k/up/down,
-Enter activates the highlighted session, Escape returns focus to projects pane.
+Displays active iTerm2 sessions grouped by project tab. Each project with a linked
+iTerm2 tab appears as a named group header; sessions not in any project tab appear
+under an 'Other' header. Navigation via j/k/up/down, Enter activates the highlighted
+session, Escape returns focus to projects pane.
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import Static
 
-from joy.models import PresetKind, TerminalSession
+from joy.models import TerminalSession
 
 # ---------------------------------------------------------------------------
 # Nerd Font icon constants (per D-07)
@@ -26,7 +26,6 @@ from joy.models import PresetKind, TerminalSession
 
 ICON_SESSION = "\uf120"      # nf-fa-terminal
 ICON_CLAUDE = "\U000f1325"   # nf-md-robot (AI/robot glyph)
-ICON_LINK = "\uf0c1"         # nf-fa-link
 INDICATOR_BUSY = "\u25cf"    # BLACK CIRCLE -- session running claude
 INDICATOR_WAITING = "\u25cb" # WHITE CIRCLE -- session at shell prompt
 
@@ -91,7 +90,7 @@ class SessionRow(Static):
     """Single-line row displaying one terminal session.
 
     Stores session_id for Enter key activation. Content format:
-    [icon]  [session_name]  [busy/waiting indicator]  [process]  [cwd]  [link icon]
+    [icon]  [session_name]  [busy/waiting indicator]  [process]  [cwd]
     """
 
     DEFAULT_CSS = """
@@ -108,19 +107,17 @@ class SessionRow(Static):
         *,
         is_claude: bool = False,
         is_busy: bool = False,
-        is_linked: bool = False,
         show_shortcut: bool = False,
         **kwargs,
     ) -> None:
         self.session_id = session.session_id
         self.session_name = session.session_name  # FOUND-04: identity field for cursor preservation
-        self.is_linked = is_linked
-        # Store original data for re-rendering when linked status changes
+        # Store original data for potential re-rendering
         self._session = session
         self._is_claude = is_claude
         self._is_busy = is_busy
         self._show_shortcut = show_shortcut
-        content = self._build_content(session, is_claude=is_claude, is_busy=is_busy, is_linked=is_linked, show_shortcut=show_shortcut)
+        content = self._build_content(session, is_claude=is_claude, is_busy=is_busy, show_shortcut=show_shortcut)
         super().__init__(content, **kwargs)
 
     @staticmethod
@@ -129,7 +126,6 @@ class SessionRow(Static):
         *,
         is_claude: bool = False,
         is_busy: bool = False,
-        is_linked: bool = False,
         show_shortcut: bool = False,
     ) -> Text:
         """Build the rich.Text renderable for a single-line session row."""
@@ -155,9 +151,6 @@ class SessionRow(Static):
         if show_shortcut:
             t.append("  [h]", style="dim")
 
-        if is_linked:
-            t.append(f"  {ICON_LINK}", style="cyan")
-
         return t
 
 
@@ -169,9 +162,11 @@ class SessionRow(Static):
 class TerminalPane(Widget, can_focus=True):
     """Bottom-left pane: interactive terminal session list.
 
-    Sessions are pushed via set_sessions(). Claude sessions (foreground_process=='claude')
-    are grouped under a 'Claude' header; others appear under 'Other'. Cursor navigation
-    via j/k/up/down, Enter activates highlighted session, Escape returns to projects pane.
+    Sessions are pushed via set_sessions(). When tab_groups is provided,
+    sessions are grouped under their project's tab header; sessions not in any
+    project tab appear under an 'Other' header. When tab_groups is None, all
+    sessions fall into 'Other'. Cursor navigation via j/k/up/down, Enter
+    activates highlighted session, Escape returns to projects pane.
     """
 
     class SessionHighlighted(Message):
@@ -229,8 +224,8 @@ class TerminalPane(Widget, can_focus=True):
         super().__init__(**kwargs)
         self._cursor: int = -1
         self._rows: list[SessionRow] = []
-        self._linked_names: set[str] = set()
         self._sessions_cache: list[TerminalSession] | None = None
+        self._tab_groups_cache: list[tuple[str, str]] | None = None
         self.border_title = "Terminal"
 
     def compose(self) -> ComposeResult:
@@ -240,13 +235,21 @@ class TerminalPane(Widget, can_focus=True):
             id="terminal-scroll",
         )
 
-    async def set_sessions(self, sessions: list[TerminalSession] | None) -> None:
+    async def set_sessions(
+        self,
+        sessions: list[TerminalSession] | None,
+        tab_groups: list[tuple[str, str]] | None = None,
+    ) -> None:
         """Populate the pane with session rows. Idempotent.
 
         Args:
             sessions: List of TerminalSession objects, or None if iTerm2 is unavailable.
+            tab_groups: List of (project_name, tab_id) pairs in display order. Sessions
+                whose tab_id matches are grouped under the project's header. Sessions
+                with no matching tab_id fall under 'Other'. None treats all as 'Other'.
         """
         self._sessions_cache = sessions
+        self._tab_groups_cache = tab_groups
         scroll = self.query_one("#terminal-scroll", _TerminalScroll)
         saved_scroll_y = scroll.scroll_y
         # FOUND-04: save cursor identity before DOM rebuild (D-12, D-13)
@@ -272,45 +275,58 @@ class TerminalPane(Widget, can_focus=True):
 
         from joy.terminal_sessions import _SHELL_PROCESSES  # noqa: PLC0415
 
-        # Split into Claude sessions vs. other using the is_claude flag set at fetch time.
-        # is_claude uses multi-signal detection: job name, session name, TTY process list.
-        claude_sessions = [s for s in sessions if s.is_claude]
-        other_sessions = [s for s in sessions if not s.is_claude]
-
-        # Within Claude group: busy (Claude/node is foreground) sorts before waiting
-        # (shell is foreground -- Claude is paused/backgrounded), then alpha by name.
-        def _claude_sort_key(s: TerminalSession) -> tuple[int, str]:
+        def _sort_key(s: TerminalSession) -> tuple[int, int, str]:
+            """Sort key: Claude-busy first (0,0), Claude-waiting (0,1), other (1,x), then alpha."""
             is_busy = s.foreground_process.lower() not in _SHELL_PROCESSES
-            return (0 if is_busy else 1, s.session_name.lower())
-
-        claude_sessions.sort(key=_claude_sort_key)
-
-        # Sort Other sessions alphabetically by session_name
-        other_sessions.sort(key=lambda s: s.session_name.lower())
+            if s.is_claude:
+                return (0, 0 if is_busy else 1, s.session_name.lower())
+            return (1, 0, s.session_name.lower())
 
         new_rows: list[SessionRow] = []
         first_group = True
 
-        # Mount Claude group (if any)
-        if claude_sessions:
-            first_group = False
-            scroll.mount(GroupHeader("Claude"))
-            for session in claude_sessions:
-                is_busy = session.foreground_process.lower() not in _SHELL_PROCESSES
-                is_linked = session.session_name in self._linked_names
-                row = SessionRow(session, is_claude=True, is_busy=is_busy, is_linked=is_linked, show_shortcut=len(new_rows) == 0)
-                scroll.mount(row)
-                new_rows.append(row)
+        if tab_groups:
+            # Build tab_id -> project_name lookup
+            tab_id_to_project: dict[str, str] = {tab_id: name for name, tab_id in tab_groups}
+            project_tab_ids: set[str] = set(tab_id_to_project.keys())
 
-        # Mount Other group (if any)
+            # Bucket sessions into per-project lists and other
+            project_sessions: dict[str, list[TerminalSession]] = {name: [] for name, _ in tab_groups}
+            other_sessions: list[TerminalSession] = []
+            for session in sessions:
+                if session.tab_id and session.tab_id in project_tab_ids:
+                    project_sessions[tab_id_to_project[session.tab_id]].append(session)
+                else:
+                    other_sessions.append(session)
+
+            # Mount project groups in tab_groups order (skip empty groups)
+            for project_name, _tab_id in tab_groups:
+                group = project_sessions[project_name]
+                if not group:
+                    continue
+                if not first_group:
+                    scroll.mount(Static("", classes="section-spacer"))
+                first_group = False
+                scroll.mount(GroupHeader(project_name))
+                group.sort(key=_sort_key)
+                for session in group:
+                    is_busy = session.foreground_process.lower() not in _SHELL_PROCESSES
+                    row = SessionRow(session, is_claude=session.is_claude, is_busy=is_busy, show_shortcut=len(new_rows) == 0)
+                    scroll.mount(row)
+                    new_rows.append(row)
+        else:
+            # No tab grouping data: all sessions go to Other
+            other_sessions = list(sessions)
+
+        # Mount Other group for sessions not in any project tab
         if other_sessions:
             if not first_group:
                 scroll.mount(Static("", classes="section-spacer"))
-            first_group = False
             scroll.mount(GroupHeader("Other"))
+            other_sessions.sort(key=_sort_key)
             for session in other_sessions:
-                is_linked = session.session_name in self._linked_names
-                row = SessionRow(session, is_claude=False, is_linked=is_linked, show_shortcut=len(new_rows) == 0)
+                is_busy = session.foreground_process.lower() not in _SHELL_PROCESSES
+                row = SessionRow(session, is_claude=session.is_claude, is_busy=is_busy, show_shortcut=len(new_rows) == 0)
                 scroll.mount(row)
                 new_rows.append(row)
 
@@ -331,21 +347,6 @@ class TerminalPane(Widget, can_focus=True):
         self._update_highlight(emit=False)  # refresh restore -- no sync message
 
         scroll.call_after_refresh(lambda: scroll.scroll_to(y=saved_scroll_y, animate=False))
-
-    def set_linked_names(self, linked_names: set[str]) -> None:
-        """Update linked session names and refresh link icons on existing rows."""
-        self._linked_names = linked_names
-        for row in self._rows:
-            is_linked = row.session_name in linked_names
-            if row.is_linked != is_linked:
-                row.is_linked = is_linked
-                row.update(row._build_content(
-                    row._session,
-                    is_claude=row._is_claude,
-                    is_busy=row._is_busy,
-                    is_linked=is_linked,
-                    show_shortcut=row._show_shortcut,
-                ))
 
     def _update_highlight(self, *, emit: bool = True) -> None:
         """Apply '--highlight' CSS class to the row at the current cursor position."""
@@ -444,7 +445,7 @@ class TerminalPane(Widget, can_focus=True):
         def on_name(new_name: str | None) -> None:
             if new_name is None:
                 return
-            self._do_rename_session(row.session_id, new_name, row.session_name)
+            self._do_rename_session(row.session_id, new_name)
 
         self.app.push_screen(
             NameInputModal(title="Rename Session", initial_value=row.session_name, placeholder="Session name"),
@@ -452,31 +453,15 @@ class TerminalPane(Widget, can_focus=True):
         )
 
     @work(thread=True, exit_on_error=False)
-    def _do_rename_session(self, session_id: str, new_name: str, old_name: str) -> None:
+    def _do_rename_session(self, session_id: str, new_name: str) -> None:
         import joy.terminal_sessions as _ts  # noqa: PLC0415
         ok = _ts.rename_session(session_id, new_name)
         if ok:
-            self.app.call_from_thread(self.app.notify, f"Renamed: {old_name} -> {new_name}", markup=False)
-            # Update linked project obj.value if this session is linked
-            self.app.call_from_thread(self._update_linked_project_name, old_name, new_name)
+            self.app.call_from_thread(self.app.notify, f"Renamed session", markup=False)
             # Trigger refresh to rebuild pane with new name
             self.app.call_from_thread(self.app._load_terminal)
         else:
             self.app.call_from_thread(self.app.notify, "Failed to rename session", severity="error", markup=False)
-
-    def _update_linked_project_name(self, old_name: str, new_name: str) -> None:
-        """Update obj.value in linked project when session is renamed."""
-        if not hasattr(self.app, '_rel_index') or self.app._rel_index is None:
-            return
-        project = self.app._rel_index.project_for_terminal(old_name)
-        if project is None:
-            return
-        for obj in project.objects:
-            if obj.kind == PresetKind.TERMINALS and obj.value == old_name:
-                obj.value = new_name
-                break
-        # Persist change
-        self.app._save_projects_bg()
 
     def action_close_session(self) -> None:
         """Close the highlighted session with confirmation (d key)."""
