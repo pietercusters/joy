@@ -1,6 +1,7 @@
 """Left pane: project list widget with keyboard navigation and repo grouping."""
 from __future__ import annotations
 
+from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import VerticalScroll
@@ -9,9 +10,21 @@ from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import Input, Static
 
-from joy.models import PresetKind, Project, Repo
-from joy.widgets.worktree_pane import ICON_BRANCH
-from joy.widgets.terminal_pane import ICON_CLAUDE
+from joy.models import MRInfo, PresetKind, Project, Repo
+from joy.widgets.icons import (
+    ICON_BRANCH,
+    ICON_TICKET,
+    ICON_THREAD,
+    ICON_NOTE,
+    ICON_TERMINAL,
+    ICON_WORKTREE,
+    ICON_MR_OPEN,
+    ICON_MR_DRAFT,
+    ICON_MR_CLOSED,
+    ICON_CI_PASS,
+    ICON_CI_FAIL,
+    ICON_CI_PENDING,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -52,7 +65,7 @@ class GroupHeader(Static):
 
 
 class ProjectRow(Static):
-    """Single-line row displaying one project with badge counts (D-09, D-10, D-11)."""
+    """Single-line row: status dot + name + optional MR strip + 6-icon ribbon."""
 
     DEFAULT_CSS = """
     ProjectRow {
@@ -62,27 +75,163 @@ class ProjectRow(Static):
     }
     """
 
-    def __init__(self, project: Project, **kwargs) -> None:
+    def __init__(self, project: Project, avail_width: int = 80, **kwargs) -> None:
         self.project = project
-        self._wt_count: int = 0
-        self._agent_count: int = 0
-        super().__init__(self._build_content(), **kwargs)
+        self._avail_width = avail_width
+        self._mr_info: MRInfo | None = None
+        self._has: dict[str, bool] = self._compute_has(project)
+        content = self.build_content(project, avail_width, mr_info=None, has=self._has)
+        super().__init__(content, **kwargs)
 
-    def _build_content(self) -> str:
-        """Build display string with project name and badge counts (D-09, D-10).
+    @staticmethod
+    def _compute_has(project: Project) -> dict[str, bool]:
+        """Compute which object kinds are present in the project."""
+        kinds = {obj.kind for obj in project.objects}
+        return {
+            "branch":   PresetKind.BRANCH in kinds,
+            "ticket":   PresetKind.TICKET in kinds,
+            "thread":   PresetKind.THREAD in kinds,
+            "note":     PresetKind.NOTE in kinds,
+            "terminal": PresetKind.TERMINALS in kinds,
+            "worktree": PresetKind.WORKTREE in kinds,
+        }
 
-        Both counts always shown, even when zero (D-10: consistent row width).
+    @staticmethod
+    def build_content(
+        project: Project,
+        avail_width: int,
+        mr_info: "MRInfo | None",
+        has: dict[str, bool],
+    ) -> Text:
+        """Build a single-line Rich.Text row:
+        [status-dot] [space] [name...padding...] [MR-strip] [space] [icon-ribbon]
         """
-        return f" {self.project.name}  {ICON_BRANCH} {self._wt_count}  {ICON_CLAUDE} {self._agent_count}"
+        t = Text(no_wrap=True, overflow="ellipsis")
 
-    def set_counts(self, wt_count: int, agent_count: int) -> None:
-        """Update badge counts and trigger content re-render (D-11).
+        # Status dot (leftmost)
+        status = project.status
+        if status == "prio":
+            t.append("●", style="green")
+        elif status == "hold":
+            t.append("●", style="dim")
+        else:  # idle
+            t.append("○", style="dim")
+        t.append(" ")
 
-        Uses Static.update() — no DOM rebuild needed.
-        """
-        self._wt_count = wt_count
-        self._agent_count = agent_count
-        self.update(self._build_content())
+        # MR strip (built first so we know its length for padding)
+        mr_strip = Text()
+        if mr_info is not None:
+            mr_strip.append(f"!{mr_info.mr_number} ", style="dim")
+            if mr_info.is_draft:
+                mr_strip.append(ICON_MR_DRAFT, style="dim")
+            else:
+                mr_strip.append(ICON_MR_OPEN, style="green")
+            if mr_info.ci_status == "pass":
+                mr_strip.append(f" {ICON_CI_PASS}", style="green")
+            elif mr_info.ci_status == "fail":
+                mr_strip.append(f" {ICON_CI_FAIL}", style="red")
+            elif mr_info.ci_status == "pending":
+                mr_strip.append(f" {ICON_CI_PENDING}", style="yellow")
+            mr_strip.append(" ")
+
+        # Icon ribbon: branch ticket thread note terminal worktree
+        ribbon_icons = [
+            (ICON_BRANCH,   has.get("branch",   False)),
+            (ICON_TICKET,   has.get("ticket",   False)),
+            (ICON_THREAD,   has.get("thread",   False)),
+            (ICON_NOTE,     has.get("note",     False)),
+            (ICON_TERMINAL, has.get("terminal", False)),
+            (ICON_WORKTREE, has.get("worktree", False)),
+        ]
+        ribbon = Text()
+        for icon, present in ribbon_icons:
+            if present:
+                ribbon.append(icon, style="cyan")
+            else:
+                ribbon.append(icon, style="grey50 dim")
+
+        # Compute fixed right width: mr_strip_len + 1 space + ribbon (6 icons)
+        mr_plain_len = len(mr_strip.plain)
+        fixed_right = mr_plain_len + 1 + len(ribbon_icons)  # 1 space between mr and ribbon
+
+        # Fixed left: status-dot (1) + space (1) = 2
+        name_budget = avail_width - 2 - fixed_right
+        name = project.name
+        if len(name) > name_budget and name_budget > 1:
+            name = name[:name_budget - 1] + "…"
+        elif name_budget <= 1:
+            name = "…"
+
+        # Padding between name and right section
+        pad = max(0, name_budget - len(name))
+        t.append(name)
+        t.append(" " * pad)
+
+        # MR strip (if any)
+        if mr_info is not None:
+            t.append_text(mr_strip)
+        else:
+            t.append(" ")  # single space before ribbon when no MR strip
+
+        # Ribbon
+        t.append_text(ribbon)
+        return t
+
+    def set_counts(
+        self,
+        wt_count: int,
+        agent_count: int,
+        mr_info: "MRInfo | None" = None,
+        avail_width: int | None = None,
+    ) -> None:
+        """Update MR info and re-render content. wt_count/agent_count kept for compat."""
+        self._mr_info = mr_info
+        if avail_width is not None:
+            self._avail_width = avail_width
+        self._has = self._compute_has(self.project)  # refresh in case objects changed
+        self.update(self.build_content(self.project, self._avail_width, mr_info, self._has))
+
+
+# ---------------------------------------------------------------------------
+# pick_best_mr: helper to select the most relevant MR for a project row
+# ---------------------------------------------------------------------------
+
+
+def pick_best_mr(
+    project: "Project",
+    mr_data: dict,
+    rel_index: object,
+) -> "MRInfo | None":
+    """Select the most relevant MR for a project row.
+
+    Priority:
+    1. MR for any linked worktree's branch (via rel_index)
+    2. Highest-numbered open (non-draft) MR for project's repo
+    3. Highest-numbered MR (draft or otherwise) for project's repo
+    Returns None if no MR found or project has no repo.
+    """
+    if project.repo is None:
+        return None
+    if not mr_data:
+        return None
+
+    # Priority 1: MR for a linked worktree's branch
+    for wt in rel_index.worktrees_for(project):  # type: ignore[union-attr]
+        mr = mr_data.get((wt.repo_name, wt.branch))
+        if mr is not None:
+            return mr
+
+    # Priority 2 & 3: scan all MRs for this repo
+    repo_mrs = [
+        mr for (repo, _branch), mr in mr_data.items()
+        if repo == project.repo
+    ]
+    if not repo_mrs:
+        return None
+    open_mrs = [mr for mr in repo_mrs if not mr.is_draft]
+    if open_mrs:
+        return max(open_mrs, key=lambda m: m.mr_number)
+    return max(repo_mrs, key=lambda m: m.mr_number)
 
 
 # ---------------------------------------------------------------------------
@@ -113,6 +262,7 @@ class ProjectList(Widget, can_focus=True):
         Binding("R", "assign_repo", "Assign Repo", show=True),
         Binding("a", "archive_project", "Archive", show=True),
         Binding("A", "open_archive_browser", "Archives", show=True),
+        Binding("g", "toggle_status", "Status", show=True),
     ]
 
     DEFAULT_CSS = """
@@ -124,6 +274,9 @@ class ProjectList(Widget, can_focus=True):
     }
     ProjectRow.--highlight {
         background: $accent 30%;
+    }
+    ProjectList .section-spacer {
+        height: 1;
     }
     """
 
@@ -191,21 +344,27 @@ class ProjectList(Widget, can_focus=True):
                 other.append(p)
 
         new_rows: list[ProjectRow] = []
+        avail_width = self._get_available_width()
+        first_group = True
 
         # Mount repo groups alphabetically (D-09)
         for repo_name in sorted(grouped, key=str.lower):
+            if not first_group:
+                scroll.mount(Static("", classes="section-spacer"))
+            first_group = False
             scroll.mount(GroupHeader(repo_name))
             for p in grouped[repo_name]:
-                row = ProjectRow(p)
+                row = ProjectRow(p, avail_width=avail_width)
                 scroll.mount(row)
                 new_rows.append(row)
 
         # Mount "Other" group last (D-09)
         if other:
             if grouped:  # only show "Other" header when there are also repo groups
+                scroll.mount(Static("", classes="section-spacer"))
                 scroll.mount(GroupHeader("Other"))
             for p in other:
-                row = ProjectRow(p)
+                row = ProjectRow(p, avail_width=avail_width)
                 scroll.mount(row)
                 new_rows.append(row)
 
@@ -541,13 +700,35 @@ class ProjectList(Widget, can_focus=True):
             self._cursor = index
             self._update_highlight()
 
-    def update_badges(self, index: object) -> None:
-        """Push badge counts from RelationshipIndex to all project rows (D-11, BADGE-03).
+    def _get_available_width(self) -> int:
+        """Return usable content width for row rendering."""
+        width = self.content_region.width
+        if width == 0:
+            return 80
+        return max(width - 2, 20)  # subtract 2 for left+right padding
+
+    def update_badges(self, index: object, mr_data: dict | None = None) -> None:
+        """Push badge counts and MR info from RelationshipIndex to all project rows.
 
         Called by JoyApp._update_badges() after every completed refresh cycle.
         """
         from joy.resolver import RelationshipIndex  # noqa: PLC0415 — avoid circular at module level
+        avail_width = self._get_available_width()
         for row in self._rows:
             wt_count = len(index.worktrees_for(row.project))  # type: ignore[union-attr]
             agent_count = len(index.terminals_for(row.project))  # type: ignore[union-attr]
-            row.set_counts(wt_count, agent_count)
+            mr_info = pick_best_mr(row.project, mr_data or {}, index) if mr_data else None
+            row.set_counts(wt_count, agent_count, mr_info=mr_info, avail_width=avail_width)
+
+    def action_toggle_status(self) -> None:
+        """Cycle project status: idle → prio → hold → idle (g key)."""
+        if self._cursor < 0 or self._cursor >= len(self._rows):
+            return
+        project = self._rows[self._cursor].project
+        cycle = {"idle": "prio", "prio": "hold", "hold": "idle"}
+        project.status = cycle.get(project.status, "idle")
+        self.app._save_projects_bg()
+        # Re-render just this row
+        row = self._rows[self._cursor]
+        row._has = ProjectRow._compute_has(project)
+        row.update(ProjectRow.build_content(project, row._avail_width, row._mr_info, row._has))
