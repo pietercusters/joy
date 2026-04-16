@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: verifying
-stopped_at: Completed quick-260416-k3w-01-PLAN.md
-last_updated: "2026-04-16T13:04:28.378Z"
+stopped_at: context exhaustion at 90% (2026-04-16)
+last_updated: "2026-04-16T16:40:07.590Z"
 last_activity: 2026-04-16
 progress:
   total_phases: 16
@@ -81,10 +81,11 @@ None — clean milestone close.
 | 260415-qqx | Build full iTerm2 terminal session control: rename Agent→Terminal, n/e/d/D bindings, auto-create/auto-remove, project-link flag | 2026-04-15 | 251fcf8 | Verified | [260415-qqx-build-full-iterm2-terminal-session-contr](./quick/260415-qqx-build-full-iterm2-terminal-session-contr/) |
 | 260416-k3w | Add project archive/unarchive: a/A bindings, archive.toml cold storage, ArchiveModal, ArchiveBrowserModal with branch-match sections | 2026-04-16 | 851e3dc | Verified | [260416-k3w-archive-project-with-a-a-bindings-cold-s](./quick/260416-k3w-archive-project-with-a-a-bindings-cold-s/) |
 | 260416-m39 | Project list icon ribbon: status dot (g key cycles idle/prio/hold), 6-icon presence ribbon, MR strip, section spacers, icons.py | 2026-04-16 | 399a581 | Needs Review | [260416-m39-projects-overview-icon-ribbon-mr-status-](./quick/260416-m39-projects-overview-icon-ribbon-mr-status-/) |
+| 260416-of2 | Improve iTerm2 integration: link projects to iTerm2 tabs via unique IDs, group terminals by tab, refactor sessions pane | 2026-04-16 | ad6f93c | Needs Review | [260416-of2-improve-iterm2-integration-link-projects](./quick/260416-of2-improve-iterm2-integration-link-projects/) |
 
 ## Session Continuity
 
-Last session: 2026-04-16
-Stopped at: quick-260416-m39 complete — 322 tests passing, awaiting human verify of icon ribbon UI
-Last activity: 2026-04-16 - Completed quick task 260416-m39: Projects overview icon ribbon, MR status icons, project status toggle (prio/hold/idle)
+Last session: 2026-04-16T16:40:07.582Z
+Stopped at: context exhaustion at 90% (2026-04-16)
+Last activity: 2026-04-16 - Completed quick task 260416-of2: Improve iTerm2 integration — projects linked to tabs by tab_id, terminal pane grouped by project, stale-heal, auto-create
 Resume: Phase 15 (cross-pane-selection-sync) still needs execution, then v1.2 milestone can close

@@ -95,6 +95,7 @@ class JoyApp(App):
         self._current_worktrees: list[WorktreeInfo] = []
         self._current_sessions: list[TerminalSession] = []
         self._live_tab_ids: set[str] = set()
+        self._tabs_creating: set[str] = set()  # in-flight guard: project names with tab creation pending
         # Phase 15: cross-pane sync guard (D-03)
         self._is_syncing: bool = False
         # Phase 15: sync toggle state (D-12, D-14) — toggle binding added in Plan 03
@@ -249,8 +250,10 @@ class JoyApp(App):
                     # Stale: tab closed externally; clear so auto-create fires on next cycle
                     project.iterm_tab_id = None
                     needs_save = True
-                elif project.iterm_tab_id is None:
+                elif project.iterm_tab_id is None and project.name not in self._tabs_creating:
                     # No tab linked yet: best-effort auto-create (fire-and-forget)
+                    # In-flight guard prevents duplicate workers on successive refresh ticks
+                    self._tabs_creating.add(project.name)
                     self._do_create_tab_for_project(project)
             if needs_save:
                 self._save_projects_bg()
@@ -668,17 +671,25 @@ class JoyApp(App):
     def _do_create_tab_for_project(self, project: Project) -> None:
         """Create an iTerm2 tab for a project and persist the tab_id. Best-effort, silent."""
         from joy.terminal_sessions import create_tab  # noqa: PLC0415
-        tab_id = create_tab(project.name)
-        if tab_id:
-            project.iterm_tab_id = tab_id
-            self.app.call_from_thread(self._save_projects_bg)
-            self.app.call_from_thread(self._load_terminal)
+        project_name = project.name
+        tab_id = create_tab(project_name)
+
+        def _apply(tab_id: str | None = tab_id) -> None:
+            self._tabs_creating.discard(project_name)
+            if tab_id:
+                project.iterm_tab_id = tab_id
+                self._save_projects_bg()
+                self._load_terminal()
+
+        self.app.call_from_thread(_apply)
 
     @work(thread=True, exit_on_error=False)
     def _do_activate_tab(self, tab_id: str) -> None:
         """Activate the iTerm2 tab for a project by finding a session in that tab."""
         from joy.terminal_sessions import activate_session  # noqa: PLC0415
-        for session in self._current_sessions:
+        # Snapshot on call — _current_sessions may be replaced by main thread concurrently
+        sessions = list(self._current_sessions)
+        for session in sessions:
             if session.tab_id == tab_id:
                 activate_session(session.session_id)
                 return
