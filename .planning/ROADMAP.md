@@ -68,3 +68,14 @@ Full details: `.planning/milestones/v1.2-ROADMAP.md`
 | 14. Relationship Foundation & Badges | v1.2 | 3/3 | ✓ Complete | 2026-04-15 |
 | 15. Cross-Pane Selection Sync | v1.2 | 3/3 | ✓ Complete | 2026-04-15 |
 | 16. Live Data Propagation | v1.2 | 2/2 | ✓ Complete | 2026-04-15 |
+
+### Phase 17: Fix iTerm2 integration bugs from quick-260416-of2: remove auto-sync, close whole Tab on delete/archive, fix test isolation for ~/.joy/
+
+**Goal:** Remove automatic iTerm2 tab creation (tabs only via h-key), close entire tab on project delete/archive, isolate all tests from real ~/.joy/ paths
+**Requirements**: FIX17-REMOVE-AUTO-SYNC, FIX17-TAB-CLOSE-ON-DELETE-ARCHIVE, FIX17-TEST-ISOLATION, FIX17-CLOSE-TAB
+**Depends on:** Phase 16
+**Plans:** 2 plans
+
+Plans:
+- [ ] 17-01-PLAN.md -- Test isolation fixture + close_tab function
+- [ ] 17-02-PLAN.md -- Remove auto-sync, tab-level close on delete/archive, remove ArchiveModal
