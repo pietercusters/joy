@@ -11,7 +11,7 @@ from textual.binding import Binding
 from textual.containers import Grid
 from textual.widgets import Header
 
-from joy.models import Config, ObjectItem, PresetKind, Project, Repo, TerminalSession, WorktreeInfo
+from joy.models import ArchivedProject, Config, ObjectItem, PresetKind, Project, Repo, TerminalSession, WorktreeInfo
 from joy.widgets.hint_bar import HintBar
 from joy.resolver import RelationshipIndex
 from joy.screens import NameInputModal, PresetPickerModal, SettingsModal, ValueInputModal
@@ -23,7 +23,7 @@ from joy.widgets.worktree_pane import WorktreePane
 
 
 _PANE_HINTS: dict[str, str] = {
-    "project-list":   "n: New  e: Rename  D: Delete  R: Assign repo  /: Filter",
+    "project-list":   "n: New  e: Rename  D: Delete  R: Assign repo  /: Filter  a: Archive  A: Archives",
     "project-detail": "o: Open  n: Add  e: Edit  d: Delete  D: Force del  space: Toggle",
     "terminal-pane":  "o: Open  n: Add  e: Rename  d: Close  D: Force close",
     "worktrees-pane": "i/Enter: Open IDE",
@@ -856,6 +856,45 @@ class JoyApp(App):
         # Show accumulated error toasts at the end (D-07)
         for err in errors:
             self.app.notify(f"Failed to open: {err}", severity="error", markup=False)
+
+    # ------------------------------------------------------------------
+    # Archive background workers
+    # ------------------------------------------------------------------
+
+    @work(thread=True, exit_on_error=False)
+    def _close_sessions_bg(self, sessions: list[TerminalSession]) -> None:
+        """Close iTerm2 sessions gracefully in a background thread.
+
+        Sessions disappear on the next refresh cycle — no UI feedback needed here.
+        Session IDs come from the last _rel_index snapshot; close_session handles
+        already-gone sessions gracefully (returns True).
+        """
+        from joy.terminal_sessions import close_session  # noqa: PLC0415
+        for session in sessions:
+            close_session(session.session_id, force=False)
+
+    @work(thread=True, exit_on_error=False)
+    def _append_to_archive_bg(self, archived: ArchivedProject) -> None:
+        """Load archive.toml, append the new entry, save atomically.
+
+        Not safe for concurrent calls — acceptable for single-user TUI where
+        archive and unarchive actions never overlap.
+        """
+        from joy.store import load_archived_projects, save_archived_projects  # noqa: PLC0415
+        existing = load_archived_projects()
+        existing.append(archived)
+        save_archived_projects(existing)
+
+    @work(thread=True, exit_on_error=False)
+    def _remove_from_archive_bg(self, archived: ArchivedProject) -> None:
+        """Load archive.toml, remove the given entry by project name, save atomically.
+
+        Not safe for concurrent calls — acceptable for single-user TUI.
+        """
+        from joy.store import load_archived_projects, save_archived_projects  # noqa: PLC0415
+        existing = load_archived_projects()
+        updated = [ap for ap in existing if ap.project.name != archived.project.name]
+        save_archived_projects(updated)
 
 
 def _get_version() -> str:

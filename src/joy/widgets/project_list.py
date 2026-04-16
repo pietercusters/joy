@@ -9,7 +9,7 @@ from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import Input, Static
 
-from joy.models import Project, Repo
+from joy.models import PresetKind, Project, Repo
 from joy.widgets.worktree_pane import ICON_BRANCH
 from joy.widgets.terminal_pane import ICON_CLAUDE
 
@@ -111,6 +111,8 @@ class ProjectList(Widget, can_focus=True):
         Binding("delete", "delete_project", "Delete", show=False),
         Binding("/", "filter", "Filter", show=True),
         Binding("R", "assign_repo", "Assign Repo", show=True),
+        Binding("a", "archive_project", "Archive", show=True),
+        Binding("A", "open_archive_browser", "Archives", show=True),
     ]
 
     DEFAULT_CSS = """
@@ -357,6 +359,102 @@ class ProjectList(Widget, can_focus=True):
     def action_new_project(self) -> None:
         """Delegate to JoyApp.action_new_project (n only fires from project list focus)."""
         self.app.action_new_project()
+
+    def action_archive_project(self) -> None:
+        """Archive the highlighted project to cold storage (~/.joy/archive.toml)."""
+        from joy.screens.archive_modal import ArchiveChoice, ArchiveModal  # noqa: PLC0415
+
+        if self._cursor < 0 or self._cursor >= len(self._rows):
+            return
+        project = self._rows[self._cursor].project
+        cursor_at = self._cursor
+
+        def on_archive(choice: ArchiveChoice) -> None:
+            if choice is ArchiveChoice.CANCEL:
+                return
+
+            close_terminals = choice is ArchiveChoice.ARCHIVE_WITH_CLOSE
+
+            # 1. Strip WORKTREE + TERMINALS objects; preserve all others
+            stripped_objects = [
+                obj for obj in project.objects
+                if obj.kind not in (PresetKind.WORKTREE, PresetKind.TERMINALS)
+            ]
+            from joy.models import ArchivedProject, Project as _Project  # noqa: PLC0415
+            from datetime import datetime, timezone  # noqa: PLC0415
+            archived_project_data = _Project(
+                name=project.name,
+                objects=stripped_objects,
+                created=project.created,
+                repo=project.repo,
+            )
+
+            # 2. Optionally close terminal sessions in background
+            if close_terminals and self.app._rel_index is not None:
+                sessions = self.app._rel_index.terminals_for(project)
+                if sessions:
+                    self.app._close_sessions_bg(sessions)
+
+            # 3. Remove from live projects list
+            projects = self.app._projects
+            try:
+                projects.remove(project)
+            except ValueError:
+                return  # already removed
+            self.app._save_projects_bg()
+
+            # 4. Append to archive
+            archived = ArchivedProject(
+                project=archived_project_data,
+                archived_at=datetime.now(timezone.utc),
+            )
+            self.app._append_to_archive_bg(archived)
+
+            # 5. Refresh list and restore cursor
+            self.set_projects(projects, self._repos)
+            if projects:
+                new_index = min(cursor_at, len(projects) - 1)
+
+                def _restore() -> None:
+                    self.focus()
+                    self.select_index(new_index)
+
+                self.call_after_refresh(_restore)
+            self.app.notify(f"Archived: '{project.name}'", markup=False)
+
+        self.app.push_screen(ArchiveModal(project=project), on_archive)
+
+    def action_open_archive_browser(self) -> None:
+        """Open the archive browser to view and unarchive projects (A key)."""
+        from joy.screens.archive_browser import ArchiveBrowserModal  # noqa: PLC0415
+        from joy.store import load_archived_projects  # noqa: PLC0415
+        from joy.models import ArchivedProject  # noqa: PLC0415
+
+        archived = load_archived_projects()
+        if not archived:
+            self.app.notify("No archived projects.", markup=False)
+            return
+
+        # Build active branch set from last worktree refresh snapshot
+        active_branches: set[str] = {
+            wt.branch for wt in self.app._current_worktrees
+            if wt.branch != "HEAD"
+        }
+
+        def on_unarchive(result: ArchivedProject | None) -> None:
+            if result is None:
+                return
+            # Restore project (already stripped of WORKTREE/TERMINALS on archive)
+            self.app._projects.append(result.project)
+            self.app._save_projects_bg()
+            self.app._remove_from_archive_bg(result)
+            self.set_projects(list(self.app._projects), self._repos)
+            self.app.notify(f"Unarchived: '{result.project.name}'", markup=False)
+
+        self.app.push_screen(
+            ArchiveBrowserModal(archived=archived, active_branches=active_branches),
+            on_unarchive,
+        )
 
     def action_filter(self) -> None:
         """Enter filter mode: mount Input above the scroll container (D-06)."""
