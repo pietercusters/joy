@@ -94,6 +94,7 @@ class JoyApp(App):
         self._sessions_ready: bool = False
         self._current_worktrees: list[WorktreeInfo] = []
         self._current_sessions: list[TerminalSession] = []
+        self._live_tab_ids: set[str] = set()
         # Phase 15: cross-pane sync guard (D-03)
         self._is_syncing: bool = False
         # Phase 15: sync toggle state (D-12, D-14) — toggle binding added in Plan 03
@@ -193,11 +194,15 @@ class JoyApp(App):
         from joy.terminal_sessions import fetch_sessions  # noqa: PLC0415
 
         try:
-            sessions = fetch_sessions()
-            self.app.call_from_thread(self._set_terminal_sessions, sessions)
+            result = fetch_sessions()
+            if result is not None:
+                sessions, live_tab_ids = result
+            else:
+                sessions, live_tab_ids = None, set()
+            self.app.call_from_thread(self._set_terminal_sessions, sessions, live_tab_ids)
             self.app.call_from_thread(self._mark_terminal_refresh_success)
         except Exception:
-            self.app.call_from_thread(self._set_terminal_sessions, None)
+            self.app.call_from_thread(self._set_terminal_sessions, None, set())
             self.app.call_from_thread(self._mark_terminal_refresh_failure)
 
     async def _set_worktrees(
@@ -224,14 +229,42 @@ class JoyApp(App):
         self._apply_worktree_link_status_fast(worktrees)
         self._maybe_compute_relationships()
 
-    async def _set_terminal_sessions(self, sessions: list[TerminalSession] | None) -> None:
+    async def _set_terminal_sessions(
+        self,
+        sessions: list[TerminalSession] | None,
+        live_tab_ids: set[str] | None = None,
+    ) -> None:
         """Push terminal session data to the pane widget (D-15). Also captures data for resolver (D-07)."""
+        live_tab_ids = live_tab_ids or set()
+        self._live_tab_ids = live_tab_ids
         # Phase 14: store for resolver (treat None as empty — pitfall 2 avoidance)
         self._current_sessions = sessions or []
         self._sessions_ready = True
+
+        # Stale tab heal: when iTerm2 is available, check each project's iterm_tab_id
+        if sessions is not None:
+            needs_save = False
+            for project in self._projects:
+                if project.iterm_tab_id and project.iterm_tab_id not in live_tab_ids:
+                    # Stale: tab closed externally; clear so auto-create fires on next cycle
+                    project.iterm_tab_id = None
+                    needs_save = True
+                elif project.iterm_tab_id is None:
+                    # No tab linked yet: best-effort auto-create (fire-and-forget)
+                    self._do_create_tab_for_project(project)
+            if needs_save:
+                self._save_projects_bg()
+
+        # Build tab_groups for the pane: projects with live tabs, in project list order
+        tab_groups = [
+            (p.name, p.iterm_tab_id)
+            for p in self._projects
+            if p.iterm_tab_id and p.iterm_tab_id in live_tab_ids
+        ]
+
         self._is_syncing = True  # suppress cross-pane sync during pane rebuild
         try:
-            await self.query_one(TerminalPane).set_sessions(sessions)
+            await self.query_one(TerminalPane).set_sessions(sessions, tab_groups=tab_groups)
         finally:
             self._is_syncing = False
         self._maybe_compute_relationships()
@@ -258,7 +291,6 @@ class JoyApp(App):
         self._update_badges()
         self._propagate_changes(self._current_mr_data)
         self._update_worktree_link_status()
-        self._update_terminal_link_status()
 
     def _propagate_mr_auto_add(self, mr_data: dict) -> list[str]:
         """Auto-add MR objects for detected PRs (PROP-02, D-02, D-03, D-05).
@@ -298,48 +330,16 @@ class JoyApp(App):
                 messages.append(f"\u2295 Added PR #{mr_info.mr_number} to {project.name}")
         return messages
 
-    def _propagate_terminal_auto_remove(self) -> list[str]:
-        """Auto-remove linked Terminal objects when their iTerm2 session disappears.
-
-        Only runs when fetch_sessions() returned a non-empty list (timing guard).
-        Mutates project.objects and returns notification messages.
-        """
-        messages: list[str] = []
-        if not self._current_sessions:
-            # Empty list = either iTerm2 hiccup or genuinely no sessions.
-            # Per decision #2 (simplest option): skip auto-removal in both cases.
-            # Objects linked to sessions that are all-gone simultaneously are preserved
-            # until at least one other session is present (low-risk edge case).
-            return messages
-        active_sessions = {s.session_name for s in self._current_sessions}
-        for project in self._projects:
-            removed_names = [
-                obj.value for obj in project.objects
-                if obj.kind == PresetKind.TERMINALS and obj.value not in active_sessions
-            ]
-            if removed_names:
-                project.objects = [
-                    obj for obj in project.objects
-                    if not (obj.kind == PresetKind.TERMINALS and obj.value not in active_sessions)
-                ]
-                for name in removed_names:
-                    messages.append(f"\u2296 Removed terminal '{name}' from {project.name}")
-        return messages
-
     def _propagate_changes(self, mr_data: dict) -> None:
         """Run propagation after both data sources are ready (D-09, D-10, D-11, D-12).
 
-        Calls _propagate_mr_auto_add and _propagate_terminal_auto_remove, batches
-        TOML saves, and emits notifications (D-11).
+        Calls _propagate_mr_auto_add, batches TOML saves, and emits notifications (D-11).
         """
         messages: list[str] = []
         messages.extend(self._propagate_mr_auto_add(mr_data))
-        messages.extend(self._propagate_terminal_auto_remove())
 
         # D-10: batch save — only when TOML-persistent mutations occurred
-        mr_added = any("\u2295 Added PR" in m for m in messages)
-        terminal_removed = any("\u2296 Removed terminal" in m for m in messages)
-        if mr_added or terminal_removed:
+        if any("\u2295 Added PR" in m for m in messages):
             self._save_projects_bg()
 
         # D-11: notify per mutation
@@ -390,16 +390,6 @@ class JoyApp(App):
         try:
             pane = self.query_one(_WorktreePane)
             pane.set_linked_paths(linked_paths, linked_branches)
-        except Exception:
-            pass
-
-    def _update_terminal_link_status(self) -> None:
-        """Push linked session names to TerminalPane for flag display."""
-        if self._rel_index is None:
-            return
-        linked_names: set[str] = set(self._rel_index._project_for_terminal.keys())
-        try:
-            self.query_one(TerminalPane).set_linked_names(linked_names)
         except Exception:
             pass
 
@@ -645,6 +635,8 @@ class JoyApp(App):
             project_list.call_after_refresh(lambda: project_list.select_index(new_index))
             self.query_one(ProjectDetail).set_project(project)
             self.notify(f"Created project: '{name}'", markup=False)
+            # Auto-create iTerm2 tab for the new project (best-effort, silent)
+            self._do_create_tab_for_project(project)
             # D-02, D-03: Start add-object loop
             self._start_add_object_loop(project)
         self.push_screen(NameInputModal(), on_name)
@@ -661,8 +653,6 @@ class JoyApp(App):
                     self._save_projects_bg()
                     self.query_one(ProjectDetail).set_project(project)
                     self.notify(f"Added: {preset.value} '{_truncate(value)}'", markup=False)
-                    if preset == PresetKind.TERMINALS:
-                        self._auto_create_terminal_session(value)
                 # Loop: push preset picker again regardless of value result (D-03)
                 self._start_add_object_loop(project)
             self.push_screen(ValueInputModal(preset), on_value)
@@ -675,13 +665,24 @@ class JoyApp(App):
         save_projects(self._projects)
 
     @work(thread=True, exit_on_error=False)
-    def _auto_create_terminal_session(self, name: str) -> None:
-        """Auto-create iTerm2 session when Terminal object added to project."""
-        from joy.terminal_sessions import create_session  # noqa: PLC0415
-        session_id = create_session(name)
-        if session_id:
-            self.app.call_from_thread(self.app.notify, f"Created iTerm2 session: {name}", markup=False)
-            self.app.call_from_thread(self.app._load_terminal)
+    def _do_create_tab_for_project(self, project: Project) -> None:
+        """Create an iTerm2 tab for a project and persist the tab_id. Best-effort, silent."""
+        from joy.terminal_sessions import create_tab  # noqa: PLC0415
+        tab_id = create_tab(project.name)
+        if tab_id:
+            project.iterm_tab_id = tab_id
+            self.app.call_from_thread(self._save_projects_bg)
+            self.app.call_from_thread(self._load_terminal)
+
+    @work(thread=True, exit_on_error=False)
+    def _do_activate_tab(self, tab_id: str) -> None:
+        """Activate the iTerm2 tab for a project by finding a session in that tab."""
+        from joy.terminal_sessions import activate_session  # noqa: PLC0415
+        for session in self._current_sessions:
+            if session.tab_id == tab_id:
+                activate_session(session.session_id)
+                return
+        self.app.call_from_thread(self.notify, "Tab session not found", severity="warning", markup=False)
 
     def action_settings(self) -> None:
         """Open settings modal overlay (D-01, D-05, SETT-06)."""
@@ -801,7 +802,20 @@ class JoyApp(App):
         self._open_first_of_kind(PresetKind.THREAD)
 
     def action_open_terminal(self) -> None:
-        self._open_first_of_kind(PresetKind.TERMINALS)
+        """Open the project's linked iTerm2 tab (h key). Uses iterm_tab_id."""
+        from joy.widgets.project_detail import ProjectDetail as _PD  # noqa: PLC0415
+        try:
+            detail = self.query_one(_PD)
+        except Exception:
+            return
+        project = detail._project
+        if project is None:
+            self.notify("No project selected", markup=False)
+            return
+        if project.iterm_tab_id:
+            self._do_activate_tab(project.iterm_tab_id)
+        else:
+            self.notify("No terminal tab linked to this project", markup=False)
 
     # ------------------------------------------------------------------
     # R: toggle auto-refresh (from any pane except ProjectList where R = assign-repo)
