@@ -367,12 +367,14 @@ class TestCreateTab:
         mock_tab = MagicMock()
         mock_tab.tab_id = "new-tab-uuid"
         mock_tab.sessions = [mock_session]
+        mock_tab.async_select = AsyncMock()
 
         mock_window = MagicMock()
         mock_window.async_create_tab = AsyncMock(return_value=mock_tab)
 
         mock_app = MagicMock()
         mock_app.current_window = mock_window
+        mock_app.async_activate = AsyncMock()
 
         def run_until_complete(coro_fn, retry=False):
             loop = asyncio.new_event_loop()
@@ -392,6 +394,8 @@ class TestCreateTab:
 
         assert result == "new-tab-uuid"
         mock_session.async_set_name.assert_called_once_with("my-project")
+        mock_tab.async_select.assert_called_once()
+        mock_app.async_activate.assert_called_once()
 
     def test_create_tab_returns_none_on_failure(self):
         """create_tab returns None when Connection raises Exception."""

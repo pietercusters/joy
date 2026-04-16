@@ -160,6 +160,8 @@ def create_tab(name: str) -> str | None:
         session = tab.sessions[0]
         await session.async_set_name(name)
         result = tab.tab_id
+        await tab.async_select()
+        await app.async_activate()
 
     try:
         Connection().run_until_complete(_create, retry=False)
