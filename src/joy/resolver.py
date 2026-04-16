@@ -73,7 +73,7 @@ def compute_relationships(
     # Pass 1: build lookup maps from project object lists (D-04, D-05)
     path_to_project: dict[str, Project] = {}                   # WORKTREE obj value -> project
     branch_to_project: dict[tuple[str, str], Project] = {}     # (repo, branch) -> project
-    terminal_to_project: dict[str, Project] = {}               # session_name -> project
+    tab_id_to_project: dict[str, Project] = {}                 # tab_id -> project
 
     for project in projects:
         for obj in project.objects:
@@ -82,8 +82,9 @@ def compute_relationships(
             elif obj.kind == PresetKind.BRANCH and project.repo is not None:
                 # D-05: exclude branch matching when project has no repo
                 branch_to_project[(project.repo, obj.value)] = project
-            elif obj.kind == PresetKind.TERMINALS:
-                terminal_to_project[obj.value] = project
+        # Tab-ID based terminal matching (replaces PresetKind.TERMINALS name matching)
+        if project.iterm_tab_id:
+            tab_id_to_project[project.iterm_tab_id] = project
 
     # Pass 2: match worktrees to projects
     for wt in worktrees:
@@ -99,9 +100,9 @@ def compute_relationships(
             else:
                 index._project_for_wt_branch[(wt.repo_name, wt.branch)] = matched
 
-    # Pass 3: match sessions to projects
+    # Pass 3: match sessions to projects by tab_id
     for session in sessions:
-        matched = terminal_to_project.get(session.session_name)
+        matched = tab_id_to_project.get(session.tab_id) if session.tab_id else None
         if matched is not None:
             index._term_for_project.setdefault(matched.name, []).append(session)
             index._project_for_terminal[session.session_name] = matched

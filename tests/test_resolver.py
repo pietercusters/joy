@@ -15,8 +15,8 @@ from joy.resolver import RelationshipIndex, compute_relationships
 # ---------------------------------------------------------------------------
 
 
-def make_project(name: str, objects=None, repo=None) -> Project:
-    return Project(name=name, objects=objects or [], repo=repo)
+def make_project(name: str, objects=None, repo=None, iterm_tab_id=None) -> Project:
+    return Project(name=name, objects=objects or [], repo=repo, iterm_tab_id=iterm_tab_id)
 
 
 def make_worktree(repo_name: str, branch: str, path: str) -> WorktreeInfo:
@@ -115,21 +115,89 @@ def test_compute_relationships_no_repo_excludes_branch_match():
 
 
 # ---------------------------------------------------------------------------
-# Test 5: agent session matched by AGENTS object value = session_name
+# Test 5: terminal session matched by tab_id on project
 # ---------------------------------------------------------------------------
 
 
-def test_compute_relationships_agent_by_session_name():
-    proj_d = make_project(
-        "proj-d",
-        objects=[ObjectItem(kind=PresetKind.TERMINALS, value="claude-joy")],
-    )
-    sessions = [make_session("s1", "claude-joy")]
+def test_compute_relationships_terminal_by_tab_id():
+    """Sessions matched to projects via Project.iterm_tab_id == TerminalSession.tab_id."""
+    proj_d = make_project("proj-d", iterm_tab_id="tab-uuid-001")
+    sessions = [
+        TerminalSession(
+            session_id="s1", session_name="claude-joy",
+            foreground_process="zsh", cwd="/tmp", tab_id="tab-uuid-001",
+        )
+    ]
 
     index = compute_relationships([proj_d], [], sessions, [])
 
     assert index.terminals_for(proj_d) == [sessions[0]]
     assert index.project_for_terminal("claude-joy") is proj_d
+
+
+# ---------------------------------------------------------------------------
+# Test 5b: TERMINALS object NO LONGER matches sessions (tab_id replaces it)
+# ---------------------------------------------------------------------------
+
+
+def test_compute_relationships_terminals_object_no_longer_matches():
+    """PresetKind.TERMINALS objects are ignored by resolver — tab_id matching only."""
+    proj = make_project(
+        "proj-legacy",
+        objects=[ObjectItem(kind=PresetKind.TERMINALS, value="claude-joy")],
+    )
+    sessions = [make_session("s1", "claude-joy")]
+
+    index = compute_relationships([proj], [], sessions, [])
+
+    # Should NOT match because there's no iterm_tab_id on the project
+    assert index.terminals_for(proj) == []
+    assert index.project_for_terminal("claude-joy") is None
+
+
+# ---------------------------------------------------------------------------
+# Test 5c: sessions with non-matching tab_id fall through
+# ---------------------------------------------------------------------------
+
+
+def test_compute_relationships_terminal_no_match_by_tab_id():
+    """Sessions whose tab_id doesn't match any project fall through."""
+    proj = make_project("proj-x", iterm_tab_id="tab-AAA")
+    sessions = [
+        TerminalSession(
+            session_id="s1", session_name="orphan",
+            foreground_process="zsh", cwd="/tmp", tab_id="tab-BBB",
+        )
+    ]
+
+    index = compute_relationships([proj], [], sessions, [])
+
+    assert index.terminals_for(proj) == []
+    assert index.project_for_terminal("orphan") is None
+
+
+# ---------------------------------------------------------------------------
+# Test 5d: multiple sessions in same tab matched to same project
+# ---------------------------------------------------------------------------
+
+
+def test_compute_relationships_multiple_sessions_same_tab():
+    """All sessions with matching tab_id are associated to the project."""
+    proj = make_project("proj-multi", iterm_tab_id="tab-MULTI")
+    sessions = [
+        TerminalSession(
+            session_id="s1", session_name="main",
+            foreground_process="zsh", cwd="/tmp", tab_id="tab-MULTI",
+        ),
+        TerminalSession(
+            session_id="s2", session_name="split",
+            foreground_process="vim", cwd="/tmp", tab_id="tab-MULTI",
+        ),
+    ]
+
+    index = compute_relationships([proj], [], sessions, [])
+
+    assert len(index.terminals_for(proj)) == 2
 
 
 # ---------------------------------------------------------------------------
