@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: verifying
-stopped_at: context exhaustion at 90% (2026-04-16)
-last_updated: "2026-04-16T16:40:07.590Z"
+stopped_at: Phase 17 context gathered — context limit approaching
+last_updated: "2026-04-16T17:28:32.187Z"
 last_activity: 2026-04-16
 progress:
-  total_phases: 16
-  completed_phases: 15
-  total_plans: 40
-  completed_plans: 44
+  total_phases: 1
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
   percent: 100
 ---
 
@@ -57,6 +57,10 @@ Key decisions from v1.1:
 - pytest.mark.slow for TUI/integration tests
 - [Phase quick-260416-k3w]: ArchivedProject wraps Project + archived_at; archive.toml uses keyed schema; ArchiveModal uses Static+BINDINGS only; object stripping is caller responsibility
 
+### Roadmap Evolution
+
+- Phase 17 added: Fix iTerm2 integration bugs from quick-260416-of2 — remove auto-sync, close whole Tab on delete/archive, fix test isolation for ~/.joy/
+
 ### Pending Todos
 
 None.
@@ -85,7 +89,7 @@ None — clean milestone close.
 
 ## Session Continuity
 
-Last session: 2026-04-16T16:40:07.582Z
-Stopped at: context exhaustion at 90% (2026-04-16)
+Last session: 2026-04-16T17:28:32.183Z
+Stopped at: Phase 17 context gathered — context limit approaching
 Last activity: 2026-04-16 - Completed quick task 260416-of2: Improve iTerm2 integration — projects linked to tabs by tab_id, terminal pane grouped by project, stale-heal, auto-create
 Resume: Phase 15 (cross-pane-selection-sync) still needs execution, then v1.2 milestone can close
