@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 17 context gathered — context limit approaching
-last_updated: "2026-04-16T17:40:49.295Z"
-last_activity: 2026-04-16 -- Phase 17 planning complete
+last_updated: "2026-04-16T17:42:17.577Z"
+last_activity: 2026-04-16 -- Phase 17 execution started
 progress:
   total_phases: 1
   completed_phases: 0
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-14)
 
 **Core value:** Every artifact for the active project, openable instantly from one keyboard-driven interface.
-**Current focus:** Phase 16 — live-data-propagation
+**Current focus:** Phase 17 — fix-iterm2-integration-bugs-from-quick-260416-of2-remove-aut
 
 ## Current Position
 
-Phase: 16 (live-data-propagation) — COMPLETE
-Plan: 2 of 2
-Status: Ready to execute
-Last activity: 2026-04-16 -- Phase 17 planning complete
+Phase: 17 (fix-iterm2-integration-bugs-from-quick-260416-of2-remove-aut) — EXECUTING
+Plan: 1 of 2
+Status: Executing Phase 17
+Last activity: 2026-04-16 -- Phase 17 execution started
 
 Progress: ████████████████████ 100% (8/8 phases)
 
