@@ -74,9 +74,9 @@ Full details: `.planning/milestones/v1.2-ROADMAP.md`
 **Goal:** Remove automatic iTerm2 tab creation (tabs only via h-key), close entire tab on project delete/archive, isolate all tests from real ~/.joy/ paths
 **Requirements**: FIX17-REMOVE-AUTO-SYNC, FIX17-TAB-CLOSE-ON-DELETE-ARCHIVE, FIX17-TEST-ISOLATION, FIX17-CLOSE-TAB
 **Depends on:** Phase 16
-**Plans:** 3 plans (2 complete, 1 gap-closure)
+**Plans:** 3/3 plans complete
 
 Plans:
 - [x] 17-01-PLAN.md -- Test isolation fixture + close_tab function
 - [x] 17-02-PLAN.md -- Remove auto-sync, tab-level close on delete/archive, remove ArchiveModal
-- [ ] 17-03-PLAN.md -- Gap closure: focus new tab after h-key creation
+- [x] 17-03-PLAN.md -- Gap closure: focus new tab after h-key creation
