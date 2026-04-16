@@ -1,6 +1,8 @@
 """Left pane: project list widget with keyboard navigation and repo grouping."""
 from __future__ import annotations
 
+import re
+
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -133,7 +135,7 @@ class ProjectRow(Static):
                 mr_strip.append(f" {ICON_CI_PENDING}", style="yellow")
             mr_strip.append(" ")
 
-        # Icon ribbon: branch ticket thread note terminal worktree
+        # Icon ribbon: branch ticket thread note terminal worktree (space-separated)
         ribbon_icons = [
             (ICON_BRANCH,   has.get("branch",   False)),
             (ICON_TICKET,   has.get("ticket",   False)),
@@ -143,18 +145,22 @@ class ProjectRow(Static):
             (ICON_WORKTREE, has.get("worktree", False)),
         ]
         ribbon = Text()
-        for icon, present in ribbon_icons:
+        for i, (icon, present) in enumerate(ribbon_icons):
+            if i > 0:
+                ribbon.append(" ")
             if present:
                 ribbon.append(icon, style="cyan")
             else:
                 ribbon.append(icon, style="grey50 dim")
 
-        # Compute fixed right width: mr_strip_len + separator + ribbon (6 icons)
+        # Compute fixed right width: mr_strip_len + separator + ribbon
+        # Ribbon is 6 icons + 5 spaces between them = 11 chars.
         # When mr_info is present, mr_strip already ends with a trailing space so no extra
         # separator is needed. When absent, we add 1 space before the ribbon.
         mr_plain_len = len(mr_strip.plain)
         separator = 0 if mr_info is not None else 1
-        fixed_right = mr_plain_len + separator + len(ribbon_icons)
+        ribbon_width = 2 * len(ribbon_icons) - 1  # icons + single spaces between them
+        fixed_right = mr_plain_len + separator + ribbon_width
 
         # Fixed left: status-dot (1) + space (1) = 2
         name_budget = avail_width - 2 - fixed_right
@@ -199,6 +205,19 @@ class ProjectRow(Static):
 # ---------------------------------------------------------------------------
 
 
+def _parse_mr_number(url: str, label: str) -> int:
+    """Parse MR/PR number from URL or label string. Returns -1 if not parseable."""
+    # Try URL first: .../pull/42 or .../merge_requests/42
+    m = re.search(r"/(?:pull|merge_requests)/(\d+)", url)
+    if m:
+        return int(m.group(1))
+    # Try label: "PR #42" or "MR !42"
+    m = re.search(r"[#!](\d+)", label)
+    if m:
+        return int(m.group(1))
+    return -1
+
+
 def pick_best_mr(
     project: "Project",
     mr_data: dict,
@@ -207,35 +226,40 @@ def pick_best_mr(
     """Select the most relevant MR for a project row.
 
     Priority:
-    1. MR for any linked worktree's branch (via rel_index)
-    2. Highest-numbered open (non-draft) MR for project's repo
-    3. Highest-numbered MR (draft or otherwise) for project's repo
-    Returns None if no MR found or project has no repo.
+    1. Live API data for a linked worktree's branch (via rel_index, same repo only)
+    2. Project's own stored MR objects (PresetKind.MR in project.objects)
+
+    Deliberately avoids broad repo-wide fallback to prevent the same MR
+    appearing on multiple projects that share a repo.
     """
-    if project.repo is None:
-        return None
-    if not mr_data:
-        return None
+    # Priority 1: live MR for a linked worktree's branch
+    if mr_data and project.repo is not None:
+        for wt in rel_index.worktrees_for(project):  # type: ignore[union-attr]
+            if wt.repo_name != project.repo:
+                continue
+            mr = mr_data.get((wt.repo_name, wt.branch))
+            if mr is not None:
+                return mr
 
-    # Priority 1: MR for a linked worktree's branch (same repo only)
-    for wt in rel_index.worktrees_for(project):  # type: ignore[union-attr]
-        if wt.repo_name != project.repo:
-            continue
-        mr = mr_data.get((wt.repo_name, wt.branch))
-        if mr is not None:
-            return mr
+    # Priority 2: project's own stored MR objects (highest-numbered wins)
+    mr_objects = [obj for obj in project.objects if obj.kind == PresetKind.MR]
+    if mr_objects:
+        best_num = -1
+        best_obj = None
+        for obj in mr_objects:
+            num = _parse_mr_number(obj.value, obj.label)
+            if num > best_num:
+                best_num = num
+                best_obj = obj
+        if best_obj is not None and best_num >= 0:
+            return MRInfo(
+                mr_number=best_num,
+                is_draft=False,
+                ci_status=None,
+                url=best_obj.value,
+            )
 
-    # Priority 2 & 3: scan all MRs for this repo
-    repo_mrs = [
-        mr for (repo, _branch), mr in mr_data.items()
-        if repo == project.repo
-    ]
-    if not repo_mrs:
-        return None
-    open_mrs = [mr for mr in repo_mrs if not mr.is_draft]
-    if open_mrs:
-        return max(open_mrs, key=lambda m: m.mr_number)
-    return max(repo_mrs, key=lambda m: m.mr_number)
+    return None
 
 
 # ---------------------------------------------------------------------------
