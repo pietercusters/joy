@@ -247,14 +247,10 @@ class JoyApp(App):
             needs_save = False
             for project in self._projects:
                 if project.iterm_tab_id and project.iterm_tab_id not in live_tab_ids:
-                    # Stale: tab closed externally; clear so auto-create fires on next cycle
+                    # Stale: tab closed externally; clear link (D-05, D-06)
                     project.iterm_tab_id = None
                     needs_save = True
-                elif project.iterm_tab_id is None and project.name not in self._tabs_creating:
-                    # No tab linked yet: best-effort auto-create (fire-and-forget)
-                    # In-flight guard prevents duplicate workers on successive refresh ticks
-                    self._tabs_creating.add(project.name)
-                    self._do_create_tab_for_project(project)
+                    self.notify(f"'{project.name}' tab closed \u2014 press h to relink", markup=False)
             if needs_save:
                 self._save_projects_bg()
 
@@ -638,8 +634,6 @@ class JoyApp(App):
             project_list.call_after_refresh(lambda: project_list.select_index(new_index))
             self.query_one(ProjectDetail).set_project(project)
             self.notify(f"Created project: '{name}'", markup=False)
-            # Auto-create iTerm2 tab for the new project (best-effort, silent)
-            self._do_create_tab_for_project(project)
             # D-02, D-03: Start add-object loop
             self._start_add_object_loop(project)
         self.push_screen(NameInputModal(), on_name)
@@ -813,7 +807,7 @@ class JoyApp(App):
         self._open_first_of_kind(PresetKind.THREAD)
 
     def action_open_terminal(self) -> None:
-        """Open the project's linked iTerm2 tab (h key). Uses iterm_tab_id."""
+        """Open the project's linked iTerm2 tab (h key). Creates one if none linked (D-03)."""
         from joy.widgets.project_detail import ProjectDetail as _PD  # noqa: PLC0415
         try:
             detail = self.query_one(_PD)
@@ -826,7 +820,10 @@ class JoyApp(App):
         if project.iterm_tab_id:
             self._do_activate_tab(project.iterm_tab_id)
         else:
-            self.notify("No terminal tab linked to this project", markup=False)
+            # No tab linked: create one (D-03). Guard prevents duplicate workers (D-04).
+            if project.name not in self._tabs_creating:
+                self._tabs_creating.add(project.name)
+                self._do_create_tab_for_project(project)
 
     # ------------------------------------------------------------------
     # R: toggle auto-refresh (from any pane except ProjectList where R = assign-repo)
@@ -897,6 +894,12 @@ class JoyApp(App):
         from joy.terminal_sessions import close_session  # noqa: PLC0415
         for session in sessions:
             close_session(session.session_id, force=False)
+
+    @work(thread=True, exit_on_error=False)
+    def _close_tab_bg(self, tab_id: str) -> None:
+        """Close an entire iTerm2 tab in a background thread (D-08)."""
+        from joy.terminal_sessions import close_tab  # noqa: PLC0415
+        close_tab(tab_id, force=False)
 
     @work(thread=True, exit_on_error=False)
     def _append_to_archive_bg(self, archived: ArchivedProject) -> None:
