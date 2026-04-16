@@ -8,8 +8,41 @@ from textual.screen import ModalScreen
 from textual.widgets import Static
 
 from joy.widgets.object_row import PRESET_ICONS
+from joy.widgets.icons import (
+    ICON_BRANCH, ICON_TICKET, ICON_THREAD, ICON_NOTE, ICON_TERMINAL, ICON_WORKTREE,
+    ICON_MR_OPEN, ICON_MR_DRAFT, ICON_MR_CLOSED,
+    ICON_CI_PASS, ICON_CI_FAIL, ICON_CI_PENDING,
+    ICON_DIRTY, ICON_NO_UPSTREAM,
+)
 from joy.models import PresetKind
 
+
+# (markup_icon, label) — icon string may contain Rich markup for color
+_PROJECT_STATUS: list[tuple[str, str]] = [
+    ("[green]\u25cf[/green]", "Priority  (g to cycle)"),
+    ("[dim]\u25cf[/dim]",     "On hold   (g to cycle)"),
+    ("[dim]\u25cb[/dim]",     "Idle      (g to cycle)"),
+]
+
+# Ribbon icons shown in cyan when the object is present, grey when absent
+_PROJECT_RIBBON: list[tuple[str, str]] = [
+    (f"[cyan]{ICON_BRANCH}[/cyan]",   "Branch"),
+    (f"[cyan]{ICON_TICKET}[/cyan]",   "Ticket"),
+    (f"[cyan]{ICON_THREAD}[/cyan]",   "Thread"),
+    (f"[cyan]{ICON_NOTE}[/cyan]",     "Note"),
+    (f"[cyan]{ICON_TERMINAL}[/cyan]", "Terminal"),
+    (f"[cyan]{ICON_WORKTREE}[/cyan]", "Worktree"),
+]
+
+# MR strip icons (shown when project has a linked MR)
+_PROJECT_MR: list[tuple[str, str]] = [
+    (f"[green]{ICON_MR_OPEN}[/green]",   "MR open"),
+    (f"[dim]{ICON_MR_DRAFT}[/dim]",      "MR draft"),
+    (f"[dim]{ICON_MR_CLOSED}[/dim]",     "MR closed / merged"),
+    (f"[green]{ICON_CI_PASS}[/green]",   "CI passed"),
+    (f"[red]{ICON_CI_FAIL}[/red]",       "CI failed"),
+    (f"[yellow]{ICON_CI_PENDING}[/yellow]", "CI pending"),
+]
 
 # (icon, label, description) tuples for each section
 _DETAIL_ICONS: list[tuple[str, str, str]] = [
@@ -30,14 +63,14 @@ _INDICATOR_ICONS: list[tuple[str, str, str]] = [
     ("\u25cb", "Not open by default", "empty circle"),
 ]
 
-_WORKTREE_ICONS: list[tuple[str, str, str]] = [
-    ("\uf111", "Uncommitted changes", "yellow"),
-    ("\U000f0be1", "No upstream remote", "dim"),
-    ("\uea64", "MR open", "green"),
-    ("\uebdb", "MR draft", "dim"),
-    ("\uf00c", "CI passed", "green"),
-    ("\uf00d", "CI failed", "red"),
-    ("\uf192", "CI pending", "yellow"),
+_WORKTREE_ICONS: list[tuple[str, str]] = [
+    (f"[yellow]{ICON_DIRTY}[/yellow]",         "Uncommitted changes"),
+    (f"[dim]{ICON_NO_UPSTREAM}[/dim]",         "No upstream remote"),
+    (f"[green]{ICON_MR_OPEN}[/green]",         "MR open"),
+    (f"[dim]{ICON_MR_DRAFT}[/dim]",            "MR draft"),
+    (f"[green]{ICON_CI_PASS}[/green]",         "CI passed"),
+    (f"[red]{ICON_CI_FAIL}[/red]",             "CI failed"),
+    (f"[yellow]{ICON_CI_PENDING}[/yellow]",    "CI pending"),
 ]
 
 _TERMINAL_ICONS: list[tuple[str, str, str]] = [
@@ -84,12 +117,31 @@ class LegendModal(ModalScreen[None]):
         height: 1;
         padding: 0 1;
     }
+    LegendModal .legend-note {
+        height: 1;
+        padding: 0 1;
+        color: $text-muted;
+        text-style: italic;
+    }
     """
 
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Static("Icon Legend", classes="legend-title")
             with VerticalScroll():
+                yield Static("Project List — Status", classes="legend-section")
+                for icon_markup, label in _PROJECT_STATUS:
+                    yield Static(f"  {icon_markup}  {label}", classes="legend-row", markup=True)
+
+                yield Static("Project List — Icon Ribbon", classes="legend-section")
+                yield Static("  cyan = linked  /  grey = not linked", classes="legend-note")
+                for icon_markup, label in _PROJECT_RIBBON:
+                    yield Static(f"  {icon_markup}  {label}", classes="legend-row", markup=True)
+
+                yield Static("Project List — MR Strip", classes="legend-section")
+                for icon_markup, label in _PROJECT_MR:
+                    yield Static(f"  {icon_markup}  {label}", classes="legend-row", markup=True)
+
                 yield Static("Details Pane", classes="legend-section")
                 for icon, label, _desc in _DETAIL_ICONS:
                     yield Static(f"  {icon}  {label}", classes="legend-row")
@@ -100,8 +152,8 @@ class LegendModal(ModalScreen[None]):
                     yield Static(f"  {icon}  {label}{suffix}", classes="legend-row")
 
                 yield Static("Worktrees Pane", classes="legend-section")
-                for icon, label, _style in _WORKTREE_ICONS:
-                    yield Static(f"  {icon}  {label}", classes="legend-row")
+                for icon_markup, label in _WORKTREE_ICONS:
+                    yield Static(f"  {icon_markup}  {label}", classes="legend-row", markup=True)
 
                 yield Static("Terminal Pane", classes="legend-section")
                 for icon, label, _style in _TERMINAL_ICONS:

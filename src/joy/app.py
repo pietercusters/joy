@@ -408,7 +408,7 @@ class JoyApp(App):
         if self._rel_index is None:
             return
         try:
-            self.query_one(ProjectList).update_badges(self._rel_index)
+            self.query_one(ProjectList).update_badges(self._rel_index, mr_data=self._current_mr_data)
         except Exception:
             pass  # ProjectList not yet mounted — badges will be populated on next cycle
 

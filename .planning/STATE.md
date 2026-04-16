@@ -80,9 +80,11 @@ None — clean milestone close.
 | 260415-mh6 | Refactor worktree logic and Worktrees pane: auto-detect worktrees by branch, fix 'i' key IDE open, enter opens IDE, investigate bugs | 2026-04-15 | b7d5a98 | Needs Review | [260415-mh6-refactor-worktree-logic-and-worktrees-pa](./quick/260415-mh6-refactor-worktree-logic-and-worktrees-pa/) |
 | 260415-qqx | Build full iTerm2 terminal session control: rename Agent→Terminal, n/e/d/D bindings, auto-create/auto-remove, project-link flag | 2026-04-15 | 251fcf8 | Verified | [260415-qqx-build-full-iterm2-terminal-session-contr](./quick/260415-qqx-build-full-iterm2-terminal-session-contr/) |
 | 260416-k3w | Add project archive/unarchive: a/A bindings, archive.toml cold storage, ArchiveModal, ArchiveBrowserModal with branch-match sections | 2026-04-16 | 851e3dc | Verified | [260416-k3w-archive-project-with-a-a-bindings-cold-s](./quick/260416-k3w-archive-project-with-a-a-bindings-cold-s/) |
+| 260416-m39 | Project list icon ribbon: status dot (g key cycles idle/prio/hold), 6-icon presence ribbon, MR strip, section spacers, icons.py | 2026-04-16 | 399a581 | Needs Review | [260416-m39-projects-overview-icon-ribbon-mr-status-](./quick/260416-m39-projects-overview-icon-ribbon-mr-status-/) |
 
 ## Session Continuity
 
 Last session: 2026-04-16
-Stopped at: quick-260416-k3w complete — 322 tests passing, archive feature verified
+Stopped at: quick-260416-m39 complete — 322 tests passing, awaiting human verify of icon ribbon UI
+Last activity: 2026-04-16 - Completed quick task 260416-m39: Projects overview icon ribbon, MR status icons, project status toggle (prio/hold/idle)
 Resume: Phase 15 (cross-pane-selection-sync) still needs execution, then v1.2 milestone can close

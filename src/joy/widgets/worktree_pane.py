@@ -12,21 +12,16 @@ from textual.widget import Widget
 from textual.widgets import Static
 
 from joy.models import MRInfo, WorktreeInfo
-
-# ---------------------------------------------------------------------------
-# Nerd Font icon constants (per D-08, verified codepoints from RESEARCH.md)
-# ---------------------------------------------------------------------------
-
-ICON_BRANCH = "\ue0a0"           # nf-pl-branch (same as PRESET_ICONS[BRANCH])
-ICON_DIRTY = "\uf111"            # nf-fa-circle
-ICON_NO_UPSTREAM = "\U000f0be1"  # nf-md-cloud_off (verified, NOT nf-fa-cloud_off)
-
-# Phase 11: MR/CI status icons (D-04, D-05)
-ICON_MR_OPEN    = "\uea64"      # nf-cod-git_pull_request (green for open)
-ICON_MR_DRAFT   = "\uebdb"      # nf-cod-git_pull_request_draft (dim for draft)
-ICON_CI_PASS    = "\uf00c"      # nf-fa-check (green)
-ICON_CI_FAIL    = "\uf00d"      # nf-fa-times (red)
-ICON_CI_PENDING = "\uf192"      # nf-fa-dot_circle_o (yellow) -- distinct from ICON_DIRTY
+from joy.widgets.icons import (
+    ICON_BRANCH,
+    ICON_DIRTY,
+    ICON_NO_UPSTREAM,
+    ICON_MR_OPEN,
+    ICON_MR_DRAFT,
+    ICON_CI_PASS,
+    ICON_CI_FAIL,
+    ICON_CI_PENDING,
+)
 
 
 # ---------------------------------------------------------------------------
