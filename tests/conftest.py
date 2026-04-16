@@ -36,7 +36,7 @@ def sample_project(sample_object: ObjectItem) -> Project:
             ObjectItem(kind=PresetKind.FILE, value="/path/to/file.py", label="Main file"),
             ObjectItem(kind=PresetKind.NOTE, value="project-notes/daily.md", label="Notes"),
             ObjectItem(kind=PresetKind.WORKTREE, value="/Users/dev/worktrees/project", label="Worktree"),
-            ObjectItem(kind=PresetKind.AGENTS, value="test-project-agents", label="Agents"),
+            ObjectItem(kind=PresetKind.TERMINALS, value="test-project-agents", label="Terminals"),
             ObjectItem(kind=PresetKind.URL, value="https://docs.example.com", label="Docs"),
         ],
         created=date(2026, 1, 15),

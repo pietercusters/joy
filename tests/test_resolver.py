@@ -122,14 +122,14 @@ def test_compute_relationships_no_repo_excludes_branch_match():
 def test_compute_relationships_agent_by_session_name():
     proj_d = make_project(
         "proj-d",
-        objects=[ObjectItem(kind=PresetKind.AGENTS, value="claude-joy")],
+        objects=[ObjectItem(kind=PresetKind.TERMINALS, value="claude-joy")],
     )
     sessions = [make_session("s1", "claude-joy")]
 
     index = compute_relationships([proj_d], [], sessions, [])
 
-    assert index.agents_for(proj_d) == [sessions[0]]
-    assert index.project_for_agent("claude-joy") is proj_d
+    assert index.terminals_for(proj_d) == [sessions[0]]
+    assert index.project_for_terminal("claude-joy") is proj_d
 
 
 # ---------------------------------------------------------------------------
@@ -143,9 +143,9 @@ def test_compute_relationships_no_match_returns_empty():
     index = compute_relationships([proj_e], [], [], [])
 
     assert index.worktrees_for(proj_e) == []
-    assert index.agents_for(proj_e) == []
+    assert index.terminals_for(proj_e) == []
     assert index.project_for_worktree(make_worktree("r", "b", "/p")) is None
-    assert index.project_for_agent("no-match") is None
+    assert index.project_for_terminal("no-match") is None
 
 
 # ---------------------------------------------------------------------------

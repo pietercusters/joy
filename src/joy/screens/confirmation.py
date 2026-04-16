@@ -38,16 +38,17 @@ class ConfirmationModal(ModalScreen[bool]):
     }
     """
 
-    def __init__(self, title: str, prompt: str) -> None:
+    def __init__(self, title: str, prompt: str, *, hint: str = "Enter to delete, Escape to cancel") -> None:
         super().__init__()
         self._title = title
         self._prompt = prompt
+        self._hint = hint
 
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Static(self._title, classes="modal-title")
             yield Static(self._prompt)
-            yield Static("Enter to delete, Escape to cancel", classes="modal-hint")
+            yield Static(self._hint, classes="modal-hint")
 
     def on_mount(self) -> None:
         # Focus the screen itself since there is no Input widget

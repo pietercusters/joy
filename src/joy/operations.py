@@ -72,28 +72,39 @@ def _open_worktree(item: ObjectItem, config: Config) -> None:
 
 @opener(ObjectType.ITERM)
 def _open_iterm(item: ObjectItem, config: Config) -> None:
-    """Create or focus a named iTerm2 window via AppleScript."""
-    # Escape backslashes first, then double quotes for AppleScript string safety.
-    # Order matters: reversing would double-escape the backslash in \".
-    # This prevents AppleScript injection via malicious project names (T-1-03-01).
-    name = item.value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ").replace("\r", " ")
-    script = f'''
-    tell application "iTerm2"
-        activate
-        set targetWindow to missing value
-        repeat with w in windows
-            if name of w is "{name}" then
-                set targetWindow to w
-                exit repeat
-            end if
-        end repeat
-        if targetWindow is missing value then
-            set targetWindow to (create window with default profile)
-            tell current session of targetWindow
-                set name to "{name}"
-            end tell
-        end if
-        select targetWindow
-    end tell
-    '''
-    subprocess.run(["osascript", "-e", script], check=True)
+    """Create or focus a named iTerm2 session via Python API."""
+    import iterm2
+    from iterm2.connection import Connection
+
+    name = item.value
+    success = False
+
+    async def _open(connection):
+        nonlocal success
+        app = await iterm2.async_get_app(connection)
+        # Search for existing session by name
+        for window in app.terminal_windows:
+            for tab in window.tabs:
+                for session in tab.sessions:
+                    if session.name == name:
+                        await session.async_activate(select_tab=True, order_window_front=True)
+                        await app.async_activate()
+                        success = True
+                        return
+        # Not found: create new tab in front window
+        window = app.current_window
+        if window is None:
+            return
+        tab = await window.async_create_tab()
+        if tab is None or not tab.sessions:
+            return
+        session = tab.sessions[0]
+        await session.async_set_name(name)
+        success = True
+
+    try:
+        Connection().run_until_complete(_open, retry=False)
+    except Exception:
+        pass
+    if not success:
+        raise RuntimeError(f"Failed to open iTerm2 session '{name}'")

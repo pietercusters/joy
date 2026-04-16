@@ -151,7 +151,7 @@ def test_session_row_shows_abbreviated_cwd():
 
 
 def test_terminal_pane_has_bindings():
-    """TerminalPane.BINDINGS includes escape, up, down, k, j, enter."""
+    """TerminalPane.BINDINGS includes escape, up, down, k, j, enter, n, e, d, D."""
     keys = {b.key for b in TerminalPane.BINDINGS}
     assert "escape" in keys
     assert "up" in keys
@@ -159,6 +159,10 @@ def test_terminal_pane_has_bindings():
     assert "k" in keys
     assert "j" in keys
     assert "enter" in keys
+    assert "n" in keys
+    assert "e" in keys
+    assert "d" in keys
+    assert "D" in keys
 
 
 def test_terminal_pane_initial_state():

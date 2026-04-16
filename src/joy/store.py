@@ -49,8 +49,11 @@ def _toml_to_projects(data: dict) -> list[Project]:
     for name, proj_data in data.get("projects", {}).items():
         objects = []
         for obj in proj_data.get("objects", []):
+            raw_kind = obj["kind"]
+            if raw_kind == "agents":
+                raw_kind = "terminals"  # backward compat: old TOML files
             try:
-                kind = PresetKind(obj["kind"])
+                kind = PresetKind(raw_kind)
             except ValueError:
                 warnings.warn(
                     f"Unknown object kind {obj['kind']!r} in project {name!r} — skipping object",
@@ -118,12 +121,15 @@ def load_config(*, path: Path = CONFIG_PATH) -> Config:
     with open(path, "rb") as f:
         data = tomllib.load(f)
     defaults = Config()
+    raw_kinds = data.get("default_open_kinds", defaults.default_open_kinds)
+    # backward compat: old config files may have "agents" instead of "terminals"
+    default_open_kinds = ["terminals" if k == "agents" else k for k in raw_kinds]
     return Config(
         ide=data.get("ide", defaults.ide),
         editor=data.get("editor", defaults.editor),
         obsidian_vault=data.get("obsidian_vault", defaults.obsidian_vault),
         terminal=data.get("terminal", defaults.terminal),
-        default_open_kinds=data.get("default_open_kinds", defaults.default_open_kinds),
+        default_open_kinds=default_open_kinds,
         refresh_interval=data.get("refresh_interval", defaults.refresh_interval),
         branch_filter=data.get("branch_filter", defaults.branch_filter),
     )

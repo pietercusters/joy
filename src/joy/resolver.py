@@ -20,21 +20,21 @@ class RelationshipIndex:
 
     # project.name -> list of matched worktrees / sessions
     _wt_for_project: dict[str, list[WorktreeInfo]] = field(default_factory=dict)
-    _ag_for_project: dict[str, list[TerminalSession]] = field(default_factory=dict)
+    _term_for_project: dict[str, list[TerminalSession]] = field(default_factory=dict)
     # inverse: worktree path -> project (path-based match)
     _project_for_wt_path: dict[str, Project] = field(default_factory=dict)
     # inverse: (repo_name, branch) -> project (branch-based match)
     _project_for_wt_branch: dict[tuple[str, str], Project] = field(default_factory=dict)
     # inverse: session_name -> project
-    _project_for_agent: dict[str, Project] = field(default_factory=dict)
+    _project_for_terminal: dict[str, Project] = field(default_factory=dict)
 
     def worktrees_for(self, project: Project) -> list[WorktreeInfo]:
         """Return all worktrees matched to the given project."""
         return self._wt_for_project.get(project.name, [])
 
-    def agents_for(self, project: Project) -> list[TerminalSession]:
+    def terminals_for(self, project: Project) -> list[TerminalSession]:
         """Return all terminal sessions matched to the given project."""
-        return self._ag_for_project.get(project.name, [])
+        return self._term_for_project.get(project.name, [])
 
     def project_for_worktree(self, wt: WorktreeInfo) -> Project | None:
         """Return the project that owns this worktree, or None.
@@ -44,9 +44,9 @@ class RelationshipIndex:
         return self._project_for_wt_path.get(wt.path) or \
                self._project_for_wt_branch.get((wt.repo_name, wt.branch))
 
-    def project_for_agent(self, session_name: str) -> Project | None:
-        """Return the project that owns this agent session, or None."""
-        return self._project_for_agent.get(session_name)
+    def project_for_terminal(self, session_name: str) -> Project | None:
+        """Return the project that owns this terminal session, or None."""
+        return self._project_for_terminal.get(session_name)
 
 
 def compute_relationships(
@@ -66,14 +66,14 @@ def compute_relationships(
     - BRANCH object value is a branch name; matched against (project.repo, branch)
     - D-04: path match takes precedence over branch match
     - D-05: projects with repo=None are excluded from branch-based matching
-    - AGENTS object value is a session name; matched against session.session_name
+    - TERMINALS object value is a session name; matched against session.session_name
     """
     index = RelationshipIndex()
 
     # Pass 1: build lookup maps from project object lists (D-04, D-05)
     path_to_project: dict[str, Project] = {}                   # WORKTREE obj value -> project
     branch_to_project: dict[tuple[str, str], Project] = {}     # (repo, branch) -> project
-    agent_to_project: dict[str, Project] = {}                  # session_name -> project
+    terminal_to_project: dict[str, Project] = {}               # session_name -> project
 
     for project in projects:
         for obj in project.objects:
@@ -82,8 +82,8 @@ def compute_relationships(
             elif obj.kind == PresetKind.BRANCH and project.repo is not None:
                 # D-05: exclude branch matching when project has no repo
                 branch_to_project[(project.repo, obj.value)] = project
-            elif obj.kind == PresetKind.AGENTS:
-                agent_to_project[obj.value] = project
+            elif obj.kind == PresetKind.TERMINALS:
+                terminal_to_project[obj.value] = project
 
     # Pass 2: match worktrees to projects
     for wt in worktrees:
@@ -101,9 +101,9 @@ def compute_relationships(
 
     # Pass 3: match sessions to projects
     for session in sessions:
-        matched = agent_to_project.get(session.session_name)
+        matched = terminal_to_project.get(session.session_name)
         if matched is not None:
-            index._ag_for_project.setdefault(matched.name, []).append(session)
-            index._project_for_agent[session.session_name] = matched
+            index._term_for_project.setdefault(matched.name, []).append(session)
+            index._project_for_terminal[session.session_name] = matched
 
     return index

@@ -18,7 +18,7 @@ from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import Static
 
-from joy.models import TerminalSession
+from joy.models import PresetKind, TerminalSession
 
 # ---------------------------------------------------------------------------
 # Nerd Font icon constants (per D-07)
@@ -26,8 +26,9 @@ from joy.models import TerminalSession
 
 ICON_SESSION = "\uf120"      # nf-fa-terminal
 ICON_CLAUDE = "\U000f1325"   # nf-md-robot (AI/robot glyph)
-INDICATOR_BUSY = "\u25cf"    # BLACK CIRCLE — session running claude
-INDICATOR_WAITING = "\u25cb" # WHITE CIRCLE — session at shell prompt
+ICON_LINK = "\uf0c1"         # nf-fa-link
+INDICATOR_BUSY = "\u25cf"    # BLACK CIRCLE -- session running claude
+INDICATOR_WAITING = "\u25cb" # WHITE CIRCLE -- session at shell prompt
 
 
 # ---------------------------------------------------------------------------
@@ -90,7 +91,7 @@ class SessionRow(Static):
     """Single-line row displaying one terminal session.
 
     Stores session_id for Enter key activation. Content format:
-    [icon]  [session_name]  [busy/waiting indicator]  [process]  [cwd]
+    [icon]  [session_name]  [busy/waiting indicator]  [process]  [cwd]  [link icon]
     """
 
     DEFAULT_CSS = """
@@ -107,12 +108,19 @@ class SessionRow(Static):
         *,
         is_claude: bool = False,
         is_busy: bool = False,
+        is_linked: bool = False,
         show_shortcut: bool = False,
         **kwargs,
     ) -> None:
         self.session_id = session.session_id
         self.session_name = session.session_name  # FOUND-04: identity field for cursor preservation
-        content = self._build_content(session, is_claude=is_claude, is_busy=is_busy, show_shortcut=show_shortcut)
+        self.is_linked = is_linked
+        # Store original data for re-rendering when linked status changes
+        self._session = session
+        self._is_claude = is_claude
+        self._is_busy = is_busy
+        self._show_shortcut = show_shortcut
+        content = self._build_content(session, is_claude=is_claude, is_busy=is_busy, is_linked=is_linked, show_shortcut=show_shortcut)
         super().__init__(content, **kwargs)
 
     @staticmethod
@@ -121,6 +129,7 @@ class SessionRow(Static):
         *,
         is_claude: bool = False,
         is_busy: bool = False,
+        is_linked: bool = False,
         show_shortcut: bool = False,
     ) -> Text:
         """Build the rich.Text renderable for a single-line session row."""
@@ -145,6 +154,9 @@ class SessionRow(Static):
 
         if show_shortcut:
             t.append("  [h]", style="dim")
+
+        if is_linked:
+            t.append(f"  {ICON_LINK}", style="cyan")
 
         return t
 
@@ -177,6 +189,10 @@ class TerminalPane(Widget, can_focus=True):
         Binding("j", "cursor_down", "Down"),
         Binding("enter", "focus_session", "Focus"),
         Binding("o", "focus_session", "Open", show=False),
+        Binding("n", "new_session", "New", show=False),
+        Binding("e", "rename_session", "Rename", show=False),
+        Binding("d", "close_session", "Close", show=False),
+        Binding("D", "force_close_session", "Force Close", show=False),
     ]
 
     DEFAULT_CSS = """
@@ -213,6 +229,8 @@ class TerminalPane(Widget, can_focus=True):
         super().__init__(**kwargs)
         self._cursor: int = -1
         self._rows: list[SessionRow] = []
+        self._linked_names: set[str] = set()
+        self._sessions_cache: list[TerminalSession] | None = None
         self.border_title = "Terminal"
 
     def compose(self) -> ComposeResult:
@@ -228,6 +246,7 @@ class TerminalPane(Widget, can_focus=True):
         Args:
             sessions: List of TerminalSession objects, or None if iTerm2 is unavailable.
         """
+        self._sessions_cache = sessions
         scroll = self.query_one("#terminal-scroll", _TerminalScroll)
         saved_scroll_y = scroll.scroll_y
         # FOUND-04: save cursor identity before DOM rebuild (D-12, D-13)
@@ -259,7 +278,7 @@ class TerminalPane(Widget, can_focus=True):
         other_sessions = [s for s in sessions if not s.is_claude]
 
         # Within Claude group: busy (Claude/node is foreground) sorts before waiting
-        # (shell is foreground — Claude is paused/backgrounded), then alpha by name.
+        # (shell is foreground -- Claude is paused/backgrounded), then alpha by name.
         def _claude_sort_key(s: TerminalSession) -> tuple[int, str]:
             is_busy = s.foreground_process.lower() not in _SHELL_PROCESSES
             return (0 if is_busy else 1, s.session_name.lower())
@@ -278,7 +297,8 @@ class TerminalPane(Widget, can_focus=True):
             scroll.mount(GroupHeader("Claude"))
             for session in claude_sessions:
                 is_busy = session.foreground_process.lower() not in _SHELL_PROCESSES
-                row = SessionRow(session, is_claude=True, is_busy=is_busy, show_shortcut=len(new_rows) == 0)
+                is_linked = session.session_name in self._linked_names
+                row = SessionRow(session, is_claude=True, is_busy=is_busy, is_linked=is_linked, show_shortcut=len(new_rows) == 0)
                 scroll.mount(row)
                 new_rows.append(row)
 
@@ -289,7 +309,8 @@ class TerminalPane(Widget, can_focus=True):
             first_group = False
             scroll.mount(GroupHeader("Other"))
             for session in other_sessions:
-                row = SessionRow(session, is_claude=False, show_shortcut=len(new_rows) == 0)
+                is_linked = session.session_name in self._linked_names
+                row = SessionRow(session, is_claude=False, is_linked=is_linked, show_shortcut=len(new_rows) == 0)
                 scroll.mount(row)
                 new_rows.append(row)
 
@@ -307,9 +328,24 @@ class TerminalPane(Widget, can_focus=True):
             self._cursor = 0
         else:
             self._cursor = -1
-        self._update_highlight(emit=False)  # refresh restore — no sync message
+        self._update_highlight(emit=False)  # refresh restore -- no sync message
 
         scroll.call_after_refresh(lambda: scroll.scroll_to(y=saved_scroll_y, animate=False))
+
+    def set_linked_names(self, linked_names: set[str]) -> None:
+        """Update linked session names and refresh link icons on existing rows."""
+        self._linked_names = linked_names
+        for row in self._rows:
+            is_linked = row.session_name in linked_names
+            if row.is_linked != is_linked:
+                row.is_linked = is_linked
+                row.update(row._build_content(
+                    row._session,
+                    is_claude=row._is_claude,
+                    is_busy=row._is_busy,
+                    is_linked=is_linked,
+                    show_shortcut=row._show_shortcut,
+                ))
 
     def _update_highlight(self, *, emit: bool = True) -> None:
         """Apply '--highlight' CSS class to the row at the current cursor position."""
@@ -362,12 +398,162 @@ class TerminalPane(Widget, can_focus=True):
     @work(thread=True, exit_on_error=False)
     def _do_activate(self, session_id: str) -> None:
         """Run activate_session in background thread to avoid blocking TUI (T-12-04)."""
-        import joy.terminal_sessions as _ts  # noqa: PLC0415 — lazy import; module ref for mockability
+        import joy.terminal_sessions as _ts  # noqa: PLC0415 -- lazy import; module ref for mockability
         _ts.activate_session(session_id)
 
     def action_focus_projects(self) -> None:
         """Return focus to the projects pane (D-13)."""
         self.app.query_one("#project-list").focus()
+
+    # ------------------------------------------------------------------
+    # n/e/d/D session management bindings
+    # ------------------------------------------------------------------
+
+    def action_new_session(self) -> None:
+        """Create a new named terminal session (n key)."""
+        from joy.screens import NameInputModal  # noqa: PLC0415
+
+        def on_name(name: str | None) -> None:
+            if name is None:
+                return
+            self._do_create_session(name)
+
+        self.app.push_screen(
+            NameInputModal(title="New Terminal Session", placeholder="Session name"),
+            on_name,
+        )
+
+    @work(thread=True, exit_on_error=False)
+    def _do_create_session(self, name: str) -> None:
+        import joy.terminal_sessions as _ts  # noqa: PLC0415
+        session_id = _ts.create_session(name)
+        if session_id:
+            self.app.call_from_thread(self.app.notify, f"Created session: {name}", markup=False)
+            # Trigger refresh to pick up new session
+            self.app.call_from_thread(self.app._load_terminal)
+        else:
+            self.app.call_from_thread(self.app.notify, "Failed to create session", severity="error", markup=False)
+
+    def action_rename_session(self) -> None:
+        """Rename the highlighted session (e key)."""
+        if self._cursor < 0 or self._cursor >= len(self._rows):
+            return
+        row = self._rows[self._cursor]
+        from joy.screens import NameInputModal  # noqa: PLC0415
+
+        def on_name(new_name: str | None) -> None:
+            if new_name is None:
+                return
+            self._do_rename_session(row.session_id, new_name, row.session_name)
+
+        self.app.push_screen(
+            NameInputModal(title="Rename Session", initial_value=row.session_name, placeholder="Session name"),
+            on_name,
+        )
+
+    @work(thread=True, exit_on_error=False)
+    def _do_rename_session(self, session_id: str, new_name: str, old_name: str) -> None:
+        import joy.terminal_sessions as _ts  # noqa: PLC0415
+        ok = _ts.rename_session(session_id, new_name)
+        if ok:
+            self.app.call_from_thread(self.app.notify, f"Renamed: {old_name} -> {new_name}", markup=False)
+            # Update linked project obj.value if this session is linked
+            self.app.call_from_thread(self._update_linked_project_name, old_name, new_name)
+            # Trigger refresh to rebuild pane with new name
+            self.app.call_from_thread(self.app._load_terminal)
+        else:
+            self.app.call_from_thread(self.app.notify, "Failed to rename session", severity="error", markup=False)
+
+    def _update_linked_project_name(self, old_name: str, new_name: str) -> None:
+        """Update obj.value in linked project when session is renamed."""
+        if not hasattr(self.app, '_rel_index') or self.app._rel_index is None:
+            return
+        project = self.app._rel_index.project_for_terminal(old_name)
+        if project is None:
+            return
+        for obj in project.objects:
+            if obj.kind == PresetKind.TERMINALS and obj.value == old_name:
+                obj.value = new_name
+                break
+        # Persist change
+        self.app._save_projects_bg()
+
+    def action_close_session(self) -> None:
+        """Close the highlighted session with confirmation (d key)."""
+        if self._cursor < 0 or self._cursor >= len(self._rows):
+            return
+        row = self._rows[self._cursor]
+        # Capture by value before pushing modal — row may be replaced by a background refresh
+        # before the user confirms, causing the closure to reference stale widget state (WR-02).
+        session_id = row.session_id
+        session_name = row.session_name
+        from joy.screens import ConfirmationModal  # noqa: PLC0415
+
+        def on_confirm(confirmed: bool) -> None:
+            if not confirmed:
+                return
+            self._do_close_session(session_id, session_name, force=False)
+
+        self.app.push_screen(
+            ConfirmationModal("Close Session", f"Close '{session_name}'?", hint="Enter to close, Escape to cancel"),
+            on_confirm,
+        )
+
+    @work(thread=True, exit_on_error=False)
+    def _do_close_session(self, session_id: str, name: str, *, force: bool) -> None:
+        import joy.terminal_sessions as _ts  # noqa: PLC0415
+        ok = _ts.close_session(session_id, force=force)
+        if ok:
+            self.app.call_from_thread(self.app.notify, f"Closed session: {name}", markup=False)
+            self.app.call_from_thread(self.app._load_terminal)
+        else:
+            # Graceful close failed -- offer force close
+            if not force:
+                self.app.call_from_thread(self._offer_force_close, session_id, name)
+            else:
+                self.app.call_from_thread(self.app.notify, f"Failed to close: {name}", severity="error", markup=False)
+
+    def _offer_force_close(self, session_id: str, name: str) -> None:
+        """Push force-close confirmation after graceful close fails."""
+        from joy.screens import ConfirmationModal  # noqa: PLC0415
+
+        def on_confirm(confirmed: bool) -> None:
+            if not confirmed:
+                return
+            self._do_close_session(session_id, name, force=True)
+
+        self.app.push_screen(
+            ConfirmationModal(
+                "Force Close Session",
+                f"Force close '{name}'? (running processes will be killed)",
+                hint="Enter to force close, Escape to cancel",
+            ),
+            on_confirm,
+        )
+
+    def action_force_close_session(self) -> None:
+        """Force-close the highlighted session with confirmation (D key)."""
+        if self._cursor < 0 or self._cursor >= len(self._rows):
+            return
+        row = self._rows[self._cursor]
+        # Capture by value before pushing modal — row may be replaced by a background refresh.
+        session_id = row.session_id
+        session_name = row.session_name
+        from joy.screens import ConfirmationModal  # noqa: PLC0415
+
+        def on_confirm(confirmed: bool) -> None:
+            if not confirmed:
+                return
+            self._do_close_session(session_id, session_name, force=True)
+
+        self.app.push_screen(
+            ConfirmationModal(
+                "Force Close Session",
+                f"Force close '{session_name}'?",
+                hint="Enter to force close, Escape to cancel",
+            ),
+            on_confirm,
+        )
 
     def set_refresh_label(self, timestamp: str, *, stale: bool = False) -> None:
         """Update border_title with refresh timestamp. stale adds warning icon (D-16).

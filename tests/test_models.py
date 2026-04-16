@@ -47,7 +47,7 @@ class TestPresetKind:
         assert PresetKind.FILE.value == "file"
         assert PresetKind.NOTE.value == "note"
         assert PresetKind.WORKTREE.value == "worktree"
-        assert PresetKind.AGENTS.value == "agents"
+        assert PresetKind.TERMINALS.value == "terminals"
         assert PresetKind.URL.value == "url"
         assert PresetKind.REPO.value == "repo"
 
@@ -88,8 +88,8 @@ class TestPresetMap:
     def test_preset_map_worktree_maps_to_worktree(self) -> None:
         assert PRESET_MAP[PresetKind.WORKTREE] == ObjectType.WORKTREE
 
-    def test_preset_map_agents_maps_to_iterm(self) -> None:
-        assert PRESET_MAP[PresetKind.AGENTS] == ObjectType.ITERM
+    def test_preset_map_terminals_maps_to_iterm(self) -> None:
+        assert PRESET_MAP[PresetKind.TERMINALS] == ObjectType.ITERM
 
     def test_preset_map_url_maps_to_url(self) -> None:
         assert PRESET_MAP[PresetKind.URL] == ObjectType.URL
@@ -247,7 +247,7 @@ class TestConfig:
         assert config.editor == "Sublime Text"
         assert config.obsidian_vault == ""
         assert config.terminal == "iTerm2"
-        assert config.default_open_kinds == ["worktree", "agents"]
+        assert config.default_open_kinds == ["worktree", "terminals"]
 
     def test_config_custom_values(self) -> None:
         config = Config(
@@ -268,7 +268,7 @@ class TestConfig:
         c1 = Config()
         c2 = Config()
         c1.default_open_kinds.append("file")
-        assert c2.default_open_kinds == ["worktree", "agents"]
+        assert c2.default_open_kinds == ["worktree", "terminals"]
 
     def test_config_to_dict(self) -> None:
         config = Config()
@@ -278,10 +278,17 @@ class TestConfig:
             "editor": "Sublime Text",
             "obsidian_vault": "",
             "terminal": "iTerm2",
-            "default_open_kinds": ["worktree", "agents"],
+            "default_open_kinds": ["worktree", "terminals"],
             "refresh_interval": 30,
             "branch_filter": ["main", "testing"],
         }
+
+    def test_config_to_dict_default_open_kinds_uses_terminals(self) -> None:
+        """Config.to_dict() uses 'terminals' not 'agents' for default_open_kinds."""
+        config = Config()
+        result = config.to_dict()
+        assert "terminals" in result["default_open_kinds"]
+        assert "agents" not in result["default_open_kinds"]
 
     def test_config_to_dict_custom(self) -> None:
         config = Config(ide="VSCode", obsidian_vault="/vault")

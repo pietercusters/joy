@@ -1,11 +1,9 @@
-"""Unit tests for Phase 16 propagation logic (PROP-02, PROP-04..PROP-08).
+"""Unit tests for propagation logic (MR auto-add, terminal auto-remove).
 
 Tests cover:
-- ObjectItem.stale runtime field (PROP-04, PROP-05, PROP-07)
 - MR auto-add (_propagate_mr_auto_add) (PROP-02)
-- Agent stale marking (_propagate_agent_stale) (PROP-04, PROP-05)
+- Terminal auto-remove (_propagate_terminal_auto_remove)
 - Immutability invariants (PROP-06, PROP-07, PROP-08)
-- Stale CSS class application in ObjectRow (PROP-04, PROP-05)
 """
 from __future__ import annotations
 
@@ -14,7 +12,6 @@ from datetime import date
 import pytest
 
 from joy.models import MRInfo, ObjectItem, PresetKind, Project, TerminalSession
-from joy.widgets.object_row import ObjectRow
 
 
 # ---------------------------------------------------------------------------
@@ -62,12 +59,9 @@ class _PropContext:
         self._projects = projects
         self._current_sessions = sessions or []
 
-    # Bind the real methods from JoyApp after implementation (Task 2).
-    # These are reassigned in conftest or at import time once JoyApp exists.
-
 
 # ---------------------------------------------------------------------------
-# Task 1: RED — import propagation methods (will fail until Task 2)
+# Bound method helpers
 # ---------------------------------------------------------------------------
 
 def _get_propagate_mr(ctx: _PropContext):
@@ -76,59 +70,14 @@ def _get_propagate_mr(ctx: _PropContext):
     return lambda mr_data: JoyApp._propagate_mr_auto_add(ctx, mr_data)
 
 
-def _get_propagate_agent(ctx: _PropContext):
-    """Return bound _propagate_agent_stale for ctx."""
+def _get_propagate_terminal_remove(ctx: _PropContext):
+    """Return bound _propagate_terminal_auto_remove for ctx."""
     from joy.app import JoyApp  # noqa: PLC0415
-    return lambda: JoyApp._propagate_agent_stale(ctx)
+    return lambda: JoyApp._propagate_terminal_auto_remove(ctx)
 
 
 # ===========================================================================
-# TestObjectItemStale — tests that pass immediately after models.py update
-# ===========================================================================
-
-class TestObjectItemStale:
-    """ObjectItem.stale runtime field (PROP-07: not written to TOML)."""
-
-    def test_stale_defaults_false(self) -> None:
-        obj = ObjectItem(kind=PresetKind.BRANCH, value="main")
-        assert obj.stale is False
-
-    def test_stale_can_be_set_true(self) -> None:
-        obj = ObjectItem(kind=PresetKind.AGENTS, value="claude-work")
-        obj.stale = True
-        assert obj.stale is True
-
-    def test_stale_not_in_to_dict_when_false(self) -> None:
-        obj = ObjectItem(kind=PresetKind.MR, value="https://github.com/x/y/pull/1")
-        result = obj.to_dict()
-        assert "stale" not in result
-        assert set(result.keys()) == {"kind", "value", "label", "open_by_default"}
-
-    def test_stale_not_in_to_dict_when_true(self) -> None:
-        obj = ObjectItem(kind=PresetKind.AGENTS, value="claude-work", stale=True)
-        result = obj.to_dict()
-        assert "stale" not in result
-        assert set(result.keys()) == {"kind", "value", "label", "open_by_default"}
-
-    def test_stale_exact_keys_in_to_dict(self) -> None:
-        """to_dict() must have exactly 4 keys regardless of stale value."""
-        obj = ObjectItem(
-            kind=PresetKind.AGENTS,
-            value="my-agent",
-            label="Agent",
-            open_by_default=True,
-            stale=True,
-        )
-        result = obj.to_dict()
-        assert len(result) == 4
-        assert result["kind"] == "agents"
-        assert result["value"] == "my-agent"
-        assert result["label"] == "Agent"
-        assert result["open_by_default"] is True
-
-
-# ===========================================================================
-# TestMRAutoAdd — tests for _propagate_mr_auto_add
+# TestMRAutoAdd -- tests for _propagate_mr_auto_add
 # ===========================================================================
 
 class TestMRAutoAdd:
@@ -191,13 +140,13 @@ class TestMRAutoAdd:
         assert messages == []
 
     def test_mr_no_matching_branch_skipped(self) -> None:
-        """Project has BRANCH 'main' but mr_data has 'feat-1' — no MR added."""
+        """Project has BRANCH 'main' but mr_data has 'feat-1' -- no MR added."""
         project = _project_with_branch("joy", "main")
         ctx = _PropContext([project])
         mr = _mr_data("joy", "feat-1", "https://github.com/x/y/pull/42", 42)
         messages = _get_propagate_mr(ctx)(mr)
 
-        # Only 1 object (the branch) — no MR added
+        # Only 1 object (the branch) -- no MR added
         assert len(project.objects) == 1
         assert messages == []
 
@@ -220,7 +169,6 @@ class TestMRAutoAdd:
         branch_obj = project.objects[0]
         original_value = branch_obj.value
         original_kind = branch_obj.kind
-        original_stale = branch_obj.stale
 
         ctx = _PropContext([project])
         mr = _mr_data("joy", "feat-1", "https://github.com/x/y/pull/42", 42)
@@ -229,7 +177,6 @@ class TestMRAutoAdd:
         # Branch object is the same object, unchanged
         assert branch_obj.value == original_value
         assert branch_obj.kind == original_kind
-        assert branch_obj.stale == original_stale
 
     def test_empty_mr_data_returns_no_messages(self) -> None:
         """Empty mr_data produces no changes and no messages."""
@@ -240,164 +187,103 @@ class TestMRAutoAdd:
 
 
 # ===========================================================================
-# TestAgentStale — tests for _propagate_agent_stale
+# TestTerminalAutoRemove -- tests for _propagate_terminal_auto_remove
 # ===========================================================================
 
-class TestAgentStale:
-    """Agent stale marking (PROP-04, PROP-05)."""
+class TestTerminalAutoRemove:
+    """Terminal auto-remove propagation."""
 
-    def test_agent_marked_stale_when_absent(self) -> None:
-        """AGENTS object marked stale when session name not in active sessions."""
+    def test_terminal_removed_when_session_absent(self) -> None:
+        """TERMINALS object removed when session name not in active sessions."""
         project = Project(
             name="test",
-            objects=[ObjectItem(kind=PresetKind.AGENTS, value="claude-work")],
+            objects=[ObjectItem(kind=PresetKind.TERMINALS, value="claude-work")],
         )
         ctx = _PropContext([project], sessions=_sessions(["other-session"]))
 
-        _get_propagate_agent(ctx)()
+        messages = _get_propagate_terminal_remove(ctx)()
 
-        assert project.objects[0].stale is True
+        assert len(project.objects) == 0
+        assert len(messages) == 1
+        assert "claude-work" in messages[0]
 
-    def test_agent_stale_cleared_when_present(self) -> None:
-        """Previously stale AGENTS object cleared when session reappears."""
+    def test_terminal_kept_when_session_present(self) -> None:
+        """TERMINALS object kept when session name is in active sessions."""
         project = Project(
             name="test",
-            objects=[ObjectItem(kind=PresetKind.AGENTS, value="claude-work", stale=True)],
+            objects=[ObjectItem(kind=PresetKind.TERMINALS, value="claude-work")],
         )
         ctx = _PropContext([project], sessions=_sessions(["claude-work"]))
 
-        _get_propagate_agent(ctx)()
+        messages = _get_propagate_terminal_remove(ctx)()
 
-        assert project.objects[0].stale is False
-
-    def test_agent_marked_stale_returns_offline_message(self) -> None:
-        """False->True transition emits an 'offline' message."""
-        project = Project(
-            name="test",
-            objects=[ObjectItem(kind=PresetKind.AGENTS, value="claude-work", stale=False)],
-        )
-        ctx = _PropContext([project], sessions=_sessions([]))
-
-        messages = _get_propagate_agent(ctx)()
-
-        assert len(messages) == 1
-        assert "offline" in messages[0].lower() or "claude-work" in messages[0]
-
-    def test_agent_stale_cleared_returns_online_message(self) -> None:
-        """True->False transition emits a 'back online' message."""
-        project = Project(
-            name="test",
-            objects=[ObjectItem(kind=PresetKind.AGENTS, value="claude-work", stale=True)],
-        )
-        ctx = _PropContext([project], sessions=_sessions(["claude-work"]))
-
-        messages = _get_propagate_agent(ctx)()
-
-        assert len(messages) == 1
-        assert "online" in messages[0].lower() or "claude-work" in messages[0]
-
-    def test_agent_already_stale_no_message(self) -> None:
-        """True->True transition (still absent) emits no new message."""
-        project = Project(
-            name="test",
-            objects=[ObjectItem(kind=PresetKind.AGENTS, value="claude-work", stale=True)],
-        )
-        ctx = _PropContext([project], sessions=_sessions(["other"]))
-
-        messages = _get_propagate_agent(ctx)()
-
-        # Still stale — no transition message
+        assert len(project.objects) == 1
         assert messages == []
 
-    def test_agent_still_present_no_message(self) -> None:
-        """False->False transition (still present) emits no message."""
+    def test_no_removal_when_sessions_empty(self) -> None:
+        """Terminal objects NOT removed when sessions list is empty (timing guard)."""
         project = Project(
             name="test",
-            objects=[ObjectItem(kind=PresetKind.AGENTS, value="claude-work", stale=False)],
+            objects=[ObjectItem(kind=PresetKind.TERMINALS, value="claude-work")],
         )
-        ctx = _PropContext([project], sessions=_sessions(["claude-work"]))
+        ctx = _PropContext([project], sessions=[])
 
-        messages = _get_propagate_agent(ctx)()
+        messages = _get_propagate_terminal_remove(ctx)()
 
+        # Timing guard: empty sessions = iTerm2 hiccup, skip removal
+        assert len(project.objects) == 1
         assert messages == []
 
-    def test_non_agent_objects_not_marked_stale(self) -> None:
-        """BRANCH and MR objects are not affected by agent stale propagation."""
+    def test_multiple_projects_terminals_removed(self) -> None:
+        """Terminal auto-remove applies across all projects."""
+        p1 = Project(
+            name="p1",
+            objects=[ObjectItem(kind=PresetKind.TERMINALS, value="sess-a")],
+        )
+        p2 = Project(
+            name="p2",
+            objects=[ObjectItem(kind=PresetKind.TERMINALS, value="sess-b")],
+        )
+        ctx = _PropContext([p1, p2], sessions=_sessions(["sess-a"]))
+
+        messages = _get_propagate_terminal_remove(ctx)()
+
+        assert len(p1.objects) == 1  # sess-a is active -- kept
+        assert len(p2.objects) == 0  # sess-b is absent -- removed
+        assert len(messages) == 1
+        assert "sess-b" in messages[0]
+
+    def test_non_terminal_objects_not_removed(self) -> None:
+        """BRANCH and MR objects are not affected by terminal auto-remove."""
         project = Project(
             name="test",
             objects=[
                 ObjectItem(kind=PresetKind.BRANCH, value="main"),
                 ObjectItem(kind=PresetKind.MR, value="https://github.com/x/y/pull/1"),
+                ObjectItem(kind=PresetKind.TERMINALS, value="absent-session"),
             ],
         )
-        ctx = _PropContext([project], sessions=_sessions([]))
+        ctx = _PropContext([project], sessions=_sessions(["other"]))
 
-        _get_propagate_agent(ctx)()
+        messages = _get_propagate_terminal_remove(ctx)()
 
-        for obj in project.objects:
-            assert obj.stale is False, f"{obj.kind} should not be stale"
+        # Terminal removed but branch and MR kept
+        assert len(project.objects) == 2
+        kinds = {obj.kind for obj in project.objects}
+        assert PresetKind.BRANCH in kinds
+        assert PresetKind.MR in kinds
+        assert PresetKind.TERMINALS not in kinds
 
-    def test_multiple_projects_all_agents_checked(self) -> None:
-        """Agent stale propagation applies across all projects."""
-        p1 = Project(
-            name="p1",
-            objects=[ObjectItem(kind=PresetKind.AGENTS, value="sess-a")],
+    def test_removal_message_includes_project_name(self) -> None:
+        """Removal message includes both session name and project name."""
+        project = Project(
+            name="my-project",
+            objects=[ObjectItem(kind=PresetKind.TERMINALS, value="gone-session")],
         )
-        p2 = Project(
-            name="p2",
-            objects=[ObjectItem(kind=PresetKind.AGENTS, value="sess-b")],
-        )
-        ctx = _PropContext([p1, p2], sessions=_sessions(["sess-a"]))
+        ctx = _PropContext([project], sessions=_sessions(["other"]))
 
-        _get_propagate_agent(ctx)()
+        messages = _get_propagate_terminal_remove(ctx)()
 
-        assert p1.objects[0].stale is False  # sess-a is active
-        assert p2.objects[0].stale is True   # sess-b is absent
-
-
-# ===========================================================================
-# TestStaleCSSIntegration — stale class applied during ObjectRow construction
-# ===========================================================================
-
-class TestStaleCSSIntegration:
-    """Test that stale ObjectItems get --stale CSS class on ObjectRow (PROP-04, PROP-05)."""
-
-    def test_stale_row_has_css_class(self) -> None:
-        """ObjectRow with stale=True item gets --stale class applied (mimics _render_project)."""
-        item = ObjectItem(kind=PresetKind.AGENTS, value="claude-work", stale=True)
-        row = ObjectRow(item, index=0)
-        # Simulate what _render_project does
-        if getattr(item, 'stale', False):
-            row.add_class("--stale")
-        assert row.has_class("--stale")
-
-    def test_non_stale_row_no_css_class(self) -> None:
-        """ObjectRow with stale=False item does NOT get --stale class."""
-        item = ObjectItem(kind=PresetKind.AGENTS, value="claude-work", stale=False)
-        row = ObjectRow(item, index=0)
-        if getattr(item, 'stale', False):
-            row.add_class("--stale")
-        assert not row.has_class("--stale")
-
-    def test_stale_default_false_no_css_class(self) -> None:
-        """ObjectRow with default stale (unset) does NOT get --stale class."""
-        item = ObjectItem(kind=PresetKind.BRANCH, value="main")
-        row = ObjectRow(item, index=0)
-        if getattr(item, 'stale', False):
-            row.add_class("--stale")
-        assert not row.has_class("--stale")
-
-    def test_stale_applies_only_to_stale_items(self) -> None:
-        """Mixed stale and non-stale items: only stale gets --stale class."""
-        stale_item = ObjectItem(kind=PresetKind.AGENTS, value="offline-agent", stale=True)
-        live_item = ObjectItem(kind=PresetKind.AGENTS, value="online-agent", stale=False)
-
-        stale_row = ObjectRow(stale_item, index=0)
-        live_row = ObjectRow(live_item, index=1)
-
-        for r in (stale_row, live_row):
-            if getattr(r.item, 'stale', False):
-                r.add_class("--stale")
-
-        assert stale_row.has_class("--stale")
-        assert not live_row.has_class("--stale")
+        assert len(messages) == 1
+        assert "gone-session" in messages[0]
+        assert "my-project" in messages[0]

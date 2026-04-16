@@ -100,6 +100,91 @@ def fetch_sessions() -> list[TerminalSession] | None:
     return results
 
 
+def create_session(name: str) -> str | None:
+    """Create a new iTerm2 tab in the front window and set its name.
+
+    Returns session_id on success, None on failure.
+    All iterm2 imports are lazy to avoid startup overhead.
+    """
+    import iterm2
+    from iterm2.connection import Connection
+
+    result: str | None = None
+
+    async def _create(connection):
+        nonlocal result
+        app = await iterm2.async_get_app(connection)
+        window = app.current_window
+        if window is None:
+            return
+        tab = await window.async_create_tab()
+        if tab is None or not tab.sessions:
+            return
+        session = tab.sessions[0]
+        await session.async_set_name(name)
+        result = session.session_id
+
+    try:
+        Connection().run_until_complete(_create, retry=False)
+    except Exception:
+        pass
+    return result
+
+
+def rename_session(session_id: str, new_name: str) -> bool:
+    """Rename an iTerm2 session. Returns True on success, False on failure.
+
+    All iterm2 imports are lazy to avoid startup overhead.
+    """
+    import iterm2
+    from iterm2.connection import Connection
+
+    success = False
+
+    async def _rename(connection):
+        nonlocal success
+        app = await iterm2.async_get_app(connection)
+        session = app.get_session_by_id(session_id)
+        if session is not None:
+            await session.async_set_name(new_name)
+            success = True
+
+    try:
+        Connection().run_until_complete(_rename, retry=False)
+    except Exception:
+        pass
+    return success
+
+
+def close_session(session_id: str, force: bool = False) -> bool:
+    """Close an iTerm2 session. Returns True on success, False on failure.
+
+    force=False for graceful close, force=True to skip iTerm2's confirmation.
+    If session is already gone (None), returns True.
+    All iterm2 imports are lazy to avoid startup overhead.
+    """
+    import iterm2
+    from iterm2.connection import Connection
+
+    success = False
+
+    async def _close(connection):
+        nonlocal success
+        app = await iterm2.async_get_app(connection)
+        session = app.get_session_by_id(session_id)
+        if session is None:
+            success = True  # already gone
+            return
+        await session.async_close(force=force)
+        success = True
+
+    try:
+        Connection().run_until_complete(_close, retry=False)
+    except Exception:
+        pass
+    return success
+
+
 def activate_session(session_id: str) -> bool:
     """Focus an iTerm2 session by ID. Returns True on success, False on failure.
 
