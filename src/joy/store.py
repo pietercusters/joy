@@ -95,7 +95,8 @@ def _toml_to_projects(data: dict) -> list[Project]:
         else:
             created = date.today()
         repo = proj_data.get("repo")  # None if absent (backward compat)
-        projects.append(Project(name=name, objects=objects, created=created, repo=repo))
+        status = proj_data.get("status", "idle")
+        projects.append(Project(name=name, objects=objects, created=created, repo=repo, status=status))
     return projects
 
 
@@ -259,11 +260,12 @@ def _toml_to_archived(data: dict) -> list[ArchivedProject]:
         else:
             created = date.today()
         repo = entry.get("repo")
+        status = entry.get("status", "idle")
         archived_at = entry.get("archived_at")
         if not isinstance(archived_at, datetime):
             # Fallback: if somehow not a datetime, use epoch (should not happen with valid TOML)
             archived_at = datetime(1970, 1, 1, tzinfo=timezone.utc)
-        project = Project(name=name, objects=objects, created=created, repo=repo)
+        project = Project(name=name, objects=objects, created=created, repo=repo, status=status)
         archived.append(ArchivedProject(project=project, archived_at=archived_at))
     return archived
 
