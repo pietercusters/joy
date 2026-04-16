@@ -20,7 +20,6 @@ from joy.widgets.icons import (
     ICON_WORKTREE,
     ICON_MR_OPEN,
     ICON_MR_DRAFT,
-    ICON_MR_CLOSED,
     ICON_CI_PASS,
     ICON_CI_FAIL,
     ICON_CI_PENDING,
@@ -150,9 +149,12 @@ class ProjectRow(Static):
             else:
                 ribbon.append(icon, style="grey50 dim")
 
-        # Compute fixed right width: mr_strip_len + 1 space + ribbon (6 icons)
+        # Compute fixed right width: mr_strip_len + separator + ribbon (6 icons)
+        # When mr_info is present, mr_strip already ends with a trailing space so no extra
+        # separator is needed. When absent, we add 1 space before the ribbon.
         mr_plain_len = len(mr_strip.plain)
-        fixed_right = mr_plain_len + 1 + len(ribbon_icons)  # 1 space between mr and ribbon
+        separator = 0 if mr_info is not None else 1
+        fixed_right = mr_plain_len + separator + len(ribbon_icons)
 
         # Fixed left: status-dot (1) + space (1) = 2
         name_budget = avail_width - 2 - fixed_right
@@ -215,8 +217,10 @@ def pick_best_mr(
     if not mr_data:
         return None
 
-    # Priority 1: MR for a linked worktree's branch
+    # Priority 1: MR for a linked worktree's branch (same repo only)
     for wt in rel_index.worktrees_for(project):  # type: ignore[union-attr]
+        if wt.repo_name != project.repo:
+            continue
         mr = mr_data.get((wt.repo_name, wt.branch))
         if mr is not None:
             return mr
@@ -726,6 +730,7 @@ class ProjectList(Widget, can_focus=True):
             return
         project = self._rows[self._cursor].project
         cycle = {"idle": "prio", "prio": "hold", "hold": "idle"}
+        # Unknown status (e.g. hand-edited TOML) resets to "idle" on first g press
         project.status = cycle.get(project.status, "idle")
         self.app._save_projects_bg()
         # Re-render just this row
