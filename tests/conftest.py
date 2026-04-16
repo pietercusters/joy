@@ -41,3 +41,21 @@ def sample_project(sample_object: ObjectItem) -> Project:
         ],
         created=date(2026, 1, 15),
     )
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _isolated_store_paths(tmp_path_factory):
+    """Patch all joy.store path constants to a session-scoped tmp directory.
+
+    Prevents any test from accidentally reading/writing ~/.joy/.
+    Per D-13, D-14: uses pytest.MonkeyPatch() for session-scoped patching.
+    """
+    tmp = tmp_path_factory.mktemp("joy_store")
+    mp = pytest.MonkeyPatch()
+    mp.setattr("joy.store.JOY_DIR", tmp)
+    mp.setattr("joy.store.PROJECTS_PATH", tmp / "projects.toml")
+    mp.setattr("joy.store.CONFIG_PATH", tmp / "config.toml")
+    mp.setattr("joy.store.REPOS_PATH", tmp / "repos.toml")
+    mp.setattr("joy.store.ARCHIVE_PATH", tmp / "archive.toml")
+    yield
+    mp.undo()

@@ -480,6 +480,9 @@ class ProjectList(Widget, can_focus=True):
         def on_confirm(confirmed: bool) -> None:
             if not confirmed:
                 return
+            # Close iTerm2 tab if linked (D-09, D-12: skip silently if None)
+            if project.iterm_tab_id:
+                self.app._close_tab_bg(project.iterm_tab_id)
             projects = self.app._projects
             try:
                 projects.remove(project)
@@ -549,18 +552,20 @@ class ProjectList(Widget, can_focus=True):
 
     def action_archive_project(self) -> None:
         """Archive the highlighted project to cold storage (~/.joy/archive.toml)."""
-        from joy.screens.archive_modal import ArchiveChoice, ArchiveModal  # noqa: PLC0415
+        from joy.screens import ConfirmationModal  # noqa: PLC0415
 
         if self._cursor < 0 or self._cursor >= len(self._rows):
             return
         project = self._rows[self._cursor].project
         cursor_at = self._cursor
 
-        def on_archive(choice: ArchiveChoice) -> None:
-            if choice is ArchiveChoice.CANCEL:
+        def on_archive(confirmed: bool) -> None:
+            if not confirmed:
                 return
 
-            close_terminals = choice is ArchiveChoice.ARCHIVE_WITH_CLOSE
+            # Always close iTerm2 tab if linked (D-10, D-12: skip silently if None)
+            if project.iterm_tab_id:
+                self.app._close_tab_bg(project.iterm_tab_id)
 
             # 1. Strip WORKTREE + TERMINALS objects; preserve all others
             stripped_objects = [
@@ -576,13 +581,7 @@ class ProjectList(Widget, can_focus=True):
                 repo=project.repo,
             )
 
-            # 2. Optionally close terminal sessions in background
-            if close_terminals and self.app._rel_index is not None:
-                sessions = self.app._rel_index.terminals_for(project)
-                if sessions:
-                    self.app._close_sessions_bg(sessions)
-
-            # 3. Remove from live projects list
+            # 2. Remove from live projects list
             projects = self.app._projects
             try:
                 projects.remove(project)
@@ -590,14 +589,14 @@ class ProjectList(Widget, can_focus=True):
                 return  # already removed
             self.app._save_projects_bg()
 
-            # 4. Append to archive
+            # 3. Append to archive
             archived = ArchivedProject(
                 project=archived_project_data,
                 archived_at=datetime.now(timezone.utc),
             )
             self.app._append_to_archive_bg(archived)
 
-            # 5. Refresh list and restore cursor
+            # 4. Refresh list and restore cursor
             self.set_projects(projects, self._repos)
             if projects:
                 new_index = min(cursor_at, len(projects) - 1)
@@ -609,7 +608,14 @@ class ProjectList(Widget, can_focus=True):
                 self.call_after_refresh(_restore)
             self.app.notify(f"Archived: '{project.name}'", markup=False)
 
-        self.app.push_screen(ArchiveModal(project=project), on_archive)
+        self.app.push_screen(
+            ConfirmationModal(
+                title="Archive Project",
+                prompt=f"Archive project '{project.name}'? This will archive it and close its iTerm2 tab.",
+                hint="Enter to archive, Escape to cancel",
+            ),
+            on_archive,
+        )
 
     def action_open_archive_browser(self) -> None:
         """Open the archive browser to view and unarchive projects (A key)."""

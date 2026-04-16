@@ -52,8 +52,11 @@ def _tty_has_claude(tty: str) -> bool:
         return False
 
 
-def fetch_sessions() -> list[TerminalSession] | None:
-    """Return all active iTerm2 sessions, or None if API unavailable.
+def fetch_sessions() -> tuple[list[TerminalSession], set[str]] | None:
+    """Return all active iTerm2 sessions and live tab IDs, or None if API unavailable.
+
+    Returns (sessions, live_tab_ids) tuple where live_tab_ids is the set of all
+    tab_id values currently open in iTerm2. Returns None when API unavailable.
 
     Uses Connection().run_until_complete() (instance method) to avoid
     the module-level function's sys.exit(1) on ConnectionRefusedError.
@@ -69,17 +72,19 @@ def fetch_sessions() -> list[TerminalSession] | None:
 
     # Collect raw data inside async context, then compute is_claude synchronously
     # after run_until_complete returns (subprocess calls must not block the event loop).
-    raw: list[tuple[str, str, str, str, str]] = []  # (id, name, job, cwd, tty)
+    raw: list[tuple[str, str, str, str, str, str]] = []  # (id, tab_id, name, job, cwd, tty)
+    live_tab_ids: set[str] = set()
 
     async def _enumerate(connection):
         app = await iterm2.async_get_app(connection)
         for window in app.terminal_windows:
             for tab in window.tabs:
+                live_tab_ids.add(tab.tab_id)
                 for session in tab.sessions:
                     job = await session.async_get_variable("jobName") or ""
                     cwd = await session.async_get_variable("path") or ""
                     tty = await session.async_get_variable("tty") or ""
-                    raw.append((session.session_id, session.name or "", job, cwd, tty))
+                    raw.append((session.session_id, tab.tab_id, session.name or "", job, cwd, tty))
 
     try:
         Connection().run_until_complete(_enumerate, retry=False)
@@ -87,17 +92,18 @@ def fetch_sessions() -> list[TerminalSession] | None:
         return None
 
     results: list[TerminalSession] = []
-    for session_id, name, job, cwd, tty in raw:
+    for session_id, tab_id, name, job, cwd, tty in raw:
         results.append(
             TerminalSession(
                 session_id=session_id,
                 session_name=name,
                 foreground_process=job,
                 cwd=cwd,
+                tab_id=tab_id,
                 is_claude=_detect_claude(job, tty),
             )
         )
-    return results
+    return (results, live_tab_ids)
 
 
 def create_session(name: str) -> str | None:
@@ -123,6 +129,39 @@ def create_session(name: str) -> str | None:
         session = tab.sessions[0]
         await session.async_set_name(name)
         result = session.session_id
+
+    try:
+        Connection().run_until_complete(_create, retry=False)
+    except Exception:
+        pass
+    return result
+
+
+def create_tab(name: str) -> str | None:
+    """Create a new iTerm2 tab in the front window, set its session name, return tab_id.
+
+    Returns tab_id on success, None on failure.
+    All iterm2 imports are lazy to avoid startup overhead.
+    """
+    import iterm2
+    from iterm2.connection import Connection
+
+    result: str | None = None
+
+    async def _create(connection):
+        nonlocal result
+        app = await iterm2.async_get_app(connection)
+        window = app.current_window
+        if window is None:
+            return
+        tab = await window.async_create_tab()
+        if tab is None or not tab.sessions:
+            return
+        session = tab.sessions[0]
+        await session.async_set_name(name)
+        result = tab.tab_id
+        await tab.async_select()
+        await app.async_activate()
 
     try:
         Connection().run_until_complete(_create, retry=False)
@@ -176,6 +215,37 @@ def close_session(session_id: str, force: bool = False) -> bool:
             success = True  # already gone
             return
         await session.async_close(force=force)
+        success = True
+
+    try:
+        Connection().run_until_complete(_close, retry=False)
+    except Exception:
+        pass
+    return success
+
+
+def close_tab(tab_id: str, force: bool = False) -> bool:
+    """Close an entire iTerm2 tab by tab_id. Returns True on success, False on failure.
+
+    force=False for graceful close, force=True to skip iTerm2's confirmation.
+    If tab is already gone (not found in any window), returns True.
+    All iterm2 imports are lazy to avoid startup overhead.
+    """
+    import iterm2
+    from iterm2.connection import Connection
+
+    success = False
+
+    async def _close(connection):
+        nonlocal success
+        app = await iterm2.async_get_app(connection)
+        for window in app.terminal_windows:
+            for tab in window.tabs:
+                if tab.tab_id == tab_id:
+                    await tab.async_close(force=force)
+                    success = True
+                    return
+        # Tab not found in any window — already gone
         success = True
 
     try:

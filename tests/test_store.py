@@ -528,6 +528,51 @@ class TestProjectRepoRoundTrip:
         assert loaded[0].repo is None
 
 
+class TestProjectItermTabIdRoundTrip:
+    """Tests for iterm_tab_id field TOML serialization/deserialization."""
+
+    def test_round_trip_project_with_iterm_tab_id(self, tmp_path: Path) -> None:
+        """Save a project with iterm_tab_id set, load it back, assert preserved."""
+        from joy.store import load_projects, save_projects
+
+        projects_path = tmp_path / "projects.toml"
+        project = Project(name="tab-proj", iterm_tab_id="TAB-UUID-123", created=date(2026, 1, 1))
+        save_projects([project], path=projects_path)
+        loaded = load_projects(path=projects_path)
+
+        assert len(loaded) == 1
+        assert loaded[0].iterm_tab_id == "TAB-UUID-123"
+
+    def test_round_trip_project_without_iterm_tab_id(self, tmp_path: Path) -> None:
+        """Save a project with iterm_tab_id=None, load it back, assert None."""
+        from joy.store import load_projects, save_projects
+
+        projects_path = tmp_path / "projects.toml"
+        project = Project(name="no-tab", created=date(2026, 1, 1))
+        save_projects([project], path=projects_path)
+        loaded = load_projects(path=projects_path)
+
+        assert len(loaded) == 1
+        assert loaded[0].iterm_tab_id is None
+
+    def test_load_projects_missing_iterm_tab_id_field(self, tmp_path: Path) -> None:
+        """Old projects.toml without iterm_tab_id loads successfully (backward compat)."""
+        from joy.store import load_projects
+
+        projects_path = tmp_path / "projects.toml"
+        raw_toml = (
+            '[projects.legacy]\n'
+            'name = "legacy"\n'
+            'created = 2026-01-01\n'
+            'objects = []\n'
+        )
+        projects_path.write_bytes(raw_toml.encode("utf-8"))
+        loaded = load_projects(path=projects_path)
+
+        assert len(loaded) == 1
+        assert loaded[0].iterm_tab_id is None
+
+
 class TestGetRemoteUrl:
     """Tests for get_remote_url() subprocess git integration."""
 

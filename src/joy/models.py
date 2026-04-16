@@ -78,6 +78,7 @@ class Project:
     created: date = field(default_factory=date.today)
     repo: str | None = None
     status: str = "idle"
+    iterm_tab_id: str | None = None
 
     def to_dict(self) -> dict:
         """Serialize to a TOML-compatible dict for the keyed schema."""
@@ -89,6 +90,8 @@ class Project:
         if self.repo is not None:
             d["repo"] = self.repo
         d["status"] = self.status
+        if self.iterm_tab_id is not None:
+            d["iterm_tab_id"] = self.iterm_tab_id
         return d
 
 
@@ -170,6 +173,7 @@ class TerminalSession:
     session_name: str
     foreground_process: str
     cwd: str
+    tab_id: str = ""  # iTerm2 tab this session belongs to
     is_claude: bool = False  # True when claude is detected via multi-signal heuristic
 
 

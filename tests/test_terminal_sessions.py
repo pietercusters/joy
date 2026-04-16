@@ -102,8 +102,9 @@ class TestFetchSessions:
             result = fetch_sessions()
 
         assert result is not None
-        assert len(result) == 1
-        ts = result[0]
+        sessions, live_tab_ids = result
+        assert len(sessions) == 1
+        ts = sessions[0]
         assert ts.session_id == "w0t0p0:abc"
         assert ts.session_name == "Main"
         assert ts.foreground_process == "claude"
@@ -161,8 +162,9 @@ class TestFetchSessions:
             result = fetch_sessions()
 
         assert result is not None
-        assert len(result) == 1
-        ts = result[0]
+        sessions, live_tab_ids = result
+        assert len(sessions) == 1
+        ts = sessions[0]
         assert ts.foreground_process == ""
         assert ts.cwd == ""
 
@@ -261,6 +263,153 @@ class TestShellProcesses:
 # ---------------------------------------------------------------------------
 
 
+class TestFetchSessionsReturnsTabId:
+    """Tests for fetch_sessions returning tab_id and live_tab_ids."""
+
+    def test_fetch_sessions_returns_tuple_with_live_tab_ids(self):
+        """fetch_sessions() returns (sessions, live_tab_ids) tuple."""
+        mock_session = _make_mock_session(
+            session_id="w0t0p0:abc",
+            name="Main",
+            job_name="zsh",
+            cwd="/Users/test/project",
+        )
+        mock_tab = MagicMock()
+        mock_tab.tab_id = "tab-uuid-001"
+        mock_tab.sessions = [mock_session]
+
+        mock_window = MagicMock()
+        mock_window.tabs = [mock_tab]
+
+        mock_app = MagicMock()
+        mock_app.terminal_windows = [mock_window]
+        mock_app.async_activate = AsyncMock()
+
+        def run_until_complete(coro_fn, retry=False):
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(coro_fn(MagicMock()))
+            finally:
+                loop.close()
+
+        with (
+            patch("iterm2.async_get_app", AsyncMock(return_value=mock_app)),
+            patch(
+                "iterm2.connection.Connection.run_until_complete",
+                side_effect=run_until_complete,
+            ),
+            patch("joy.terminal_sessions._tty_has_claude", return_value=False),
+        ):
+            result = fetch_sessions()
+
+        assert result is not None
+        assert isinstance(result, tuple)
+        sessions, live_tab_ids = result
+        assert len(sessions) == 1
+        assert sessions[0].tab_id == "tab-uuid-001"
+        assert "tab-uuid-001" in live_tab_ids
+
+    def test_fetch_sessions_session_carries_tab_id(self):
+        """Each TerminalSession returned has tab_id from its parent tab."""
+        mock_s1 = _make_mock_session(session_id="s1", name="S1")
+        mock_s2 = _make_mock_session(session_id="s2", name="S2")
+
+        mock_tab1 = MagicMock()
+        mock_tab1.tab_id = "tab-A"
+        mock_tab1.sessions = [mock_s1]
+
+        mock_tab2 = MagicMock()
+        mock_tab2.tab_id = "tab-B"
+        mock_tab2.sessions = [mock_s2]
+
+        mock_window = MagicMock()
+        mock_window.tabs = [mock_tab1, mock_tab2]
+
+        mock_app = MagicMock()
+        mock_app.terminal_windows = [mock_window]
+        mock_app.async_activate = AsyncMock()
+
+        def run_until_complete(coro_fn, retry=False):
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(coro_fn(MagicMock()))
+            finally:
+                loop.close()
+
+        with (
+            patch("iterm2.async_get_app", AsyncMock(return_value=mock_app)),
+            patch(
+                "iterm2.connection.Connection.run_until_complete",
+                side_effect=run_until_complete,
+            ),
+            patch("joy.terminal_sessions._tty_has_claude", return_value=False),
+        ):
+            result = fetch_sessions()
+
+        sessions, live_tab_ids = result
+        assert len(sessions) == 2
+        tab_ids_on_sessions = {s.session_name: s.tab_id for s in sessions}
+        assert tab_ids_on_sessions["S1"] == "tab-A"
+        assert tab_ids_on_sessions["S2"] == "tab-B"
+        assert live_tab_ids == {"tab-A", "tab-B"}
+
+
+class TestCreateTab:
+    """Tests for create_tab returning tab_id."""
+
+    def test_create_tab_returns_tab_id(self):
+        """create_tab(name) returns tab_id string on success."""
+        from joy.terminal_sessions import create_tab
+
+        mock_session = MagicMock()
+        mock_session.async_set_name = AsyncMock()
+
+        mock_tab = MagicMock()
+        mock_tab.tab_id = "new-tab-uuid"
+        mock_tab.sessions = [mock_session]
+        mock_tab.async_select = AsyncMock()
+
+        mock_window = MagicMock()
+        mock_window.async_create_tab = AsyncMock(return_value=mock_tab)
+
+        mock_app = MagicMock()
+        mock_app.current_window = mock_window
+        mock_app.async_activate = AsyncMock()
+
+        def run_until_complete(coro_fn, retry=False):
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(coro_fn(MagicMock()))
+            finally:
+                loop.close()
+
+        with (
+            patch("iterm2.async_get_app", AsyncMock(return_value=mock_app)),
+            patch(
+                "iterm2.connection.Connection.run_until_complete",
+                side_effect=run_until_complete,
+            ),
+        ):
+            result = create_tab("my-project")
+
+        assert result == "new-tab-uuid"
+        mock_session.async_set_name.assert_called_once_with("my-project")
+        mock_tab.async_select.assert_called_once()
+        mock_app.async_activate.assert_called_once()
+
+    def test_create_tab_returns_none_on_failure(self):
+        """create_tab returns None when Connection raises Exception."""
+        from joy.terminal_sessions import create_tab
+
+        with patch(
+            "iterm2.connection.Connection.run_until_complete",
+            side_effect=OSError("no iTerm2"),
+        ):
+            result = create_tab("project")
+
+        assert result is None
+
+
 class TestDetectClaude:
     def test_tty_has_claude_returns_true_when_ps_output_contains_claude(self):
         """_tty_has_claude returns True when ps lists a process with 'claude' in args."""
@@ -320,9 +469,10 @@ class TestDetectClaude:
             result = fetch_sessions()
 
         assert result is not None
-        assert len(result) == 1
-        assert result[0].is_claude is True
-        assert result[0].foreground_process == "node"  # job name unchanged
+        sessions, _ = result
+        assert len(sessions) == 1
+        assert sessions[0].is_claude is True
+        assert sessions[0].foreground_process == "node"  # job name unchanged
 
     def test_fetch_sessions_is_claude_false_for_named_session_without_claude_process(self):
         """Session name alone does NOT trigger is_claude — process/TTY must confirm."""
@@ -352,7 +502,8 @@ class TestDetectClaude:
             result = fetch_sessions()
 
         assert result is not None
-        assert result[0].is_claude is False  # name alone is not enough
+        sessions, _ = result
+        assert sessions[0].is_claude is False  # name alone is not enough
 
     def test_fetch_sessions_is_claude_false_for_plain_shell(self):
         """fetch_sessions sets is_claude=False for a plain shell session."""
@@ -382,4 +533,5 @@ class TestDetectClaude:
             result = fetch_sessions()
 
         assert result is not None
-        assert result[0].is_claude is False
+        sessions, _ = result
+        assert sessions[0].is_claude is False

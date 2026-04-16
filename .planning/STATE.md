@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Completed quick-260416-k3w-01-PLAN.md
-last_updated: "2026-04-16T13:04:28.378Z"
+status: executing
+stopped_at: Phase 17 context gathered — context limit approaching
+last_updated: "2026-04-16T19:08:17.199Z"
 last_activity: 2026-04-16
 progress:
-  total_phases: 16
-  completed_phases: 15
-  total_plans: 40
-  completed_plans: 44
+  total_phases: 1
+  completed_phases: 1
+  total_plans: 3
+  completed_plans: 3
   percent: 100
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-14)
 
 **Core value:** Every artifact for the active project, openable instantly from one keyboard-driven interface.
-**Current focus:** Phase 16 — live-data-propagation
+**Current focus:** Phase 17 — fix-iterm2-integration-bugs-from-quick-260416-of2-remove-aut
 
 ## Current Position
 
-Phase: 16 (live-data-propagation) — COMPLETE
-Plan: 2 of 2
-Status: Phase complete — ready for verification
+Phase: 17
+Plan: Not started
+Status: Executing Phase 17
 Last activity: 2026-04-16
 
 Progress: ████████████████████ 100% (8/8 phases)
@@ -57,6 +57,10 @@ Key decisions from v1.1:
 - pytest.mark.slow for TUI/integration tests
 - [Phase quick-260416-k3w]: ArchivedProject wraps Project + archived_at; archive.toml uses keyed schema; ArchiveModal uses Static+BINDINGS only; object stripping is caller responsibility
 
+### Roadmap Evolution
+
+- Phase 17 added: Fix iTerm2 integration bugs from quick-260416-of2 — remove auto-sync, close whole Tab on delete/archive, fix test isolation for ~/.joy/
+
 ### Pending Todos
 
 None.
@@ -81,10 +85,11 @@ None — clean milestone close.
 | 260415-qqx | Build full iTerm2 terminal session control: rename Agent→Terminal, n/e/d/D bindings, auto-create/auto-remove, project-link flag | 2026-04-15 | 251fcf8 | Verified | [260415-qqx-build-full-iterm2-terminal-session-contr](./quick/260415-qqx-build-full-iterm2-terminal-session-contr/) |
 | 260416-k3w | Add project archive/unarchive: a/A bindings, archive.toml cold storage, ArchiveModal, ArchiveBrowserModal with branch-match sections | 2026-04-16 | 851e3dc | Verified | [260416-k3w-archive-project-with-a-a-bindings-cold-s](./quick/260416-k3w-archive-project-with-a-a-bindings-cold-s/) |
 | 260416-m39 | Project list icon ribbon: status dot (g key cycles idle/prio/hold), 6-icon presence ribbon, MR strip, section spacers, icons.py | 2026-04-16 | 399a581 | Needs Review | [260416-m39-projects-overview-icon-ribbon-mr-status-](./quick/260416-m39-projects-overview-icon-ribbon-mr-status-/) |
+| 260416-of2 | Improve iTerm2 integration: link projects to iTerm2 tabs via unique IDs, group terminals by tab, refactor sessions pane | 2026-04-16 | ad6f93c | Needs Review | [260416-of2-improve-iterm2-integration-link-projects](./quick/260416-of2-improve-iterm2-integration-link-projects/) |
 
 ## Session Continuity
 
-Last session: 2026-04-16
-Stopped at: quick-260416-m39 complete — 322 tests passing, awaiting human verify of icon ribbon UI
-Last activity: 2026-04-16 - Completed quick task 260416-m39: Projects overview icon ribbon, MR status icons, project status toggle (prio/hold/idle)
+Last session: 2026-04-16T17:28:32.183Z
+Stopped at: Phase 17 context gathered — context limit approaching
+Last activity: 2026-04-16 - Completed quick task 260416-of2: Improve iTerm2 integration — projects linked to tabs by tab_id, terminal pane grouped by project, stale-heal, auto-create
 Resume: Phase 15 (cross-pane-selection-sync) still needs execution, then v1.2 milestone can close

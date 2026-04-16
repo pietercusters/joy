@@ -238,6 +238,54 @@ class TestProject:
         assert "repo" not in result
 
 
+class TestProjectItermTabId:
+    """Tests for Project.iterm_tab_id field."""
+
+    def test_project_iterm_tab_id_default_none(self) -> None:
+        """Project.iterm_tab_id defaults to None when not specified."""
+        project = Project(name="p")
+        assert project.iterm_tab_id is None
+
+    def test_project_iterm_tab_id_set(self) -> None:
+        """Project.iterm_tab_id stores the value when explicitly set."""
+        project = Project(name="p", iterm_tab_id="TAB-UUID-123")
+        assert project.iterm_tab_id == "TAB-UUID-123"
+
+    def test_project_to_dict_with_iterm_tab_id(self) -> None:
+        """Project.to_dict() includes 'iterm_tab_id' key when set."""
+        project = Project(name="p", iterm_tab_id="TAB-UUID-123", created=date(2026, 1, 1))
+        result = project.to_dict()
+        assert "iterm_tab_id" in result
+        assert result["iterm_tab_id"] == "TAB-UUID-123"
+
+    def test_project_to_dict_without_iterm_tab_id(self) -> None:
+        """Project.to_dict() does NOT include 'iterm_tab_id' when None."""
+        project = Project(name="p", created=date(2026, 1, 1))
+        result = project.to_dict()
+        assert "iterm_tab_id" not in result
+
+
+class TestTerminalSessionTabId:
+    """Tests for TerminalSession.tab_id field."""
+
+    def test_terminal_session_tab_id_default_empty(self) -> None:
+        """TerminalSession.tab_id defaults to empty string."""
+        from joy.models import TerminalSession
+        session = TerminalSession(
+            session_id="s1", session_name="test", foreground_process="zsh", cwd="/tmp"
+        )
+        assert session.tab_id == ""
+
+    def test_terminal_session_tab_id_set(self) -> None:
+        """TerminalSession.tab_id stores the value when explicitly set."""
+        from joy.models import TerminalSession
+        session = TerminalSession(
+            session_id="s1", session_name="test", foreground_process="zsh",
+            cwd="/tmp", tab_id="TAB-UUID-456"
+        )
+        assert session.tab_id == "TAB-UUID-456"
+
+
 class TestConfig:
     """Tests for the Config dataclass."""
 

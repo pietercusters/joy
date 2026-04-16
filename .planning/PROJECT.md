@@ -108,4 +108,4 @@ Every artifact for the active project, openable instantly from one keyboard-driv
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-14 after v1.1 milestone — Workspace Intelligence shipped*
+*Last updated: 2026-04-16 after Phase 17 complete — iTerm2 integration bugs fixed (auto-sync removed, tab close on delete/archive, tab focus on h-key creation)*
