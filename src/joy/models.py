@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from enum import Enum
 
 
@@ -169,6 +169,14 @@ class TerminalSession:
     foreground_process: str
     cwd: str
     is_claude: bool = False  # True when claude is detected via multi-signal heuristic
+
+
+@dataclass
+class ArchivedProject:
+    """A project moved to cold storage with its archival timestamp."""
+
+    project: Project
+    archived_at: datetime
 
 
 def detect_forge(remote_url: str) -> str:

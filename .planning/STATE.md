@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Phase 16 live-data-propagation complete — ObjectItem.stale, propagation methods, --stale CSS
-last_updated: "2026-04-16T06:48:41.001Z"
+status: verifying
+stopped_at: Completed quick-260416-k3w-01-PLAN.md
+last_updated: "2026-04-16T13:04:28.378Z"
 last_activity: 2026-04-16
 progress:
   total_phases: 16
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-14)
 
 Phase: 16 (live-data-propagation) — COMPLETE
 Plan: 2 of 2
-Status: Phase 16 complete — all plans executed, 309 tests passing
+Status: Phase complete — ready for verification
 Last activity: 2026-04-16
 
 Progress: ████████████████████ 100% (8/8 phases)
@@ -55,6 +55,7 @@ Key decisions from v1.1:
 - cursor/_rows/--highlight pattern for all scrollable panes
 - lazy import + catch-all for iTerm2 graceful fallback
 - pytest.mark.slow for TUI/integration tests
+- [Phase quick-260416-k3w]: ArchivedProject wraps Project + archived_at; archive.toml uses keyed schema; ArchiveModal uses Static+BINDINGS only; object stripping is caller responsibility
 
 ### Pending Todos
 
@@ -78,9 +79,10 @@ None — clean milestone close.
 | 260415-gw0 | Rethink all keyboard shortcuts and add two rows of keyboard hints at the bottom | 2026-04-15 | 85c7bfc | | [260415-gw0-rethink-all-keyboard-shortcuts-and-add-t](./quick/260415-gw0-rethink-all-keyboard-shortcuts-and-add-t/) |
 | 260415-mh6 | Refactor worktree logic and Worktrees pane: auto-detect worktrees by branch, fix 'i' key IDE open, enter opens IDE, investigate bugs | 2026-04-15 | b7d5a98 | Needs Review | [260415-mh6-refactor-worktree-logic-and-worktrees-pa](./quick/260415-mh6-refactor-worktree-logic-and-worktrees-pa/) |
 | 260415-qqx | Build full iTerm2 terminal session control: rename Agent→Terminal, n/e/d/D bindings, auto-create/auto-remove, project-link flag | 2026-04-15 | 251fcf8 | Verified | [260415-qqx-build-full-iterm2-terminal-session-contr](./quick/260415-qqx-build-full-iterm2-terminal-session-contr/) |
+| 260416-k3w | Add project archive/unarchive: a/A bindings, archive.toml cold storage, ArchiveModal, ArchiveBrowserModal with branch-match sections | 2026-04-16 | 851e3dc | Verified | [260416-k3w-archive-project-with-a-a-bindings-cold-s](./quick/260416-k3w-archive-project-with-a-a-bindings-cold-s/) |
 
 ## Session Continuity
 
-Last session: 2026-04-15
-Stopped at: Phase 16 live-data-propagation complete — ObjectItem.stale, propagation methods, --stale CSS
+Last session: 2026-04-16
+Stopped at: quick-260416-k3w complete — 322 tests passing, archive feature verified
 Resume: Phase 15 (cross-pane-selection-sync) still needs execution, then v1.2 milestone can close
