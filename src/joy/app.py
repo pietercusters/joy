@@ -23,7 +23,7 @@ from joy.widgets.worktree_pane import WorktreePane
 
 
 _PANE_HINTS: dict[str, str] = {
-    "project-list":   "n: New  e: Rename  D: Delete  R: Assign repo  /: Filter  a: Archive  A: Archives",
+    "project-list":   "n: New  e: Rename  D: Delete  R: Assign repo  a: Archive  A: Archives",
     "project-detail": "o: Open  n: Add  e: Edit  d: Delete  D: Force del  space: Toggle",
     "terminal-pane":  "o: Open  n: Add  e: Rename  d: Close  D: Force close",
     "worktrees-pane": "i/Enter: Open IDE",
