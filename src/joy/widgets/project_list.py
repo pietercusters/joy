@@ -7,10 +7,9 @@ from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import VerticalScroll
-from textual.css.query import NoMatches
 from textual.message import Message
 from textual.widget import Widget
-from textual.widgets import Input, Static
+from textual.widgets import Static
 
 from joy.models import MRInfo, PresetKind, Project, Repo
 from joy.widgets.icons import (
@@ -286,7 +285,6 @@ class ProjectList(Widget, can_focus=True):
         Binding("e", "rename_project", "Rename", show=True),
         Binding("D", "delete_project", "Delete", show=True),
         Binding("delete", "delete_project", "Delete", show=False),
-        Binding("/", "filter", "Filter", show=True),
         Binding("R", "assign_repo", "Assign Repo", show=True),
         Binding("a", "archive_project", "Archive", show=True),
         Binding("A", "open_archive_browser", "Archives", show=True),
@@ -328,8 +326,6 @@ class ProjectList(Widget, can_focus=True):
         self._repos: list[Repo] = []
         self._cursor: int = -1
         self._rows: list[ProjectRow] = []
-        self._filter_active: bool = False
-        self._is_filtered: bool = False
         self._render_generation: int = 0
         self.border_title = "Projects"
 
@@ -648,60 +644,6 @@ class ProjectList(Widget, can_focus=True):
             ArchiveBrowserModal(archived=archived, active_branches=active_branches),
             on_unarchive,
         )
-
-    def action_filter(self) -> None:
-        """Enter filter mode: mount Input above the scroll container (D-06)."""
-        if self._filter_active:
-            return  # already in filter mode -- no-op (prevent duplicate mount)
-        self._is_filtered = False  # clear any Enter-kept filter state
-        scroll = self.query_one("#project-scroll", _ProjectScroll)
-        filter_input = Input(placeholder="Filter projects...", id="filter-input")
-        self.mount(filter_input, before=scroll)
-        self._filter_active = True
-        filter_input.focus()
-
-    def on_input_changed(self, event: Input.Changed) -> None:
-        """Filter project list in real-time as user types (D-07)."""
-        query = event.value.lower()
-        if query:
-            filtered = [p for p in self.app._projects if query in p.name.lower()]
-        else:
-            filtered = list(self.app._projects)  # empty string = full list (D-08)
-        self._projects = filtered
-        self._render_generation += 1
-        gen = self._render_generation
-        self.call_after_refresh(lambda: self._rebuild(gen))
-
-    def on_input_submitted(self, event: Input.Submitted) -> None:
-        """Enter in filter input: dismiss filter, keep current subset (D-08)."""
-        self._exit_filter_mode(restore=False)
-        self._is_filtered = True  # list is still filtered; Escape will restore
-
-    def on_key(self, event) -> None:
-        """Handle Escape to exit filter mode without conflicting with modals (Pitfall 1)."""
-        if event.key == "escape" and (self._filter_active or self._is_filtered):
-            event.stop()
-            self._exit_filter_mode(restore=True)
-
-    def _exit_filter_mode(self, *, restore: bool = True) -> None:
-        """Remove filter Input and optionally restore full project list (D-08, D-09)."""
-        try:
-            filter_input = self.query_one("#filter-input", Input)
-            filter_input.remove()
-        except NoMatches:
-            pass  # already removed -- expected
-        self._filter_active = False
-        self._is_filtered = False
-        if restore:
-            self.set_projects(list(self.app._projects), self._repos)  # canonical list (D-09)
-
-        def _restore_focus_and_cursor() -> None:
-            self.focus()
-            if self._rows and self._cursor < 0:
-                self._cursor = 0
-                self._update_highlight()
-
-        self.call_after_refresh(_restore_focus_and_cursor)
 
     def sync_to(self, project_name: str) -> None:
         """Move cursor to matching project_name row without posting ProjectHighlighted.
