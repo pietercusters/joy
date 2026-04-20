@@ -217,16 +217,6 @@ class TerminalPane(Widget, can_focus=True):
     TerminalPane .section-spacer {
         height: 1;
     }
-    TerminalPane.--dim-selection SessionRow.--highlight {
-        background: transparent;
-        color: $text-muted;
-        text-style: dim;
-    }
-    TerminalPane.--dim-selection:focus-within SessionRow.--highlight {
-        background: transparent;
-        color: $text-muted;
-        text-style: dim;
-    }
     """
 
     def __init__(self, **kwargs) -> None:
@@ -234,7 +224,6 @@ class TerminalPane(Widget, can_focus=True):
         super().__init__(**kwargs)
         self._cursor: int = -1
         self._rows: list[SessionRow] = []
-        self._is_dimmed: bool = False
         self._sessions_cache: list[TerminalSession] | None = None
         self._tab_groups_cache: list[tuple[str, str]] | None = None
         self.border_title = "Terminal"
@@ -389,13 +378,11 @@ class TerminalPane(Widget, can_focus=True):
         # No match: leave _cursor unchanged (D-08)
         return False
 
-    def set_dimmed(self, dimmed: bool) -> None:
-        """Set dimmed selection state (no project match). Adds/removes --dim-selection CSS class."""
-        self._is_dimmed = dimmed
-        if dimmed:
-            self.add_class("--dim-selection")
-        else:
-            self.remove_class("--dim-selection")
+    def clear_selection(self) -> None:
+        """Clear selection: cursor=-1, remove all --highlight classes."""
+        self._cursor = -1
+        for r in self._rows:
+            r.remove_class("--highlight")
 
     def action_cursor_up(self) -> None:
         """Move cursor up one row."""
@@ -411,9 +398,6 @@ class TerminalPane(Widget, can_focus=True):
 
     def action_focus_session(self) -> None:
         """Activate the highlighted session (D-12). No-op if cursor is invalid."""
-        if self._is_dimmed:
-            self.app.notify("No terminal for this project", markup=False)
-            return
         if self._cursor < 0 or self._cursor >= len(self._rows):
             return
         session_id = self._rows[self._cursor].session_id

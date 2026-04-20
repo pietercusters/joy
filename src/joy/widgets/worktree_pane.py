@@ -269,16 +269,6 @@ class WorktreePane(Widget, can_focus=True):
         color: $text-muted;
         text-style: dim;
     }
-    WorktreePane.--dim-selection WorktreeRow.--highlight {
-        background: transparent;
-        color: $text-muted;
-        text-style: dim;
-    }
-    WorktreePane.--dim-selection:focus-within WorktreeRow.--highlight {
-        background: transparent;
-        color: $text-muted;
-        text-style: dim;
-    }
     WorktreePane .section-spacer {
         height: 1;
     }
@@ -291,7 +281,6 @@ class WorktreePane(Widget, can_focus=True):
         self._loaded = False
         self._cursor: int = -1
         self._rows: list[WorktreeRow] = []
-        self._is_dimmed: bool = False
 
     def compose(self) -> ComposeResult:
         """Mount initial Loading\u2026 placeholder (D-05)."""
@@ -445,13 +434,11 @@ class WorktreePane(Widget, can_focus=True):
         # No match: leave _cursor unchanged (D-08)
         return False
 
-    def set_dimmed(self, dimmed: bool) -> None:
-        """Set dimmed selection state (no project match). Adds/removes --dim-selection CSS class."""
-        self._is_dimmed = dimmed
-        if dimmed:
-            self.add_class("--dim-selection")
-        else:
-            self.remove_class("--dim-selection")
+    def clear_selection(self) -> None:
+        """Clear selection: cursor=-1, remove all --highlight classes."""
+        self._cursor = -1
+        for r in self._rows:
+            r.remove_class("--highlight")
 
     def action_cursor_up(self) -> None:
         if self._cursor > 0:
@@ -468,9 +455,6 @@ class WorktreePane(Widget, can_focus=True):
 
     def action_activate_row(self) -> None:
         """Open the highlighted worktree in the IDE (Enter key — delegates to app)."""
-        if self._is_dimmed:
-            self.app.notify("No worktree for this project", markup=False)
-            return
         if self._cursor < 0 or self._cursor >= len(self._rows):
             return
         self.app.action_open_ide()
