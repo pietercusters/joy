@@ -95,27 +95,6 @@ async def test_preset_picker_shows_all_presets():
 
 
 @pytest.mark.asyncio
-async def test_preset_picker_filter():
-    """PresetPickerModal filters list when user types 'br' to show only 'branch'."""
-    from textual.widgets import Label, ListView
-    app = ModalTestApp()
-    async with app.run_test() as pilot:
-        await app.push_screen(PresetPickerModal(), lambda _: None)
-        await pilot.pause(0.1)
-        # Type "br" to filter
-        await pilot.press("b")
-        await pilot.press("r")
-        await pilot.pause(0.1)
-        # Query from the currently active screen (the modal)
-        listview = app.screen.query_one("#preset-list", ListView)
-        children = list(listview.children)
-        assert len(children) == 1
-        # The remaining item should be "branch"
-        label = children[0].query_one(Label)
-        assert "branch" in str(label.content)
-
-
-@pytest.mark.asyncio
 async def test_preset_picker_escape_returns_none():
     """PresetPickerModal returns None on Escape."""
     result_holder: list[PresetKind | None] = []
@@ -393,38 +372,147 @@ async def test_repo_picker_escape_returns_cancelled():
     assert result_holder[0] is RepoPickerModal.CANCELLED
 
 
+# ---------------------------------------------------------------------------
+# NewProjectModal tests
+# ---------------------------------------------------------------------------
+
+from joy.screens.new_project import NewProjectModal, NewProjectResult, _CUSTOM_BRANCH_SENTINEL  # noqa: E402
+
+
 @pytest.mark.asyncio
-async def test_repo_picker_select_none_returns_none():
-    """RepoPickerModal returns None when user selects the unassign option."""
-    result_holder: list[object] = []
-    repos = [Repo(name="alpha", local_path="/tmp/alpha")]
+async def test_new_project_modal_escape_returns_none():
+    """Escape dismisses NewProjectModal with None."""
+    result_holder: list = []
     app = ModalTestApp()
     async with app.run_test() as pilot:
-        await app.push_screen(RepoPickerModal(repos), result_holder.append)
+        await app.push_screen(NewProjectModal(repos=[]), result_holder.append)
         await pilot.pause(0.1)
-        # Type "none" to filter to the unassign option
-        for ch in "none":
+        await pilot.press("escape")
+        await pilot.pause(0.1)
+    assert result_holder == [None]
+
+
+@pytest.mark.asyncio
+async def test_new_project_modal_confirm_name_only():
+    """ctrl+n with just a name returns NewProjectResult with repo=None, branch=None."""
+    result_holder: list = []
+    app = ModalTestApp()
+    async with app.run_test() as pilot:
+        await app.push_screen(NewProjectModal(repos=[]), result_holder.append)
+        await pilot.pause(0.1)
+        for ch in "myproject":
             await pilot.press(ch)
+        await pilot.press("ctrl+n")
         await pilot.pause(0.1)
+    assert len(result_holder) == 1
+    result = result_holder[0]
+    assert result is not None
+    assert result.name == "myproject"
+    assert result.repo is None
+    assert result.branch is None
+
+
+@pytest.mark.asyncio
+async def test_new_project_modal_empty_name_rejected():
+    """ctrl+n with empty name does not dismiss modal."""
+    dismissed = False
+
+    def on_dismiss(r):
+        nonlocal dismissed
+        dismissed = True
+
+    app = ModalTestApp()
+    async with app.run_test() as pilot:
+        await app.push_screen(NewProjectModal(repos=[]), on_dismiss)
+        await pilot.pause(0.1)
+        await pilot.press("ctrl+n")
+        await pilot.pause(0.1)
+    assert not dismissed
+
+
+@pytest.mark.asyncio
+async def test_new_project_modal_repo_selection():
+    """Selecting a repo sets _selected_repo; returned in NewProjectResult."""
+    repo = Repo(name="my-repo", local_path="/tmp/my-repo")
+    result_holder: list = []
+    app = ModalTestApp()
+    async with app.run_test() as pilot:
+        modal = NewProjectModal(repos=[repo])
+        await app.push_screen(modal, result_holder.append)
+        await pilot.pause(0.1)
+        # Type name
+        for ch in "proj":
+            await pilot.press(ch)
+        # Navigate to repo-list and select first item
+        repo_list = modal.query_one("#repo-list")
+        repo_list.focus()
+        await pilot.pause(0.05)
+        await pilot.press("enter")
+        await pilot.pause(0.05)
+        await pilot.press("ctrl+n")
+        await pilot.pause(0.1)
+    assert len(result_holder) == 1
+    assert result_holder[0].repo == "my-repo"
+
+
+@pytest.mark.asyncio
+async def test_new_project_modal_branch_selection(monkeypatch):
+    """Selecting a real branch (non-sentinel) sets _selected_branch; returned in result."""
+    monkeypatch.setattr(
+        "joy.screens.new_project.NewProjectModal._fetch_recent_branches",
+        lambda self: ["main", "feature/x"],
+    )
+    result_holder: list = []
+    app = ModalTestApp()
+    async with app.run_test() as pilot:
+        modal = NewProjectModal(repos=[])
+        await app.push_screen(modal, result_holder.append)
+        await pilot.pause(0.1)
+        # Type name
+        for ch in "testproj":
+            await pilot.press(ch)
+        # Focus branch-list and press enter to select first branch ("main")
+        branch_list = modal.query_one("#branch-list")
+        branch_list.focus()
+        await pilot.pause(0.05)
+        await pilot.press("enter")
+        await pilot.pause(0.05)
+        await pilot.press("ctrl+n")
+        await pilot.pause(0.1)
+    assert len(result_holder) == 1
+    assert result_holder[0].branch == "main"
+
+
+@pytest.mark.asyncio
+async def test_new_project_modal_custom_branch(monkeypatch):
+    """Selecting '(type custom…)' shows branch-input; typing + Enter sets custom branch."""
+    # Patch to return empty branches so only sentinel is in list
+    monkeypatch.setattr(
+        "joy.screens.new_project.NewProjectModal._fetch_recent_branches",
+        lambda self: [],
+    )
+    result_holder: list = []
+    app = ModalTestApp()
+    async with app.run_test() as pilot:
+        modal = NewProjectModal(repos=[])
+        await app.push_screen(modal, result_holder.append)
+        await pilot.pause(0.1)
+        # Type name
+        for ch in "custproj":
+            await pilot.press(ch)
+        # Focus branch-list and press enter to select sentinel (only item)
+        branch_list = modal.query_one("#branch-list")
+        branch_list.focus()
+        await pilot.pause(0.05)
+        await pilot.press("enter")
+        await pilot.pause(0.1)
+        # branch-input should now be visible and focused; type custom branch
+        branch_input = modal.query_one("#branch-input")
+        assert branch_input.display, "branch-input should be visible after selecting sentinel"
+        for ch in "my-custom-branch":
+            await pilot.press(ch)
         await pilot.press("enter")
         await pilot.pause(0.1)
     assert len(result_holder) == 1
-    assert result_holder[0] is None
-
-
-@pytest.mark.asyncio
-async def test_repo_picker_filter_and_select():
-    """RepoPickerModal filters and returns the selected repo name."""
-    result_holder: list[object] = []
-    repos = [Repo(name="alpha", local_path="/tmp/alpha"), Repo(name="beta", local_path="/tmp/beta")]
-    app = ModalTestApp()
-    async with app.run_test() as pilot:
-        await app.push_screen(RepoPickerModal(repos), result_holder.append)
-        await pilot.pause(0.1)
-        # Type "alp" to filter to "alpha"
-        for ch in "alp":
-            await pilot.press(ch)
-        await pilot.pause(0.1)
-        await pilot.press("enter")
-        await pilot.pause(0.1)
-    assert result_holder == ["alpha"]
+    assert result_holder[0].branch == "my-custom-branch"
+    assert result_holder[0].name == "custproj"

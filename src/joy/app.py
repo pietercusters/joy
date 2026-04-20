@@ -14,7 +14,7 @@ from textual.widgets import Header
 from joy.models import ArchivedProject, Config, ObjectItem, PresetKind, Project, Repo, TerminalSession, WorktreeInfo
 from joy.widgets.hint_bar import HintBar
 from joy.resolver import RelationshipIndex
-from joy.screens import NameInputModal, PresetPickerModal, SettingsModal, ValueInputModal
+from joy.screens import NameInputModal, NewProjectModal, NewProjectResult, PresetPickerModal, SettingsModal, ValueInputModal
 from joy.widgets.object_row import _success_message, _truncate
 from joy.widgets.project_detail import SEMANTIC_GROUPS, ProjectDetail
 from joy.widgets.project_list import ProjectList
@@ -23,7 +23,7 @@ from joy.widgets.worktree_pane import WorktreePane
 
 
 _PANE_HINTS: dict[str, str] = {
-    "project-list":   "n: New  e: Rename  D: Delete  R: Assign repo  /: Filter  a: Archive  A: Archives",
+    "project-list":   "n: New  e: Rename  D: Delete  R: Assign repo  a: Archive  A: Archives",
     "project-detail": "o: Open  n: Add  e: Edit  d: Delete  D: Force del  space: Toggle",
     "terminal-pane":  "o: Open  n: Add  e: Rename  d: Close  D: Force close",
     "worktrees-pane": "i/Enter: Open IDE",
@@ -612,16 +612,18 @@ class JoyApp(App):
         self._open_defaults(defaults)
 
     def action_new_project(self) -> None:
-        """Start project creation flow: name modal then add-object loop (D-01, D-02)."""
-        def on_name(name: str | None) -> None:
-            if name is None:
+        """Start project creation flow: new-project modal then add-object loop."""
+        def on_result(result: "NewProjectResult | None") -> None:
+            if result is None:
                 return
             # D-04: Check duplicate name
-            if any(p.name == name for p in self._projects):
-                self.notify(f"Project '{name}' already exists", severity="error", markup=False)
+            if any(p.name == result.name for p in self._projects):
+                self.notify(f"Project '{result.name}' already exists", severity="error", markup=False)
                 return
-            # Create project, add to list, persist, refresh
-            project = Project(name=name)
+            # Create project with optional repo and branch pre-filled
+            project = Project(name=result.name, repo=result.repo)
+            if result.branch:
+                project.objects.append(ObjectItem(kind=PresetKind.BRANCH, value=result.branch))
             self._projects.append(project)
             self._save_projects_bg()
             project_list = self.query_one(ProjectList)
@@ -633,10 +635,10 @@ class JoyApp(App):
             new_index = len(self._projects) - 1
             project_list.call_after_refresh(lambda: project_list.select_index(new_index))
             self.query_one(ProjectDetail).set_project(project)
-            self.notify(f"Created project: '{name}'", markup=False)
+            self.notify(f"Created project: '{result.name}'", markup=False)
             # D-02, D-03: Start add-object loop
             self._start_add_object_loop(project)
-        self.push_screen(NameInputModal(), on_name)
+        self.push_screen(NewProjectModal(repos=self._repos), on_result)
 
     def _start_add_object_loop(self, project: Project) -> None:
         """Loop: preset picker -> value input -> repeat until Escape (D-03)."""
