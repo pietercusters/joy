@@ -91,10 +91,11 @@ None — clean milestone close.
 | 260420-ak5 | Extend new-project modal: single ModalScreen with name Input, optional repo ListView, and branch ListView (5 recent + type custom inline escape) | 2026-04-20 | af80be4 | Verified | [260420-ak5-extend-new-project-modal-add-repo-picker](./quick/260420-ak5-extend-new-project-modal-add-repo-picker/) |
 | 260420-bc2 | Fix project icon not turning cyan when worktrees or terminals are connected | 2026-04-20 | f58be3e | | [260420-bc2-fix-project-icon-not-turning-cyan-when-w](./quick/260420-bc2-fix-project-icon-not-turning-cyan-when-w/) |
 | 260420-izh | Redesign cross-pane sync with dimmed state: sync_to() returns bool, set_dimmed() on panes with no match, toast guards on open actions | 2026-04-20 | 675450f | Needs Review | [260420-izh-pane-sync-dimmed-selection-and-scoped-op](./quick/260420-izh-pane-sync-dimmed-selection-and-scoped-op/) |
+| 260420-ket | Remove dimmed-selection concept: replace set_dimmed() with clear_selection() (cursor=-1), unlinked items fully openable | 2026-04-20 | f34546b | Verified | [260420-ket-remove-dimmed-selection-clear-on-no-matc](./quick/260420-ket-remove-dimmed-selection-clear-on-no-matc/) |
 
 ## Session Continuity
 
 Last session: 2026-04-20T12:52:14.116Z
 Stopped at: Completed quick task 260420-ket: remove-dimmed-selection-clear-on-no-match
-Last activity: 2026-04-20 - Completed quick task 260420-izh: pane-sync-dimmed-selection-and-scoped-open
+Last activity: 2026-04-20 - Completed quick task 260420-ket: remove-dimmed-selection-clear-on-no-match
 Resume: Phase 15 (cross-pane-selection-sync) still needs execution, then v1.2 milestone can close
