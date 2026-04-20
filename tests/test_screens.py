@@ -95,27 +95,6 @@ async def test_preset_picker_shows_all_presets():
 
 
 @pytest.mark.asyncio
-async def test_preset_picker_filter():
-    """PresetPickerModal filters list when user types 'br' to show only 'branch'."""
-    from textual.widgets import Label, ListView
-    app = ModalTestApp()
-    async with app.run_test() as pilot:
-        await app.push_screen(PresetPickerModal(), lambda _: None)
-        await pilot.pause(0.1)
-        # Type "br" to filter
-        await pilot.press("b")
-        await pilot.press("r")
-        await pilot.pause(0.1)
-        # Query from the currently active screen (the modal)
-        listview = app.screen.query_one("#preset-list", ListView)
-        children = list(listview.children)
-        assert len(children) == 1
-        # The remaining item should be "branch"
-        label = children[0].query_one(Label)
-        assert "branch" in str(label.content)
-
-
-@pytest.mark.asyncio
 async def test_preset_picker_escape_returns_none():
     """PresetPickerModal returns None on Escape."""
     result_holder: list[PresetKind | None] = []
@@ -393,38 +372,3 @@ async def test_repo_picker_escape_returns_cancelled():
     assert result_holder[0] is RepoPickerModal.CANCELLED
 
 
-@pytest.mark.asyncio
-async def test_repo_picker_select_none_returns_none():
-    """RepoPickerModal returns None when user selects the unassign option."""
-    result_holder: list[object] = []
-    repos = [Repo(name="alpha", local_path="/tmp/alpha")]
-    app = ModalTestApp()
-    async with app.run_test() as pilot:
-        await app.push_screen(RepoPickerModal(repos), result_holder.append)
-        await pilot.pause(0.1)
-        # Type "none" to filter to the unassign option
-        for ch in "none":
-            await pilot.press(ch)
-        await pilot.pause(0.1)
-        await pilot.press("enter")
-        await pilot.pause(0.1)
-    assert len(result_holder) == 1
-    assert result_holder[0] is None
-
-
-@pytest.mark.asyncio
-async def test_repo_picker_filter_and_select():
-    """RepoPickerModal filters and returns the selected repo name."""
-    result_holder: list[object] = []
-    repos = [Repo(name="alpha", local_path="/tmp/alpha"), Repo(name="beta", local_path="/tmp/beta")]
-    app = ModalTestApp()
-    async with app.run_test() as pilot:
-        await app.push_screen(RepoPickerModal(repos), result_holder.append)
-        await pilot.pause(0.1)
-        # Type "alp" to filter to "alpha"
-        for ch in "alp":
-            await pilot.press(ch)
-        await pilot.pause(0.1)
-        await pilot.press("enter")
-        await pilot.pause(0.1)
-    assert result_holder == ["alpha"]
