@@ -661,11 +661,11 @@ class ProjectList(Widget, can_focus=True):
             on_unarchive,
         )
 
-    def sync_to(self, project_name: str) -> None:
+    def sync_to(self, project_name: str) -> bool:
         """Move cursor to matching project_name row without posting ProjectHighlighted.
 
         Silent cursor mutation for cross-pane sync. Does NOT call .focus(). (D-09, D-10)
-        If no row matches, _cursor is left unchanged. (D-08)
+        Returns True if a match was found, False otherwise. (D-08)
 
         IMPORTANT: Do NOT use select_index() here — it calls _update_highlight() which
         posts ProjectHighlighted, creating a sync loop even with the _is_syncing guard.
@@ -677,8 +677,9 @@ class ProjectList(Widget, can_focus=True):
                     r.remove_class("--highlight")
                 row.add_class("--highlight")
                 row.scroll_visible()
-                return
+                return True
         # No match: leave _cursor unchanged (D-08)
+        return False
 
     def select_first(self) -> None:
         """Auto-select the first project (PROJ-02)."""

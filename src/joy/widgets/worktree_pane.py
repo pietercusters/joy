@@ -269,6 +269,11 @@ class WorktreePane(Widget, can_focus=True):
         color: $text-muted;
         text-style: dim;
     }
+    WorktreePane.--dim-selection WorktreeRow.--highlight {
+        background: transparent;
+        color: $text-muted;
+        text-style: dim;
+    }
     WorktreePane .section-spacer {
         height: 1;
     }
@@ -281,6 +286,7 @@ class WorktreePane(Widget, can_focus=True):
         self._loaded = False
         self._cursor: int = -1
         self._rows: list[WorktreeRow] = []
+        self._is_dimmed: bool = False
 
     def compose(self) -> ComposeResult:
         """Mount initial Loading\u2026 placeholder (D-05)."""
@@ -416,11 +422,11 @@ class WorktreePane(Widget, can_focus=True):
                 )
                 self.post_message(self.WorktreeHighlighted(wt))
 
-    def sync_to(self, repo_name: str, branch: str) -> None:
+    def sync_to(self, repo_name: str, branch: str) -> bool:
         """Move cursor to matching (repo_name, branch) row without posting WorktreeHighlighted.
 
         Silent cursor mutation for cross-pane sync. Does NOT call .focus(). (D-09, D-10)
-        If no row matches, _cursor is left unchanged. (D-08)
+        Returns True if a match was found, False otherwise. (D-08)
         """
         for i, row in enumerate(self._rows):
             if row.repo_name == repo_name and row.branch == branch:
@@ -430,8 +436,17 @@ class WorktreePane(Widget, can_focus=True):
                     r.remove_class("--highlight")
                 row.add_class("--highlight")
                 row.scroll_visible()
-                return
+                return True
         # No match: leave _cursor unchanged (D-08)
+        return False
+
+    def set_dimmed(self, dimmed: bool) -> None:
+        """Set dimmed selection state (no project match). Adds/removes --dim-selection CSS class."""
+        self._is_dimmed = dimmed
+        if dimmed:
+            self.add_class("--dim-selection")
+        else:
+            self.remove_class("--dim-selection")
 
     def action_cursor_up(self) -> None:
         if self._cursor > 0:
@@ -448,6 +463,9 @@ class WorktreePane(Widget, can_focus=True):
 
     def action_activate_row(self) -> None:
         """Open the highlighted worktree in the IDE (Enter key — delegates to app)."""
+        if self._is_dimmed:
+            self.app.notify("No worktree for this project", markup=False)
+            return
         if self._cursor < 0 or self._cursor >= len(self._rows):
             return
         self.app.action_open_ide()
