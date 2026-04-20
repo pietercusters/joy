@@ -94,5 +94,5 @@ None — clean milestone close.
 
 Last session: 2026-04-16T17:28:32.183Z
 Stopped at: Phase 17 context gathered — context limit approaching
-Last activity: 2026-04-20 - Completed quick task 260420-ak5: Extend new-project modal with repo picker and branch field (Verified)
+Last activity: 2026-04-20 - Shipped feature/clean-up → PR #9 (remove filter UI + multi-field new-project modal)
 Resume: Phase 15 (cross-pane-selection-sync) still needs execution, then v1.2 milestone can close
