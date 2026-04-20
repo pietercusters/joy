@@ -577,8 +577,7 @@ class JoyApp(App):
                 else:
                     term_pane.clear_selection()
             else:
-                # Worktree not linked to any project — clear both other panes
-                wt_pane.clear_selection()
+                # Worktree not linked to any project — clear other panes
                 term_pane.clear_selection()
         finally:
             self._is_syncing = False
@@ -615,8 +614,7 @@ class JoyApp(App):
                 else:
                     wt_pane.clear_selection()
             else:
-                # Session not linked to any project — clear both other panes
-                term_pane.clear_selection()
+                # Session not linked to any project — clear other panes
                 wt_pane.clear_selection()
         finally:
             self._is_syncing = False
