@@ -201,7 +201,7 @@ class TerminalPane(Widget, can_focus=True):
     TerminalPane:focus {
         border: solid $accent;
     }
-    TerminalPane:focus-within SessionRow.--highlight {
+    TerminalPane:focus-within:not(.--dim-selection) SessionRow.--highlight {
         background: $accent;
     }
     SessionRow.--highlight {

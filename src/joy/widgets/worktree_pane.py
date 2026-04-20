@@ -259,7 +259,7 @@ class WorktreePane(Widget, can_focus=True):
         color: $text-muted;
         text-style: dim;
     }
-    WorktreePane:focus-within WorktreeRow.--highlight {
+    WorktreePane:focus-within:not(.--dim-selection) WorktreeRow.--highlight {
         background: $accent;
     }
     WorktreeRow.--highlight {
