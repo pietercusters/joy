@@ -80,7 +80,9 @@ class ProjectRow(Static):
         self._avail_width = avail_width
         self._mr_info: MRInfo | None = None
         self._has: dict[str, bool] = self._compute_has(project)
-        content = self.build_content(project, avail_width, mr_info=None, has=self._has)
+        self._wt_count: int = 0
+        self._agent_count: int = 0
+        content = self.build_content(project, avail_width, mr_info=None, has=self._has, wt_count=0, agent_count=0)
         super().__init__(content, **kwargs)
 
     @staticmethod
@@ -102,6 +104,8 @@ class ProjectRow(Static):
         avail_width: int,
         mr_info: "MRInfo | None",
         has: dict[str, bool],
+        wt_count: int = 0,
+        agent_count: int = 0,
     ) -> Text:
         """Build a single-line Rich.Text row:
         [status-dot] [space] [name...padding...] [MR-strip] [space] [icon-ribbon]
@@ -134,14 +138,21 @@ class ProjectRow(Static):
                 mr_strip.append(f" {ICON_CI_PENDING}", style="yellow")
             mr_strip.append(" ")
 
+        # Live connections override: active worktrees/terminals turn cyan even if not in stored objects
+        effective_has = dict(has)
+        if wt_count > 0:
+            effective_has["worktree"] = True
+        if agent_count > 0:
+            effective_has["terminal"] = True
+
         # Icon ribbon: branch ticket thread note terminal worktree (space-separated)
         ribbon_icons = [
-            (ICON_BRANCH,   has.get("branch",   False)),
-            (ICON_TICKET,   has.get("ticket",   False)),
-            (ICON_THREAD,   has.get("thread",   False)),
-            (ICON_NOTE,     has.get("note",     False)),
-            (ICON_TERMINAL, has.get("terminal", False)),
-            (ICON_WORKTREE, has.get("worktree", False)),
+            (ICON_BRANCH,   effective_has.get("branch",   False)),
+            (ICON_TICKET,   effective_has.get("ticket",   False)),
+            (ICON_THREAD,   effective_has.get("thread",   False)),
+            (ICON_NOTE,     effective_has.get("note",     False)),
+            (ICON_TERMINAL, effective_has.get("terminal", False)),
+            (ICON_WORKTREE, effective_has.get("worktree", False)),
         ]
         ribbon = Text()
         for i, (icon, present) in enumerate(ribbon_icons):
@@ -191,12 +202,17 @@ class ProjectRow(Static):
         mr_info: "MRInfo | None" = None,
         avail_width: int | None = None,
     ) -> None:
-        """Update MR info and re-render content. wt_count/agent_count kept for compat."""
+        """Update badge counts, MR info and re-render content."""
         self._mr_info = mr_info
+        self._wt_count = wt_count
+        self._agent_count = agent_count
         if avail_width is not None:
             self._avail_width = avail_width
         self._has = self._compute_has(self.project)  # refresh in case objects changed
-        self.update(self.build_content(self.project, self._avail_width, mr_info, self._has))
+        self.update(self.build_content(
+            self.project, self._avail_width, mr_info, self._has,
+            wt_count=wt_count, agent_count=agent_count,
+        ))
 
 
 # ---------------------------------------------------------------------------
@@ -708,4 +724,7 @@ class ProjectList(Widget, can_focus=True):
         # Re-render just this row
         row = self._rows[self._cursor]
         row._has = ProjectRow._compute_has(project)
-        row.update(ProjectRow.build_content(project, row._avail_width, row._mr_info, row._has))
+        row.update(ProjectRow.build_content(
+            project, row._avail_width, row._mr_info, row._has,
+            wt_count=row._wt_count, agent_count=row._agent_count,
+        ))
