@@ -92,10 +92,11 @@ None — clean milestone close.
 | 260420-bc2 | Fix project icon not turning cyan when worktrees or terminals are connected | 2026-04-20 | f58be3e | | [260420-bc2-fix-project-icon-not-turning-cyan-when-w](./quick/260420-bc2-fix-project-icon-not-turning-cyan-when-w/) |
 | 260420-izh | Redesign cross-pane sync with dimmed state: sync_to() returns bool, set_dimmed() on panes with no match, toast guards on open actions | 2026-04-20 | 675450f | Needs Review | [260420-izh-pane-sync-dimmed-selection-and-scoped-op](./quick/260420-izh-pane-sync-dimmed-selection-and-scoped-op/) |
 | 260420-ket | Remove dimmed-selection concept: replace set_dimmed() with clear_selection() (cursor=-1), unlinked items fully openable | 2026-04-20 | f34546b | Verified | [260420-ket-remove-dimmed-selection-clear-on-no-matc](./quick/260420-ket-remove-dimmed-selection-clear-on-no-matc/) |
+| 260420-ku9 | Fix sync bug: source pane was clearing its own selection when navigating to an unlinked item | 2026-04-20 | 6cb32a2 | | [260420-ku9-fix-sync-source-pane-clears-own-selectio](./quick/260420-ku9-fix-sync-source-pane-clears-own-selectio/) |
 
 ## Session Continuity
 
 Last session: 2026-04-20T13:03:47.253Z
 Stopped at: Completed quick task 260420-ku9: fix-sync-source-pane-clears-own-selection
-Last activity: 2026-04-20 - Completed quick task 260420-ket: remove-dimmed-selection-clear-on-no-match
+Last activity: 2026-04-20 - Completed quick task 260420-ku9: fix-sync-source-pane-clears-own-selection
 Resume: Phase 15 (cross-pane-selection-sync) still needs execution, then v1.2 milestone can close
