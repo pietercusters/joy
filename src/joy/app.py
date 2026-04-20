@@ -518,18 +518,29 @@ class JoyApp(App):
     def _sync_from_project(self, project: Project) -> None:
         """Drive WorktreePane and TerminalPane to first items related to project. (D-04)
 
+        Calls set_dimmed(True) on panes that cannot match the active project.
         Called with _is_syncing guard. Uses try/finally to always clear the guard.
         """
         self._is_syncing = True
         try:
             assert self._rel_index is not None
+            wt_pane = self.query_one(WorktreePane)
+            term_pane = self.query_one(TerminalPane)
+
             worktrees = self._rel_index.worktrees_for(project)
             if worktrees:
                 wt = worktrees[0]
-                self.query_one(WorktreePane).sync_to(wt.repo_name, wt.branch)
+                matched = wt_pane.sync_to(wt.repo_name, wt.branch)
+                wt_pane.set_dimmed(not matched)
+            else:
+                wt_pane.set_dimmed(True)  # No worktrees for this project
+
             terminals = self._rel_index.terminals_for(project)
             if terminals:
-                self.query_one(TerminalPane).sync_to(terminals[0].session_name)
+                matched = term_pane.sync_to(terminals[0].session_name)
+                term_pane.set_dimmed(not matched)
+            else:
+                term_pane.set_dimmed(True)  # No terminals for this project
         finally:
             self._is_syncing = False
 
@@ -543,17 +554,27 @@ class JoyApp(App):
             self._sync_from_worktree(message.worktree)
 
     def _sync_from_worktree(self, worktree: WorktreeInfo) -> None:
-        """Drive ProjectList and TerminalPane based on a highlighted worktree. (D-05)"""
+        """Drive ProjectList and TerminalPane based on a highlighted worktree. (D-05)
+
+        Calls set_dimmed(True) on TerminalPane when no terminal matches the project.
+        """
         self._is_syncing = True
         try:
             assert self._rel_index is not None
+            term_pane = self.query_one(TerminalPane)
             project = self._rel_index.project_for_worktree(worktree)
             if project is not None:
                 self.query_one(ProjectList).sync_to(project.name)
                 self.query_one(ProjectDetail).set_project(project)
                 terminals = self._rel_index.terminals_for(project)
                 if terminals:
-                    self.query_one(TerminalPane).sync_to(terminals[0].session_name)
+                    matched = term_pane.sync_to(terminals[0].session_name)
+                    term_pane.set_dimmed(not matched)
+                else:
+                    term_pane.set_dimmed(True)  # No terminals for this project
+            else:
+                # Worktree not linked to any project — dim TerminalPane
+                term_pane.set_dimmed(True)
         finally:
             self._is_syncing = False
 
@@ -567,10 +588,14 @@ class JoyApp(App):
             self._sync_from_session(message.session_name)
 
     def _sync_from_session(self, session_name: str) -> None:
-        """Drive ProjectList and WorktreePane based on a highlighted terminal session. (D-06)"""
+        """Drive ProjectList and WorktreePane based on a highlighted terminal session. (D-06)
+
+        Calls set_dimmed(True) on WorktreePane when no worktree matches the project.
+        """
         self._is_syncing = True
         try:
             assert self._rel_index is not None
+            wt_pane = self.query_one(WorktreePane)
             project = self._rel_index.project_for_terminal(session_name)
             if project is not None:
                 self.query_one(ProjectList).sync_to(project.name)
@@ -578,7 +603,13 @@ class JoyApp(App):
                 worktrees = self._rel_index.worktrees_for(project)
                 if worktrees:
                     wt = worktrees[0]
-                    self.query_one(WorktreePane).sync_to(wt.repo_name, wt.branch)
+                    matched = wt_pane.sync_to(wt.repo_name, wt.branch)
+                    wt_pane.set_dimmed(not matched)
+                else:
+                    wt_pane.set_dimmed(True)  # No worktrees for this project
+            else:
+                # Session not linked to any project — dim WorktreePane
+                wt_pane.set_dimmed(True)
         finally:
             self._is_syncing = False
 
