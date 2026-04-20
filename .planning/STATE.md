@@ -88,10 +88,11 @@ None — clean milestone close.
 | 260416-of2 | Improve iTerm2 integration: link projects to iTerm2 tabs via unique IDs, group terminals by tab, refactor sessions pane | 2026-04-16 | ad6f93c | Needs Review | [260416-of2-improve-iterm2-integration-link-projects](./quick/260416-of2-improve-iterm2-integration-link-projects/) |
 | 260417-aeo | Remove filter text boxes and slash command from list, including all unit tests | 2026-04-17 | 2428812 | | [260417-aeo-remove-filter-text-boxes-and-slash-comma](./quick/260417-aeo-remove-filter-text-boxes-and-slash-comma/) |
 | 260420-a6w | When I add an object, I can select an object but the focus is on a textbox (it says Type to filter...). I want to remove that textbox altogether, including all related tests etc. | 2026-04-20 | 7783352 | | [260420-a6w-when-i-add-an-object-i-can-select-an-obj](./quick/260420-a6w-when-i-add-an-object-i-can-select-an-obj/) |
+| 260420-ak5 | Extend new-project modal: single ModalScreen with name Input, optional repo ListView, and branch ListView (5 recent + type custom inline escape) | 2026-04-20 | af80be4 | Verified | [260420-ak5-extend-new-project-modal-add-repo-picker](./quick/260420-ak5-extend-new-project-modal-add-repo-picker/) |
 
 ## Session Continuity
 
 Last session: 2026-04-16T17:28:32.183Z
 Stopped at: Phase 17 context gathered — context limit approaching
-Last activity: 2026-04-20 - Completed quick task 260420-a6w: Remove filter textbox from object picker modals (PresetPickerModal and RepoPickerModal)
+Last activity: 2026-04-20 - Completed quick task 260420-ak5: Extend new-project modal with repo picker and branch field (Verified)
 Resume: Phase 15 (cross-pane-selection-sync) still needs execution, then v1.2 milestone can close
