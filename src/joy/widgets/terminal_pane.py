@@ -201,7 +201,7 @@ class TerminalPane(Widget, can_focus=True):
     TerminalPane:focus {
         border: solid $accent;
     }
-    TerminalPane:focus-within:not(.--dim-selection) SessionRow.--highlight {
+    TerminalPane:focus-within SessionRow.--highlight {
         background: $accent;
     }
     SessionRow.--highlight {
@@ -218,6 +218,11 @@ class TerminalPane(Widget, can_focus=True):
         height: 1;
     }
     TerminalPane.--dim-selection SessionRow.--highlight {
+        background: transparent;
+        color: $text-muted;
+        text-style: dim;
+    }
+    TerminalPane.--dim-selection:focus-within SessionRow.--highlight {
         background: transparent;
         color: $text-muted;
         text-style: dim;
