@@ -17,6 +17,7 @@ KIND_SHORTCUT: dict[PresetKind, str] = {
     PresetKind.NOTE: "u",
     PresetKind.THREAD: "t",
     PresetKind.TERMINALS: "h",
+    PresetKind.REPO: "r",
 }
 
 # Nerd Font icons for each preset type

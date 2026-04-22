@@ -17,7 +17,7 @@ class _DetailScroll(VerticalScroll, can_focus=False):
     the e/d/o bindings on ProjectDetail to silently fail.
     """
 
-from joy.models import ObjectItem, PresetKind, Project
+from joy.models import ObjectItem, PresetKind, Project, WorktreeInfo
 from joy.widgets.object_row import KIND_SHORTCUT, ObjectRow, _success_message, _truncate
 
 # Semantic group structure for Details pane
@@ -90,12 +90,14 @@ class ProjectDetail(Widget, can_focus=True):
         self._project: Project | None = None
         self._cursor: int = -1
         self._rows: list[ObjectRow] = []
+        self._resolver_worktrees: list[WorktreeInfo] = []
+        self._readonly_items: set[int] = set()
         self.border_title = "Details"
 
     def compose(self) -> ComposeResult:
         yield _DetailScroll(id="detail-scroll")
 
-    def set_project(self, project: Project) -> None:
+    def set_project(self, project: Project, resolver_worktrees: list[WorktreeInfo] | None = None) -> None:
         """Update the displayed project: rebuild grouped object rows and reset cursor.
 
         Defers DOM manipulation via call_after_refresh to ensure VerticalScroll is
@@ -104,11 +106,54 @@ class ProjectDetail(Widget, can_focus=True):
         A generation counter guards against stale renders during rapid project
         switching: if set_project is called again before the deferred callback fires,
         the superseded render is a no-op.
+
+        Args:
+            project: The project to display.
+            resolver_worktrees: Optional list of resolver-matched worktrees to show as
+                virtual rows in the detail pane. Defaults to [] (no change if not supplied).
         """
         self._project = project
+        if resolver_worktrees is not None:
+            self._resolver_worktrees = resolver_worktrees
         self._render_generation = getattr(self, "_render_generation", 0) + 1
         gen = self._render_generation
         self.call_after_refresh(lambda: self._render_project(gen))
+
+    def _build_virtual_rows(self, project: Project) -> dict[PresetKind, list[ObjectItem]]:
+        """Assemble the grouped dict of ObjectItems for the given project.
+
+        Includes stored objects, synthesized REPO row, synthesized TERMINALS row,
+        and resolver-matched WORKTREE rows (deduplicated against stored worktrees).
+        Virtual rows added here that should not be deletable are tracked in
+        self._readonly_items (keyed by id(item)).
+        """
+        grouped: dict[PresetKind, list[ObjectItem]] = {}
+
+        # Stored objects
+        for item in project.objects:
+            grouped.setdefault(item.kind, []).append(item)
+
+        # Synthesize REPO row from project.repo if set
+        if project.repo:
+            repo_item = ObjectItem(kind=PresetKind.REPO, value=project.repo, label="")
+            grouped.setdefault(PresetKind.REPO, []).append(repo_item)
+
+        # Synthesize TERMINALS row from project.iterm_tab_id if set
+        if project.iterm_tab_id:
+            terminals_item = ObjectItem(kind=PresetKind.TERMINALS, value=project.iterm_tab_id, label="")
+            grouped.setdefault(PresetKind.TERMINALS, []).append(terminals_item)
+
+        # Synthesize WORKTREE rows from resolver, deduplicated against stored worktrees
+        stored_wt_paths: set[str] = {
+            obj.value for obj in project.objects if obj.kind == PresetKind.WORKTREE
+        }
+        for wt in self._resolver_worktrees:
+            if wt.path not in stored_wt_paths:
+                virt_item = ObjectItem(kind=PresetKind.WORKTREE, value=wt.path, label=wt.branch)
+                grouped.setdefault(PresetKind.WORKTREE, []).append(virt_item)
+                self._readonly_items.add(id(virt_item))
+
+        return grouped
 
     def _render_project(self, gen: int = 0, *, initial_cursor: int | None = None) -> None:
         """Rebuild the grouped object rows for the current project.
@@ -126,18 +171,12 @@ class ProjectDetail(Widget, can_focus=True):
             return
         scroll = self.query_one("#detail-scroll", _DetailScroll)
 
-        # Clear existing content
+        # Clear existing content and reset readonly sentinel
         scroll.remove_children()
+        self._readonly_items.clear()
 
-        # Group objects by preset kind in defined display order
-        grouped: dict[PresetKind, list[ObjectItem]] = {}
-        for item in self._project.objects:
-            grouped.setdefault(item.kind, []).append(item)
-
-        # Synthesize repo ObjectItem if project has a repo URL
-        if self._project.repo:
-            repo_item = ObjectItem(kind=PresetKind.REPO, value=self._project.repo, label="")
-            grouped.setdefault(PresetKind.REPO, []).append(repo_item)
+        # Build grouped dict including virtual rows
+        grouped = self._build_virtual_rows(self._project)
 
         # Mount semantic groups, only for groups that have objects
         new_rows: list[ObjectRow] = []
@@ -234,9 +273,11 @@ class ProjectDetail(Widget, can_focus=True):
             return
         self.app._start_add_object_loop(self._project)
 
-    def _set_project_with_cursor(self, project: Project, cursor: int) -> None:
+    def _set_project_with_cursor(self, project: Project, cursor: int, resolver_worktrees: list[WorktreeInfo] | None = None) -> None:
         """Re-render project and restore cursor near given position."""
         self._project = project
+        if resolver_worktrees is not None:
+            self._resolver_worktrees = resolver_worktrees
         self._render_generation = getattr(self, "_render_generation", 0) + 1
         gen = self._render_generation
         self.call_after_refresh(lambda: self._render_project(gen, initial_cursor=cursor))
@@ -271,6 +312,9 @@ class ProjectDetail(Widget, can_focus=True):
         if item is None:
             self.app.notify("No object selected", severity="error", markup=False)
             return
+        if id(item) in self._readonly_items:
+            self.app.notify("Worktree rows are read-only", markup=False)
+            return
         kind_val = item.kind.value
         value_display = _truncate(item.label if item.label else item.value)
         prev_cursor = self._cursor
@@ -303,6 +347,9 @@ class ProjectDetail(Widget, can_focus=True):
         item = self.highlighted_object
         if item is None:
             self.app.notify("No object selected", severity="error", markup=False)
+            return
+        if id(item) in self._readonly_items:
+            self.app.notify("Worktree rows are read-only", markup=False)
             return
         prev_cursor = self._cursor
         try:

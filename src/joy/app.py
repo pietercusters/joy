@@ -24,7 +24,7 @@ from joy.widgets.worktree_pane import WorktreePane
 
 _PANE_HINTS: dict[str, str] = {
     "project-list":   "n: New  e: Rename  D: Delete  R: Assign repo  a: Archive  A: Archives",
-    "project-detail": "o: Open  n: Add  e: Edit  d: Delete  D: Force del  space: Toggle",
+    "project-detail": "o: Open  n: Add  e: Edit  d: Delete  D: Force del  space: Toggle  r: Repo",
     "terminal-pane":  "o: Open  n: Add  e: Rename  d: Close  D: Force close",
     "worktrees-pane": "i/Enter: Open IDE",
 }
@@ -62,7 +62,8 @@ class JoyApp(App):
         ("q", "quit", "Quit"),
         Binding("shift+o,O", "open_all_defaults", "Open All", priority=True),
         Binding("s", "settings", "Settings", priority=True),
-        Binding("r", "refresh_worktrees", "Refresh", priority=True),
+        Binding("R", "refresh_worktrees", "Refresh", priority=True),
+        Binding("r", "open_repo", "Repo", show=False),
         Binding("l", "legend", "Legend", priority=True),
         Binding("x", "toggle_sync", "Sync: on"),   # shown when sync is ON (D-11, D-13)
         Binding("x", "disable_sync", "Sync: off"),  # shown when sync is OFF
@@ -73,7 +74,6 @@ class JoyApp(App):
         Binding("u", "open_note", "Note", show=False),
         Binding("t", "open_thread", "Thread", show=False),
         Binding("h", "open_terminal", "Terminal", show=False),
-        Binding("R", "toggle_auto_refresh", "Auto-refresh", show=False),
     ]
 
     def __init__(self, **kwargs) -> None:
@@ -353,7 +353,8 @@ class JoyApp(App):
                 project_list.set_projects(self._projects, self._repos)
                 if project_list._cursor >= 0 and project_list._cursor < len(project_list._rows):
                     current = project_list._rows[project_list._cursor].project
-                    self.query_one(ProjectDetail).set_project(current)
+                    resolver_wts = self._rel_index.worktrees_for(current) if self._rel_index else []
+                    self.query_one(ProjectDetail).set_project(current, resolver_worktrees=resolver_wts)
             finally:
                 self._is_syncing = False
 
@@ -407,7 +408,7 @@ class JoyApp(App):
         self._load_terminal()
 
     def action_refresh_worktrees(self) -> None:
-        """Manual refresh triggered by 'r' keybinding (D-05, D-15). No toast (D-06)."""
+        """Manual refresh triggered by 'R' keybinding (D-05, D-15). No toast (D-06)."""
         self._load_worktrees()
         self._load_terminal()
 
@@ -511,7 +512,8 @@ class JoyApp(App):
         """When highlight moves, update detail pane and drive cross-pane sync. (SYNC-01, SYNC-02)"""
         if self._is_syncing:
             return
-        self.query_one(ProjectDetail).set_project(message.project)
+        resolver_wts = self._rel_index.worktrees_for(message.project) if self._rel_index else []
+        self.query_one(ProjectDetail).set_project(message.project, resolver_worktrees=resolver_wts)
         if self._sync_enabled and self._rel_index is not None:
             self._sync_from_project(message.project)
 
@@ -568,7 +570,8 @@ class JoyApp(App):
             project = self._rel_index.project_for_worktree(worktree)
             if project is not None:
                 self.query_one(ProjectList).sync_to(project.name)
-                self.query_one(ProjectDetail).set_project(project)
+                resolver_wts = self._rel_index.worktrees_for(project)
+                self.query_one(ProjectDetail).set_project(project, resolver_worktrees=resolver_wts)
                 terminals = self._rel_index.terminals_for(project)
                 if terminals:
                     matched = term_pane.sync_to(terminals[0].session_name)
@@ -604,8 +607,8 @@ class JoyApp(App):
             project = self._rel_index.project_for_terminal(session_name)
             if project is not None:
                 self.query_one(ProjectList).sync_to(project.name)
-                self.query_one(ProjectDetail).set_project(project)
                 worktrees = self._rel_index.worktrees_for(project)
+                self.query_one(ProjectDetail).set_project(project, resolver_worktrees=worktrees)
                 if worktrees:
                     wt = worktrees[0]
                     matched = wt_pane.sync_to(wt.repo_name, wt.branch)
@@ -624,7 +627,8 @@ class JoyApp(App):
     ) -> None:
         """When Enter pressed on project, update detail and shift focus (D-04)."""
         detail = self.query_one(ProjectDetail)
-        detail.set_project(message.project)
+        resolver_wts = self._rel_index.worktrees_for(message.project) if self._rel_index else []
+        detail.set_project(message.project, resolver_worktrees=resolver_wts)
         # Focus AFTER the DOM rebuild: set_project defers via call_after_refresh,
         # so focusing before that point lets the rebuild displace focus when
         # children are removed and re-mounted. Scheduling after ensures focus
@@ -767,29 +771,84 @@ class JoyApp(App):
     # ------------------------------------------------------------------
 
     def _open_first_of_kind(self, kind: PresetKind) -> None:
-        """Find the first object of *kind* in the active project and open/copy it."""
+        """Dispatch keystroke for *kind* using the DISPATCH table (4-state taxonomy)."""
+        from joy.dispatch import DISPATCH  # noqa: PLC0415
         detail = self.query_one(ProjectDetail)
         project = detail._project
         if project is None:
             self.notify("No project selected", markup=False)
             return
-        item = next((obj for obj in project.objects if obj.kind == kind), None)
-        if item is None:
-            self.notify(f"No {kind.value} found for this project", markup=False)
-            return
-        # Branch copies to clipboard; all others use open_object
-        if kind == PresetKind.BRANCH:
-            self._copy_branch(item)
+        cfg = DISPATCH.get(kind)
+        if cfg is None:
+            return  # unknown kind — no-op
+
+        # Resolve the value for this kind (check virtual sources too)
+        value = self._resolve_kind_value(project, kind)
+
+        if value is not None:
+            # Exists path
+            if cfg.exists_not_openable:
+                self._copy_value_bg(value, kind)
+            elif cfg.exists_openable:
+                # TERMINALS: use tab activation instead of open_object
+                if kind == PresetKind.TERMINALS:
+                    self._do_activate_tab(value)
+                else:
+                    item = ObjectItem(kind=kind, value=value)
+                    self._do_open_global(item)
         else:
-            self._do_open_global(item)
+            # Missing path
+            if cfg.missing_auto_create:
+                self._auto_create_kind(kind, project)
+            elif cfg.missing_needs_input:
+                self._prompt_for_kind(kind, project)
+            else:
+                msg = cfg.missing_notify or f"No {kind.value} found for this project"
+                self.notify(msg, markup=False)
+
+    def _resolve_kind_value(self, project: Project, kind: PresetKind) -> str | None:
+        """Return the first value for *kind* from any source (objects, repo, iterm_tab_id)."""
+        if kind == PresetKind.REPO:
+            return project.repo  # direct field
+        if kind == PresetKind.TERMINALS:
+            return project.iterm_tab_id  # direct field
+        # Resolver worktrees: return path of first matched worktree for WORKTREE kind
+        if kind == PresetKind.WORKTREE:
+            if self._rel_index is not None:
+                worktrees = self._rel_index.worktrees_for(project)
+                if worktrees:
+                    return worktrees[0].path
+            # Fall through to objects[] (stored WORKTREE items)
+        return next((obj.value for obj in project.objects if obj.kind == kind), None)
+
+    def _auto_create_kind(self, kind: PresetKind, project: Project) -> None:
+        """Handle missing_auto_create: create the resource without user input."""
+        if kind == PresetKind.TERMINALS:
+            if project.name not in self._tabs_creating:
+                self._tabs_creating.add(project.name)
+                self._do_create_tab_for_project(project)
+        # Future kinds: add elif here
+
+    def _prompt_for_kind(self, kind: PresetKind, project: Project) -> None:
+        """Handle missing_needs_input: push a ValueInputModal for the user to supply the value."""
+        def on_value(value: str | None) -> None:
+            if value is None:
+                return
+            obj = ObjectItem(kind=kind, value=value)
+            project.objects.append(obj)
+            self._save_projects_bg()
+            self.query_one(ProjectDetail).set_project(project)
+            self.notify(f"Added: {kind.value} '{_truncate(value)}'", markup=False)
+
+        self.push_screen(ValueInputModal(kind), on_value)
 
     @work(thread=True, exit_on_error=False)
-    def _copy_branch(self, item: ObjectItem) -> None:
-        """Copy branch name to clipboard via pbcopy."""
-        import subprocess  # noqa: PLC0415
+    def _copy_value_bg(self, value: str, kind: PresetKind) -> None:
+        """Copy a string value to clipboard via pbcopy."""
+        import subprocess as _subprocess  # noqa: PLC0415
         try:
-            subprocess.run(["pbcopy"], input=item.value.encode("utf-8"), check=True)
-            self.notify(f"Copied branch: {item.value}", markup=False)
+            _subprocess.run(["pbcopy"], input=value.encode("utf-8"), check=True)
+            self.notify(f"Copied {kind.value}: {value}", markup=False)
         except Exception as exc:
             self.notify(f"Failed to copy: {exc}", severity="error", markup=False)
 
@@ -845,40 +904,13 @@ class JoyApp(App):
     def action_open_thread(self) -> None:
         self._open_first_of_kind(PresetKind.THREAD)
 
+    def action_open_repo(self) -> None:
+        """r key: copy repo name to clipboard or notify no repo (REPO dispatch)."""
+        self._open_first_of_kind(PresetKind.REPO)
+
     def action_open_terminal(self) -> None:
-        """Open the project's linked iTerm2 tab (h key). Creates one if none linked (D-03)."""
-        from joy.widgets.project_detail import ProjectDetail as _PD  # noqa: PLC0415
-        try:
-            detail = self.query_one(_PD)
-        except Exception:
-            return
-        project = detail._project
-        if project is None:
-            self.notify("No project selected", markup=False)
-            return
-        if project.iterm_tab_id:
-            self._do_activate_tab(project.iterm_tab_id)
-        else:
-            # No tab linked: create one (D-03). Guard prevents duplicate workers (D-04).
-            if project.name not in self._tabs_creating:
-                self._tabs_creating.add(project.name)
-                self._do_create_tab_for_project(project)
-
-    # ------------------------------------------------------------------
-    # R: toggle auto-refresh (from any pane except ProjectList where R = assign-repo)
-    # ------------------------------------------------------------------
-
-    def action_toggle_auto_refresh(self) -> None:
-        """Toggle the auto-refresh timer on/off."""
-        if self._refresh_timer is not None:
-            self._refresh_timer.stop()
-            self._refresh_timer = None
-            self.notify("Auto-refresh disabled", markup=False)
-        else:
-            self._refresh_timer = self.set_interval(
-                self._config.refresh_interval, self._trigger_worktree_refresh
-            )
-            self.notify("Auto-refresh enabled", markup=False)
+        """h key: open/create terminal via dispatch table."""
+        self._open_first_of_kind(PresetKind.TERMINALS)
 
     @work(thread=True, exit_on_error=False)
     def _save_config_bg(self) -> None:
