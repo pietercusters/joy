@@ -365,7 +365,7 @@ class TerminalPane(Widget, can_focus=True):
         """Move cursor to matching session_name row without posting SessionHighlighted.
 
         Silent cursor mutation for cross-pane sync. Does NOT call .focus(). (D-09, D-10)
-        If no row matches, _cursor is left unchanged. (D-08)
+        If no row matches, selection is cleared (_cursor = -1).
         """
         for i, row in enumerate(self._rows):
             if row.session_name == session_name:
@@ -375,7 +375,10 @@ class TerminalPane(Widget, can_focus=True):
                 row.add_class("--highlight")
                 row.scroll_visible()
                 return
-        # No match: leave _cursor unchanged (D-08)
+        # No match: clear selection so stale highlight doesn't mislead
+        self._cursor = -1
+        for r in self._rows:
+            r.remove_class("--highlight")
 
     def action_cursor_up(self) -> None:
         """Move cursor up one row."""
