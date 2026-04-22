@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 17 context gathered — context limit approaching
-last_updated: "2026-04-16T19:08:17.199Z"
+stopped_at: "Completed quick task 260420-ku9: fix-sync-source-pane-clears-own-selection"
+last_updated: "2026-04-20T13:03:47.257Z"
 last_activity: 2026-04-16
 progress:
   total_phases: 1
@@ -90,10 +90,13 @@ None — clean milestone close.
 | 260420-a6w | When I add an object, I can select an object but the focus is on a textbox (it says Type to filter...). I want to remove that textbox altogether, including all related tests etc. | 2026-04-20 | 7783352 | | [260420-a6w-when-i-add-an-object-i-can-select-an-obj](./quick/260420-a6w-when-i-add-an-object-i-can-select-an-obj/) |
 | 260420-ak5 | Extend new-project modal: single ModalScreen with name Input, optional repo ListView, and branch ListView (5 recent + type custom inline escape) | 2026-04-20 | af80be4 | Verified | [260420-ak5-extend-new-project-modal-add-repo-picker](./quick/260420-ak5-extend-new-project-modal-add-repo-picker/) |
 | 260420-bc2 | Fix project icon not turning cyan when worktrees or terminals are connected | 2026-04-20 | f58be3e | | [260420-bc2-fix-project-icon-not-turning-cyan-when-w](./quick/260420-bc2-fix-project-icon-not-turning-cyan-when-w/) |
+| 260420-izh | Redesign cross-pane sync with dimmed state: sync_to() returns bool, set_dimmed() on panes with no match, toast guards on open actions | 2026-04-20 | 675450f | Needs Review | [260420-izh-pane-sync-dimmed-selection-and-scoped-op](./quick/260420-izh-pane-sync-dimmed-selection-and-scoped-op/) |
+| 260420-ket | Remove dimmed-selection concept: replace set_dimmed() with clear_selection() (cursor=-1), unlinked items fully openable | 2026-04-20 | f34546b | Verified | [260420-ket-remove-dimmed-selection-clear-on-no-matc](./quick/260420-ket-remove-dimmed-selection-clear-on-no-matc/) |
+| 260420-ku9 | Fix sync bug: source pane was clearing its own selection when navigating to an unlinked item | 2026-04-20 | 6cb32a2 | | [260420-ku9-fix-sync-source-pane-clears-own-selectio](./quick/260420-ku9-fix-sync-source-pane-clears-own-selectio/) |
 
 ## Session Continuity
 
-Last session: 2026-04-16T17:28:32.183Z
-Stopped at: Phase 17 context gathered — context limit approaching
-Last activity: 2026-04-20 - Completed quick task 260420-bc2: Fix project icon cyan coloring from live wt/terminal counts
+Last session: 2026-04-20T13:03:47.253Z
+Stopped at: Completed quick task 260420-ku9: fix-sync-source-pane-clears-own-selection
+Last activity: 2026-04-20 - Completed quick task 260420-ku9: fix-sync-source-pane-clears-own-selection
 Resume: Phase 15 (cross-pane-selection-sync) still needs execution, then v1.2 milestone can close

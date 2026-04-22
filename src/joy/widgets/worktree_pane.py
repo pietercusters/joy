@@ -416,11 +416,11 @@ class WorktreePane(Widget, can_focus=True):
                 )
                 self.post_message(self.WorktreeHighlighted(wt))
 
-    def sync_to(self, repo_name: str, branch: str) -> None:
+    def sync_to(self, repo_name: str, branch: str) -> bool:
         """Move cursor to matching (repo_name, branch) row without posting WorktreeHighlighted.
 
         Silent cursor mutation for cross-pane sync. Does NOT call .focus(). (D-09, D-10)
-        If no row matches, selection is cleared (_cursor = -1).
+        Returns True if a match was found, False otherwise. (D-08)
         """
         for i, row in enumerate(self._rows):
             if row.repo_name == repo_name and row.branch == branch:
@@ -430,8 +430,12 @@ class WorktreePane(Widget, can_focus=True):
                     r.remove_class("--highlight")
                 row.add_class("--highlight")
                 row.scroll_visible()
-                return
-        # No match: clear selection so stale highlight doesn't mislead
+                return True
+        # No match: leave _cursor unchanged (D-08)
+        return False
+
+    def clear_selection(self) -> None:
+        """Clear selection: cursor=-1, remove all --highlight classes."""
         self._cursor = -1
         for r in self._rows:
             r.remove_class("--highlight")
