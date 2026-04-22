@@ -66,7 +66,8 @@ class FakeWorktreePane(FakeSyncablePane):
             if row.repo_name == repo_name and row.branch == branch:
                 self._cursor = i
                 return
-        # No match: leave _cursor unchanged (D-08)
+        # No match: clear selection
+        self._cursor = -1
 
 
 class FakeTerminalPane(FakeSyncablePane):
@@ -78,7 +79,8 @@ class FakeTerminalPane(FakeSyncablePane):
             if row.session_name == session_name:
                 self._cursor = i
                 return
-        # No match: leave _cursor unchanged (D-08)
+        # No match: clear selection
+        self._cursor = -1
 
 
 class FakeProjectList(FakeSyncablePane):
@@ -90,7 +92,8 @@ class FakeProjectList(FakeSyncablePane):
             if row.project.name == project_name:
                 self._cursor = i
                 return
-        # No match: leave _cursor unchanged (D-08)
+        # No match: clear selection
+        self._cursor = -1
 
 
 # ---------------------------------------------------------------------------
@@ -153,10 +156,10 @@ def test_sync_project_to_worktree():
     # Assertions run only if sync_to doesn't fail (Plan 02 GREEN)
     assert pane._cursor == 1  # target row at index 1
 
-    # No-match case: cursor stays at 0
+    # No-match case: cursor cleared (no match)
     pane._cursor = 0
     pane.sync_to("nonexistent-repo", "nonexistent-branch")
-    assert pane._cursor == 0  # cursor unchanged
+    assert pane._cursor == -1  # cursor cleared (no match)
 
 
 # ---------------------------------------------------------------------------
@@ -193,10 +196,10 @@ def test_sync_project_to_terminal():
     pane.sync_to(agents[0].session_name)
     assert pane._cursor == 1
 
-    # No-match case: cursor stays at 0
+    # No-match case: cursor cleared (no match)
     pane._cursor = 0
     pane.sync_to("no-such-session")
-    assert pane._cursor == 0  # cursor unchanged
+    assert pane._cursor == -1  # cursor cleared (no match)
 
 
 # ---------------------------------------------------------------------------
@@ -230,10 +233,10 @@ def test_sync_worktree_to_project():
     pane.sync_to(matched_project.name)
     assert pane._cursor == 1
 
-    # No-match case: cursor stays at 0
+    # No-match case: cursor cleared (no match)
     pane._cursor = 0
     pane.sync_to("no-such-project")
-    assert pane._cursor == 0  # cursor unchanged
+    assert pane._cursor == -1  # cursor cleared (no match)
 
 
 # ---------------------------------------------------------------------------
@@ -304,10 +307,10 @@ def test_sync_agent_to_project():
     pane.sync_to(matched_project.name)
     assert pane._cursor == 1
 
-    # No-match case: cursor stays at 0
+    # No-match case: cursor cleared (no match)
     pane._cursor = 0
     pane.sync_to("no-such-project")
-    assert pane._cursor == 0  # cursor unchanged
+    assert pane._cursor == -1  # cursor cleared (no match)
 
 
 # ---------------------------------------------------------------------------
@@ -341,6 +344,124 @@ def test_sync_agent_to_worktree():
     # Happy path: sync_to should move cursor to index 1
     pane.sync_to(worktrees[0].repo_name, worktrees[0].branch)
     assert pane._cursor == 1
+
+
+# ---------------------------------------------------------------------------
+# SYNC-10: no-match clears WorktreePane (project with no worktree)
+# ---------------------------------------------------------------------------
+
+
+def test_sync_no_match_clears_worktree_pane():
+    """SYNC-10: sync_to on WorktreePane with no matching row clears selection.
+
+    When a project has no related worktree, WorktreePane must show no highlight
+    and set _cursor = -1. This prevents the 'i' key from opening a stale worktree.
+    """
+    row0 = FakeRow(repo_name="repo-a", branch="main", path="/tmp/a")
+    row1 = FakeRow(repo_name="repo-b", branch="feat", path="/tmp/b")
+    pane = FakeWorktreePane([row0, row1])
+
+    # Start with valid selection
+    pane._cursor = 1
+
+    # Sync to non-existent worktree
+    pane.sync_to("no-such-repo", "no-such-branch")
+
+    assert pane._cursor == -1, "No-match must clear cursor to -1"
+
+
+# ---------------------------------------------------------------------------
+# SYNC-11: no-match clears TerminalPane (project with no terminal)
+# ---------------------------------------------------------------------------
+
+
+def test_sync_no_match_clears_terminal_pane():
+    """SYNC-11: sync_to on TerminalPane with no matching row clears selection.
+
+    When a project has no related terminal session, TerminalPane must show no
+    highlight and set _cursor = -1.
+    """
+    row0 = FakeSessionRow(session_name="session-a")
+    row1 = FakeSessionRow(session_name="session-b")
+    pane = FakeTerminalPane([row0, row1])
+
+    # Start with valid selection
+    pane._cursor = 0
+
+    # Sync to non-existent session
+    pane.sync_to("no-such-session")
+
+    assert pane._cursor == -1, "No-match must clear cursor to -1"
+
+
+# ---------------------------------------------------------------------------
+# SYNC-12: no-match clears ProjectList (worktree with no project)
+# ---------------------------------------------------------------------------
+
+
+def test_sync_no_match_clears_project_list():
+    """SYNC-12: sync_to on ProjectList with no matching row clears selection.
+
+    When navigating to a worktree that belongs to no project, ProjectList must
+    clear its selection.
+    """
+    proj_a = Project(name="proj-a")
+    proj_b = Project(name="proj-b")
+    row0 = FakeProjectRow(project=proj_a)
+    row1 = FakeProjectRow(project=proj_b)
+    pane = FakeProjectList([row0, row1])
+
+    # Start with valid selection
+    pane._cursor = 1
+
+    # Sync to non-existent project
+    pane.sync_to("no-such-project")
+
+    assert pane._cursor == -1, "No-match must clear cursor to -1"
+
+
+# ---------------------------------------------------------------------------
+# SYNC-13: no-match from valid cursor clears in all 3 directions
+# ---------------------------------------------------------------------------
+
+
+def test_sync_no_match_clears_all_three_panes():
+    """SYNC-13: verify the clear-on-no-match fix works from any starting cursor position.
+
+    Ensures the fix handles the common scenario: user navigates to project A
+    (which has a worktree at cursor 2), then moves to project B (which has none).
+    WorktreePane must clear from cursor 2, not keep it highlighted.
+    """
+    # WorktreePane: start at cursor 2 (last row)
+    rows_wt = [
+        FakeRow(repo_name="r1", branch="b1", path="/tmp/1"),
+        FakeRow(repo_name="r2", branch="b2", path="/tmp/2"),
+        FakeRow(repo_name="r3", branch="b3", path="/tmp/3"),
+    ]
+    wt_pane = FakeWorktreePane(rows_wt)
+    wt_pane._cursor = 2
+    wt_pane.sync_to("nonexistent", "nonexistent")
+    assert wt_pane._cursor == -1
+
+    # TerminalPane: start at cursor 1 (middle row)
+    rows_tp = [
+        FakeSessionRow(session_name="s1"),
+        FakeSessionRow(session_name="s2"),
+    ]
+    tp_pane = FakeTerminalPane(rows_tp)
+    tp_pane._cursor = 1
+    tp_pane.sync_to("nonexistent")
+    assert tp_pane._cursor == -1
+
+    # ProjectList: start at cursor 0 (first row)
+    rows_pl = [
+        FakeProjectRow(project=Project(name="p1")),
+        FakeProjectRow(project=Project(name="p2")),
+    ]
+    pl_pane = FakeProjectList(rows_pl)
+    pl_pane._cursor = 0
+    pl_pane.sync_to("nonexistent")
+    assert pl_pane._cursor == -1
 
 
 # ---------------------------------------------------------------------------
