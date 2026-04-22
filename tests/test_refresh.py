@@ -339,7 +339,7 @@ async def test_refresh_failure_shows_stale(mock_store_for_refresh):
         await app.workers.wait_for_complete()
         # Now make discover_worktrees fail
         with patch("joy.worktrees.discover_worktrees", side_effect=Exception("git error")):
-            await pilot.press("r")
+            await pilot.press("R")
             await pilot.pause(0.3)
             await app.workers.wait_for_complete()
         title = app.query_one(WorktreePane).border_title
@@ -350,13 +350,13 @@ async def test_refresh_failure_shows_stale(mock_store_for_refresh):
 
 @pytest.mark.asyncio
 async def test_no_toast_on_manual_refresh(mock_store_for_refresh):
-    """Pressing 'r' does NOT call app.notify — timestamp update is the only feedback (D-06)."""
+    """Pressing 'R' does NOT call app.notify — timestamp update is the only feedback (D-06)."""
     app = JoyApp()
     async with app.run_test() as pilot:
         await pilot.pause(0.2)
         await app.workers.wait_for_complete()
         with patch.object(app, "notify") as mock_notify:
-            await pilot.press("r")
+            await pilot.press("R")
             await pilot.pause(0.2)
             await app.workers.wait_for_complete()
             mock_notify.assert_not_called()
@@ -373,7 +373,7 @@ async def test_timestamp_updates_after_refresh(mock_store_for_refresh):
         assert title1 != "Worktrees", (
             f"Expected border_title to include timestamp after initial load, got: {repr(title1)}"
         )
-        await pilot.press("r")
+        await pilot.press("R")
         await pilot.pause(0.2)
         await app.workers.wait_for_complete()
         title2 = app.query_one(WorktreePane).border_title
@@ -405,17 +405,17 @@ async def test_terminal_load_on_mount(mock_store_for_refresh):
 
 @pytest.mark.asyncio
 async def test_terminal_refresh_on_r_key(mock_store_for_refresh, mock_fetch_sessions):
-    """Pressing 'r' triggers terminal refresh (fetch_sessions call count increases)."""
+    """Pressing 'R' triggers terminal refresh (fetch_sessions call count increases)."""
     app = JoyApp()
     async with app.run_test() as pilot:
         await pilot.pause(0.2)
         await app.workers.wait_for_complete()
         call_count_before = mock_fetch_sessions.call_count
-        await pilot.press("r")
+        await pilot.press("R")
         await pilot.pause(0.2)
         await app.workers.wait_for_complete()
         assert mock_fetch_sessions.call_count > call_count_before, (
-            f"Expected fetch_sessions call count to increase after 'r' press, "
+            f"Expected fetch_sessions call count to increase after 'R' press, "
             f"before={call_count_before}, after={mock_fetch_sessions.call_count}"
         )
 
