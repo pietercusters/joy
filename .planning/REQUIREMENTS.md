@@ -43,6 +43,23 @@ Requirements for the Cross-Pane Intelligence milestone. Each maps to roadmap pha
 - [ ] **PROP-07**: MR objects are auto-added but never auto-removed by propagation
 - [ ] **PROP-08**: Projects without a registered repo are excluded from all propagation
 
+## v1.3 Requirements
+
+Requirements for the Unified Object View milestone.
+
+### Unified Detail View
+
+- [ ] **UOV-01**: ProjectDetail assembles a virtual row list from all sources: `project.objects[]`, synthesized REPO (from `project.repo`), synthesized TERMINALS (from `project.iterm_tab_id`), and resolver-matched worktrees
+- [ ] **UOV-02**: Resolver-matched worktree rows appear in the detail pane as read-only virtual rows — no delete action available
+- [ ] **UOV-03**: All virtual rows (REPO, TERMINALS, resolver worktrees) participate in the same keystroke dispatch as stored ObjectItems
+
+### Consistent Keystroke Taxonomy
+
+- [ ] **KEY-01**: Each object kind declares behavior for 4 states via a per-kind dispatch config: exists+openable, exists+not-openable, missing+auto-create, missing+needs-input
+- [ ] **KEY-02**: All quick-open shortcuts (b, m, i, y, u, t, h, r) route through the dispatch table — no scattered if/else
+- [ ] **KEY-03**: REPO kind is assigned the `r` shortcut — copies repo name if set, prompts to assign repo if not set
+- [ ] **KEY-04**: Adding or changing a kind's behavior requires only updating the dispatch config, not app logic
+
 ## Future Requirements (v1.3+)
 
 ### Post-Propagation Safety

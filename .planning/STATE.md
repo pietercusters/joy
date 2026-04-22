@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Completed quick task 260420-ku9: fix-sync-source-pane-clears-own-selection"
-last_updated: "2026-04-20T13:03:47.257Z"
+stopped_at: "Completed quick task 260422-ksh: refactor-projectdetail-and-keystroke-dispatch"
+last_updated: "2026-04-22T13:08:57.014Z"
 last_activity: 2026-04-16
 progress:
   total_phases: 1
@@ -94,10 +94,11 @@ None — clean milestone close.
 | 260420-ket | Remove dimmed-selection concept: replace set_dimmed() with clear_selection() (cursor=-1), unlinked items fully openable | 2026-04-20 | f34546b | Verified | [260420-ket-remove-dimmed-selection-clear-on-no-matc](./quick/260420-ket-remove-dimmed-selection-clear-on-no-matc/) |
 | 260420-ku9 | Fix sync bug: source pane was clearing its own selection when navigating to an unlinked item | 2026-04-20 | 6cb32a2 | | [260420-ku9-fix-sync-source-pane-clears-own-selectio](./quick/260420-ku9-fix-sync-source-pane-clears-own-selectio/) |
 | 260422-iy6 | Fix sync_to clear on no match in all 3 panes | 2026-04-22 | be3527c | | [260422-iy6-fix-sync-to-clear-on-no-match-in-all-3-p](./quick/260422-iy6-fix-sync-to-clear-on-no-match-in-all-3-p/) |
+| 260422-ksh | Refactor ProjectDetail and keystroke dispatch for unified object view | 2026-04-22 | f4eff22 | | [260422-ksh-refactor-projectdetail-and-keystroke-dis](./quick/260422-ksh-refactor-projectdetail-and-keystroke-dis/) |
 
 ## Session Continuity
 
-Last session: 2026-04-20T13:03:47.253Z
-Stopped at: Completed quick task 260420-ku9: fix-sync-source-pane-clears-own-selection
-Last activity: 2026-04-22 - Completed quick task 260422-iy6: Fix sync_to clear on no match in all 3 panes
+Last session: 2026-04-22T13:08:57.011Z
+Stopped at: Completed quick task 260422-ksh: refactor-projectdetail-and-keystroke-dispatch
+Last activity: 2026-04-22 - Completed quick task 260422-ksh: Refactor ProjectDetail and keystroke dispatch for unified object view
 Resume: Phase 15 (cross-pane-selection-sync) still needs execution, then v1.2 milestone can close
