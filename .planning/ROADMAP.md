@@ -5,6 +5,7 @@
 - ✅ **v1.0 MVP** — Phases 1-5 (shipped 2026-04-12)
 - ✅ **v1.1 Workspace Intelligence** — Phases 6-13 (shipped 2026-04-14)
 - ✅ **v1.2 Cross-Pane Intelligence** — Phases 14-16 (shipped 2026-04-15)
+- ✅ **v1.3 Unified Object View** — Phase 17 (shipped 2026-04-22)
 
 ## Phases
 
@@ -48,6 +49,17 @@ Full details: `.planning/milestones/v1.2-ROADMAP.md`
 
 </details>
 
+<details>
+<summary>✅ v1.3 Unified Object View (Phase 17) — SHIPPED 2026-04-22</summary>
+
+- [x] Phase 17: Fix iTerm2 Integration Bugs (3/3 plans) — completed 2026-04-16
+
+Plus 21 quick tasks: unified detail view, DISPATCH table, icon ribbon, archive browser, new-project modal, cross-pane sync polish.
+
+Full details: `.planning/milestones/v1.3-ROADMAP.md`
+
+</details>
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -68,15 +80,4 @@ Full details: `.planning/milestones/v1.2-ROADMAP.md`
 | 14. Relationship Foundation & Badges | v1.2 | 3/3 | ✓ Complete | 2026-04-15 |
 | 15. Cross-Pane Selection Sync | v1.2 | 3/3 | ✓ Complete | 2026-04-15 |
 | 16. Live Data Propagation | v1.2 | 2/2 | ✓ Complete | 2026-04-15 |
-
-### Phase 17: Fix iTerm2 integration bugs from quick-260416-of2: remove auto-sync, close whole Tab on delete/archive, fix test isolation for ~/.joy/
-
-**Goal:** Remove automatic iTerm2 tab creation (tabs only via h-key), close entire tab on project delete/archive, isolate all tests from real ~/.joy/ paths
-**Requirements**: FIX17-REMOVE-AUTO-SYNC, FIX17-TAB-CLOSE-ON-DELETE-ARCHIVE, FIX17-TEST-ISOLATION, FIX17-CLOSE-TAB
-**Depends on:** Phase 16
-**Plans:** 3/3 plans complete
-
-Plans:
-- [x] 17-01-PLAN.md -- Test isolation fixture + close_tab function
-- [x] 17-02-PLAN.md -- Remove auto-sync, tab-level close on delete/archive, remove ArchiveModal
-- [x] 17-03-PLAN.md -- Gap closure: focus new tab after h-key creation
+| 17. Fix iTerm2 Integration Bugs | v1.3 | 3/3 | ✓ Complete | 2026-04-16 |

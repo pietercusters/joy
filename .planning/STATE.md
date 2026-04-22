@@ -1,11 +1,11 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: executing
-stopped_at: "Completed quick task 260422-ksh: refactor-projectdetail-and-keystroke-dispatch"
-last_updated: "2026-04-22T13:08:57.014Z"
-last_activity: 2026-04-16
+milestone: v1.3
+milestone_name: Unified Object View
+status: milestone_complete
+stopped_at: "v1.3 milestone archived 2026-04-22"
+last_updated: "2026-04-22T00:00:00.000Z"
+last_activity: 2026-04-22
 progress:
   total_phases: 1
   completed_phases: 1
@@ -18,30 +18,30 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-14)
+See: .planning/PROJECT.md (updated 2026-04-22)
 
 **Core value:** Every artifact for the active project, openable instantly from one keyboard-driven interface.
-**Current focus:** Phase 17 — fix-iterm2-integration-bugs-from-quick-260416-of2-remove-aut
+**Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: 17
-Plan: Not started
-Status: Executing Phase 17
-Last activity: 2026-04-16
+Phase: —
+Plan: —
+Status: v1.3 milestone complete — ready for /gsd-new-milestone
 
-Progress: ████████████████████ 100% (8/8 phases)
+Progress: ████████████████████ 100% (17/17 phases)
 
 ## Milestone Summary
 
-v1.1 Workspace Intelligence shipped 2026-04-14:
+v1.3 Unified Object View shipped 2026-04-22:
 
-- 8 phases (6-13), 19 plans
-- Live worktree pane with MR/CI badges
-- iTerm2 terminal pane with Claude agent detection
-- Background auto-refresh engine
-- Repo registry with project grouping
-- 276 fast tests, 3,606 src LOC + 5,883 test LOC
+- 1 formal phase (17), 3 plans + 21 quick tasks
+- Unified detail view: REPO/TERMINALS/resolver worktrees as virtual rows
+- Per-kind DISPATCH table replaces scattered if/else in app.py
+- Test isolation: autouse session fixture for all ~/.joy/ paths
+- iTerm2 tab hardening: explicit h-key creation, close on delete/archive
+- clear_selection() on sync no-match; project archive/unarchive; icon ribbon
+- 6,180 src LOC + 7,923 test LOC
 
 ## Accumulated Context
 
@@ -49,17 +49,19 @@ v1.1 Workspace Intelligence shipped 2026-04-14:
 
 Decisions are logged in PROJECT.md Key Decisions table.
 
-Key decisions from v1.1:
+Key decisions from v1.3:
 
-- list-form subprocess for all external calls (security)
-- cursor/_rows/--highlight pattern for all scrollable panes
-- lazy import + catch-all for iTerm2 graceful fallback
-- pytest.mark.slow for TUI/integration tests
-- [Phase quick-260416-k3w]: ArchivedProject wraps Project + archived_at; archive.toml uses keyed schema; ArchiveModal uses Static+BINDINGS only; object stripping is caller responsibility
+- Tab creation on explicit h-key only (auto-sync removed)
+- clear_selection() replaces dimmed-state concept
+- DISPATCH table per kind in dispatch.py (declarative keystroke routing)
+- Virtual rows in ProjectDetail (REPO, TERMINALS, resolver worktrees) — no persistence mutation
+- Session-scoped fixture for test isolation (autouse, patches 5 path constants)
+- ArchivedProject wraps Project + archived_at; archive.toml uses keyed schema
 
 ### Roadmap Evolution
 
-- Phase 17 added: Fix iTerm2 integration bugs from quick-260416-of2 — remove auto-sync, close whole Tab on delete/archive, fix test isolation for ~/.joy/
+- v1.3 complete — Phase 17 + 21 quick tasks
+- Next milestone to be defined via /gsd-new-milestone
 
 ### Pending Todos
 
@@ -67,38 +69,13 @@ None.
 
 ### Blockers/Concerns
 
-None — clean milestone close.
-
-### Quick Tasks Completed
-
-| # | Description | Date | Commit | Status | Directory |
-|---|-------------|------|--------|--------|-----------|
-| 260411-ivh | Fix three UAT bugs: project list selection after delete, detail pane focus dimming, Slack thread URL navigation | 2026-04-11 | 9f5e006 | | [260411-ivh-fix-three-uat-bugs-project-list-selectio](./quick/260411-ivh-fix-three-uat-bugs-project-list-selectio/) |
-| 260414-c4g | Mark slow TUI/filter tests with pytest.mark.slow, exclude by default — suite drops from ~264s to 25.84s | 2026-04-14 | cf15821 | | [260414-c4g-the-unit-test-suite-take-too-long-to-run](./quick/260414-c4g-the-unit-test-suite-take-too-long-to-run/) |
-| 260414-nrt | Details pane redesign: columnar layout, repo field, whitespace, legend popup | 2026-04-14 | 9d13330 | | [260414-nrt-details-pane-redesign-columnar-layout-re](./quick/260414-nrt-details-pane-redesign-columnar-layout-re/) |
-| 260414-pob | Details pane fixes: open icon restored, legend toggle, semantic grouping, repo as object, indent all panes | 2026-04-14 | b39bf2d | | [260414-pob-details-pane-fixes-and-improvements-open](./quick/260414-pob-details-pane-fixes-and-improvements-open/) |
-| 260414-qk4 | bug: in the Worktree overview, when there's an MR available we should go to the MR when clicking Enter. If not, we should go to the worktree. | 2026-04-14 | 7ae1811 | | [260414-qk4-bug-in-the-worktree-overview-when-there-](./quick/260414-qk4-bug-in-the-worktree-overview-when-there-/) |
-| 260414-rim | Few small requests: rename on e, 1-space indent, default branch display, branch filter editor | 2026-04-14 | 04f9c72 | | [260414-rim-few-small-requests-rename-project-on-e-k](./quick/260414-rim-few-small-requests-rename-project-on-e-k/) |
-| 260415-jab | Add global 'i' binding to open IDE on active project's first worktree — restores IDE access when worktree row has an MR | 2026-04-15 | 0b12320 | | [260415-jab-fix-opening-ide-on-worktree-fails-when-m](./quick/260415-jab-fix-opening-ide-on-worktree-fails-when-m/) |
-| 260415-gw0 | Rethink all keyboard shortcuts and add two rows of keyboard hints at the bottom | 2026-04-15 | 85c7bfc | | [260415-gw0-rethink-all-keyboard-shortcuts-and-add-t](./quick/260415-gw0-rethink-all-keyboard-shortcuts-and-add-t/) |
-| 260415-mh6 | Refactor worktree logic and Worktrees pane: auto-detect worktrees by branch, fix 'i' key IDE open, enter opens IDE, investigate bugs | 2026-04-15 | b7d5a98 | Needs Review | [260415-mh6-refactor-worktree-logic-and-worktrees-pa](./quick/260415-mh6-refactor-worktree-logic-and-worktrees-pa/) |
-| 260415-qqx | Build full iTerm2 terminal session control: rename Agent→Terminal, n/e/d/D bindings, auto-create/auto-remove, project-link flag | 2026-04-15 | 251fcf8 | Verified | [260415-qqx-build-full-iterm2-terminal-session-contr](./quick/260415-qqx-build-full-iterm2-terminal-session-contr/) |
-| 260416-k3w | Add project archive/unarchive: a/A bindings, archive.toml cold storage, ArchiveModal, ArchiveBrowserModal with branch-match sections | 2026-04-16 | 851e3dc | Verified | [260416-k3w-archive-project-with-a-a-bindings-cold-s](./quick/260416-k3w-archive-project-with-a-a-bindings-cold-s/) |
-| 260416-m39 | Project list icon ribbon: status dot (g key cycles idle/prio/hold), 6-icon presence ribbon, MR strip, section spacers, icons.py | 2026-04-16 | 399a581 | Needs Review | [260416-m39-projects-overview-icon-ribbon-mr-status-](./quick/260416-m39-projects-overview-icon-ribbon-mr-status-/) |
-| 260416-of2 | Improve iTerm2 integration: link projects to iTerm2 tabs via unique IDs, group terminals by tab, refactor sessions pane | 2026-04-16 | ad6f93c | Needs Review | [260416-of2-improve-iterm2-integration-link-projects](./quick/260416-of2-improve-iterm2-integration-link-projects/) |
-| 260417-aeo | Remove filter text boxes and slash command from list, including all unit tests | 2026-04-17 | 2428812 | | [260417-aeo-remove-filter-text-boxes-and-slash-comma](./quick/260417-aeo-remove-filter-text-boxes-and-slash-comma/) |
-| 260420-a6w | When I add an object, I can select an object but the focus is on a textbox (it says Type to filter...). I want to remove that textbox altogether, including all related tests etc. | 2026-04-20 | 7783352 | | [260420-a6w-when-i-add-an-object-i-can-select-an-obj](./quick/260420-a6w-when-i-add-an-object-i-can-select-an-obj/) |
-| 260420-ak5 | Extend new-project modal: single ModalScreen with name Input, optional repo ListView, and branch ListView (5 recent + type custom inline escape) | 2026-04-20 | af80be4 | Verified | [260420-ak5-extend-new-project-modal-add-repo-picker](./quick/260420-ak5-extend-new-project-modal-add-repo-picker/) |
-| 260420-bc2 | Fix project icon not turning cyan when worktrees or terminals are connected | 2026-04-20 | f58be3e | | [260420-bc2-fix-project-icon-not-turning-cyan-when-w](./quick/260420-bc2-fix-project-icon-not-turning-cyan-when-w/) |
-| 260420-izh | Redesign cross-pane sync with dimmed state: sync_to() returns bool, set_dimmed() on panes with no match, toast guards on open actions | 2026-04-20 | 675450f | Needs Review | [260420-izh-pane-sync-dimmed-selection-and-scoped-op](./quick/260420-izh-pane-sync-dimmed-selection-and-scoped-op/) |
-| 260420-ket | Remove dimmed-selection concept: replace set_dimmed() with clear_selection() (cursor=-1), unlinked items fully openable | 2026-04-20 | f34546b | Verified | [260420-ket-remove-dimmed-selection-clear-on-no-matc](./quick/260420-ket-remove-dimmed-selection-clear-on-no-matc/) |
-| 260420-ku9 | Fix sync bug: source pane was clearing its own selection when navigating to an unlinked item | 2026-04-20 | 6cb32a2 | | [260420-ku9-fix-sync-source-pane-clears-own-selectio](./quick/260420-ku9-fix-sync-source-pane-clears-own-selectio/) |
-| 260422-iy6 | Fix sync_to clear on no match in all 3 panes | 2026-04-22 | be3527c | | [260422-iy6-fix-sync-to-clear-on-no-match-in-all-3-p](./quick/260422-iy6-fix-sync-to-clear-on-no-match-in-all-3-p/) |
-| 260422-ksh | Refactor ProjectDetail and keystroke dispatch for unified object view | 2026-04-22 | f4eff22 | | [260422-ksh-refactor-projectdetail-and-keystroke-dis](./quick/260422-ksh-refactor-projectdetail-and-keystroke-dis/) |
+Known tech debt for next milestone:
+- test_propagation.py::TestTerminalAutoRemove (6 tests) — references non-existent JoyApp._propagate_terminal_auto_remove
+- test_sync.py (4 tests) — terminal sync / resolver returns empty list for terminals
 
 ## Session Continuity
 
-Last session: 2026-04-22T13:08:57.011Z
-Stopped at: Completed quick task 260422-ksh: refactor-projectdetail-and-keystroke-dispatch
-Last activity: 2026-04-22 - Completed quick task 260422-ksh: Refactor ProjectDetail and keystroke dispatch for unified object view
-Resume: Phase 15 (cross-pane-selection-sync) still needs execution, then v1.2 milestone can close
+Last session: 2026-04-22
+Stopped at: v1.3 milestone archived
+Last activity: 2026-04-22 — v1.3 milestone complete
+Resume: /gsd-new-milestone to start v1.4 planning

@@ -1,5 +1,20 @@
 # Milestones
 
+## v1.3 Unified Object View (Shipped: 2026-04-22)
+
+**Phases completed:** 1 phase (17), 3 plans + 21 quick tasks
+
+**Key accomplishments:**
+
+- Virtual row assembly in ProjectDetail: REPO, TERMINALS, and resolver-matched worktrees appear alongside stored ObjectItems in a unified detail view
+- Per-kind DISPATCH table in dispatch.py routes all quick-open shortcuts (b, m, i, y, u, t, h, r) — replaces scattered if/else in app.py
+- REPO virtual row assigned `r` shortcut: copies repo name when set, prompts assignment when not
+- Session-scoped autouse pytest fixture patches all 5 ~/.joy/ path constants to tmp directory — no test can touch real user data
+- iTerm2 tab-close on project delete/archive; tabs only created via explicit `h` press (auto-sync removed)
+- `clear_selection()` replaces dimmed-state concept — cross-pane sync clears cursor on no-match; unlinked items remain fully openable
+
+---
+
 ## v1.2 Cross-Pane Intelligence (Shipped: 2026-04-15)
 
 **Phases completed:** 3 phases (14-16), 8 plans, all complete

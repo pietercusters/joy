@@ -108,6 +108,52 @@
 
 ---
 
+## Milestone: v1.3 — Unified Object View
+
+**Shipped:** 2026-04-22
+**Phases:** 1 (Phase 17) + 21 quick tasks | **Plans:** 3 | **Sessions:** 7 days (2026-04-15 to 2026-04-22)
+
+### What Was Built
+
+- **Phase 17 (iTerm2 bug hardening):** Session-scoped autouse fixture isolating all tests from ~/.joy/; `close_tab()` for tab-level iTerm2 control; removed auto-sync tab creation (tabs only via `h`); delete/archive closes linked tab; new tabs focused immediately
+- **Quick tasks (UOV + KEY):** ProjectDetail assembles virtual rows (REPO, TERMINALS, resolver worktrees) alongside stored ObjectItems; per-kind DISPATCH table in dispatch.py routes all quick-open shortcuts — replaces scattered if/else in app.py
+- **Quick tasks (polish sprint):** cross-pane sync redesign (`clear_selection()` on no-match), icon ribbon with status dot and 6-icon presence ribbon, project archive/unarchive with cold-storage archive.toml and ArchiveBrowserModal, new-project modal extended with repo + branch ListViews, filter textboxes removed from all panes
+
+### What Worked
+
+- **Quick-task workflow for a polish sprint was efficient:** v1.3 was primarily a rapid iteration cycle — 21 quick tasks rather than formal phases. Each task was atomic, reviewed, and merged. The GSD quick-task machinery handled this pattern well.
+- **DISPATCH table as data eliminated a class of bugs:** Moving keystroke routing from imperative if/else in app.py to a declarative per-kind config in dispatch.py made adding or changing key behavior a one-line diff. The pattern is extensible and readable.
+- **clear_selection() beats dimmed state:** The earlier dimmed-state concept (set_dimmed()) was reverted in the same sprint it was introduced. clear_selection() is simpler — no visual state to manage, unlinked items remain usable. Reverting fast prevented the pattern from spreading.
+- **Test isolation fixture paid for itself immediately:** The autouse session fixture was a Phase 17 plan 01 deliverable. Every test from that point on ran in isolation without developer thought. No "I accidentally touched ~/.joy/" incidents after.
+
+### What Was Inefficient
+
+- **v1.2 REQUIREMENTS.md was never deleted at v1.2 close:** The v1.2 milestone was "shipped" but the REQUIREMENTS.md cleanup step was skipped. This left both v1.2 requirements (unchecked, but already delivered) and future v1.3 requirements in the same file for weeks. Cleanup happened at v1.3 close instead.
+- **Pre-existing test failures accumulated silently:** test_propagation.py::TestTerminalAutoRemove and several test_sync.py terminal tests reference non-existent methods. These were noted as "pre-existing" in every Phase 17 summary, but never addressed. They're now explicitly tracked as tech debt.
+- **audit-open gsd-tools bug:** The pre-close artifact audit crashed (`output is not defined` in gsd-tools.cjs). The audit had to be done manually instead. Bug should be filed.
+
+### Patterns Established
+
+- **`clear_selection()` (cursor=-1) for sync no-match:** All three panes follow the same contract — if sync finds no related item, cursor is cleared; the pane becomes unfiltered and all items are independently openable
+- **DISPATCH table per kind:** `dispatch.py` holds a `DISPATCH` dict keyed by kind string, each entry a `KindDispatch(open_fn, create_fn, label)` — adding a new kind requires only one dict entry
+- **Virtual row assembly in ProjectDetail:** REPO and TERMINALS are synthesized at render time from `project.repo` and `project.iterm_tab_id`; resolver worktrees come from RelationshipIndex — none mutate project data
+- **Session-scoped autouse fixture for all store paths:** Single fixture in conftest.py patches JOY_DIR, PROJECTS_PATH, CONFIG_PATH, REPOS_PATH, ARCHIVE_PATH — zero per-test overhead, guaranteed isolation
+
+### Key Lessons
+
+1. **Close milestones completely.** Skipping REQUIREMENTS.md deletion at v1.2 close created confusing state that persisted for a full week. The five minutes to run `git rm` is worth it every time.
+2. **Quick-task sprints need explicit milestone scoping.** v1.3 was mostly quick tasks, but they weren't formally scoped to v1.3 during execution. Retroactive attribution at milestone close works but costs more effort than tagging tasks as you go.
+3. **Reverting fast is a feature, not a failure.** The dimmed-state → clear_selection() flip happened within the same sprint. Shipping a bad pattern and reverting it the same day is healthy — it means the feedback loop is tight.
+4. **Pre-existing test failures need a plan, not just documentation.** Noting "pre-existing" in every summary is better than nothing, but the failures don't go away by themselves. The next milestone should include an explicit cleanup task.
+
+### Cost Observations
+
+- Model mix: ~70% sonnet (quick tasks), ~30% opus (dispatch/UOV design)
+- Sessions: 7 days (2026-04-15 to 2026-04-22), ~105 commits
+- Notable: Highest quick-task density of any milestone (21 quick tasks vs. 1 formal phase); demonstrates the project has shifted from greenfield build to iterative refinement
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -116,13 +162,17 @@
 |-----------|----------|--------|------------|
 | v1.0 MVP | 3 days | 5 | First milestone — baseline established |
 | v1.1 Workspace Intelligence | 3 days | 8 | Parallel phase execution (11+12); slow-test marker convention added |
+| v1.2 Cross-Pane Intelligence | 1 day | 3 | Tight dependency chain; milestone close was incomplete (REQUIREMENTS.md not deleted) |
+| v1.3 Unified Object View | 7 days | 1 + 21 quick tasks | Polish sprint pattern; quick-task velocity high; test isolation fixture established |
 
 ### Cumulative Quality
 
-| Milestone | Tests (fast) | New Dependencies | Commits |
-|-----------|-------------|-----------------|---------|
-| v1.0 MVP | 131 | textual, tomli_w, pytest-asyncio | ~50 |
-| v1.1 Workspace Intelligence | 276 | iterm2>=2.15 | 158 |
+| Milestone | Src LOC | Tests (fast) | New Dependencies | Commits |
+|-----------|---------|-------------|-----------------|---------|
+| v1.0 MVP | ~3,641 | 131 | textual, tomli_w, pytest-asyncio | ~50 |
+| v1.1 Workspace Intelligence | 3,606 | 276 | iterm2>=2.15 | 158 |
+| v1.2 Cross-Pane Intelligence | ~5,500 | ~300 | — | ~60 |
+| v1.3 Unified Object View | 6,180 | ~320 | — | ~105 |
 
 ### Top Lessons (Verified Across Milestones)
 
@@ -130,3 +180,5 @@
 2. Async UI frameworks require explicit post-mutation focus management — plan for it from the first TUI phase
 3. Graceful degradation for optional integrations (iTerm2, gh, glab) must be specced in success criteria, not discovered in UAT
 4. Mark slow tests at the phase that creates them — accumulated test debt compounds silently and wastes every dev cycle until addressed
+5. Close milestones completely — skipping cleanup steps (REQUIREMENTS.md, git tag) creates confusing state that costs more to untangle later than to do right the first time
+6. Quick-task sprints are an efficient pattern for iterative polish, but need explicit milestone scoping to avoid retroactive attribution debt

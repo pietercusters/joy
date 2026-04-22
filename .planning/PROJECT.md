@@ -2,9 +2,9 @@
 
 ## What This Is
 
-`joy` is a keyboard-driven Python TUI for managing coding project artifacts. It gives developers a real-time workspace dashboard — all objects related to a project (branches, MRs, tickets, worktrees, notes, agents, and more) visible at a glance, plus live git worktree status, MR/CI badges, and active iTerm2 sessions. Any artifact is openable with a single keystroke. Installable globally via `uv tool install git+<repo>`, configured per-machine in `~/.joy`.
+`joy` is a keyboard-driven Python TUI for managing coding project artifacts. It gives developers a real-time workspace dashboard — all objects related to a project (branches, MRs, tickets, worktrees, notes, agents, and more) visible at a glance, plus live git worktree status, MR/CI badges, active iTerm2 sessions, and cross-pane intelligence that links worktrees and terminals to their project. Any artifact is openable with a single keystroke. Installable globally via `uv tool install git+<repo>`, configured per-machine in `~/.joy`.
 
-v1.0 delivered the core artifact launcher. v1.1 transformed it into a live workspace dashboard with real-time git, MR/CI, and terminal state.
+v1.0 delivered the core artifact launcher. v1.1 transformed it into a live workspace dashboard with real-time git, MR/CI, and terminal state. v1.2 added cross-pane relationship intelligence (badge counts, bidirectional sync, auto-propagation). v1.3 unified the detail view and established a consistent per-kind keystroke dispatch table.
 
 ## Core Value
 
@@ -44,6 +44,21 @@ Every artifact for the active project, openable instantly from one keyboard-driv
 - ✓ iTerm2 terminal pane: live session list with Claude agent detection, Enter to focus — v1.1
 - ✓ Projects grouped by registered repo in project pane; unmatched projects in "Other" — v1.1
 - ✓ README Prerequisites section: iTerm2 Python API, shell integration, gh, glab — v1.1
+- ✓ RelationshipIndex: bidirectional Project↔Worktree and Project↔Agent matching — v1.2
+- ✓ Cursor identity preservation (repo+branch / session_name) across DOM rebuilds — v1.2
+- ✓ Live badge counts on ProjectRow (worktree count + agent count) updating per refresh — v1.2
+- ✓ All 6 cross-pane sync directions (project↔worktree↔agent), `x` toggle, footer hint — v1.2
+- ✓ MR auto-add propagation (URL-deduped) + agent stale marking/clearing — v1.2
+- ✓ Worktree auto-remove after 2+ consecutive missing refreshes — v1.2
+- ✓ ProjectDetail unified view: virtual rows for REPO, TERMINALS, resolver worktrees alongside stored objects — v1.3
+- ✓ Per-kind DISPATCH table routes all quick-open shortcuts — no scattered if/else — v1.3
+- ✓ REPO virtual row: `r` copies repo name or prompts assignment — v1.3
+- ✓ Test isolation: autouse session fixture patches all ~/.joy/ paths to tmp dir — v1.3
+- ✓ iTerm2 tab-close on project delete/archive; tabs only via explicit `h` press — v1.3
+- ✓ clear_selection() on sync no-match (cursor=-1); unlinked items remain fully openable — v1.3
+- ✓ Project archive/unarchive: `a`/`A` bindings, archive.toml cold storage, ArchiveBrowserModal — v1.3
+- ✓ Project list icon ribbon: status dot (g cycles idle/prio/hold), 6-icon presence ribbon, MR strip — v1.3
+- ✓ New-project modal: single screen with name input, optional repo ListView, branch ListView — v1.3
 
 ### Active
 
@@ -59,6 +74,10 @@ Every artifact for the active project, openable instantly from one keyboard-driv
 - Object reordering (J/K) — deferred per D-13; not worth complexity for personal use case
 - Configurable keybindings — ship opinionated defaults; premature complexity
 - New project from discovered worktree — dropped (FLOW-03); manual project creation is sufficient
+- Dim non-matching rows in sync — user explicitly excluded; spatial memory preserved
+- MR auto-remove on PR close — ambiguous semantics; auto-add only
+- Sync toggle persists across restarts (SYNC-10) — ephemeral is fine
+- Real-time file watching on ~/.joy/ TOML (PERF-01) — 30s refresh sufficient
 
 ## Context
 
@@ -66,9 +85,11 @@ Every artifact for the active project, openable instantly from one keyboard-driv
 - macOS-only: leverages iTerm2 (Python API + AppleScript), Obsidian URI scheme, desktop app URL handlers
 - v1.0 shipped 2026-04-12: 5 phases, 15 plans, ~3,641 LOC Python, 131 tests
 - v1.1 shipped 2026-04-14: 8 phases, 19 plans, 3,606 src LOC + 5,883 test LOC, 276 fast tests passing
+- v1.2 shipped 2026-04-15: 3 phases, 8 plans, cross-pane intelligence
+- v1.3 shipped 2026-04-22: 1 phase (17) + 21 quick tasks, 6,180 src LOC + 7,923 test LOC
 - Tech stack: Python 3.11+, Textual 8.x, tomllib (stdlib), tomli_w, iterm2>=2.15 — minimal dependencies
-- Data format: TOML in `~/.joy/` — human-editable, repos stored in separate `repos.toml`
-- New in v1.1: iterm2 Python package added for terminal pane; gh/glab CLIs required at runtime (not installed dependencies)
+- Data format: TOML in `~/.joy/` — human-editable; repos.toml, archive.toml added in v1.1/v1.3
+- Pre-existing test failures: test_propagation.py::TestTerminalAutoRemove (references non-existent method), test_sync.py terminal sync (4 tests) — known tech debt
 
 ## Constraints
 
@@ -98,6 +119,12 @@ Every artifact for the active project, openable instantly from one keyboard-driv
 | cursor/_rows/--highlight pattern in panes | Consistent cursor pattern replicated across WorktreePane, TerminalPane, ProjectList | ✓ Good — convention |
 | Dropped FLOW-03 (new-project-from-worktree) | Manual project creation sufficient; auto-create from worktree adds scope without clear value | ✓ Good — D-03 |
 | Slow test exclusion via pytest.mark.slow | TUI/filter tests take ~240s; exclude by default, run with -m slow when needed | ✓ Good — dev velocity |
+| ArchivedProject wraps Project + archived_at | archive.toml uses keyed schema; object stripping is caller responsibility | ✓ Good — clean separation |
+| Tab creation on explicit h-key only | Auto-sync tab creation removed — user controls when tabs exist | ✓ Good — v1.3 D-01 |
+| clear_selection() replaces dimmed state | Unlinked items remain fully openable; no confusing disabled state | ✓ Good — v1.3 D-02 |
+| DISPATCH table per kind in dispatch.py | Keystroke routing as data (4-state per kind) eliminates app.py if/else sprawl | ✓ Good — v1.3 D-03 |
+| Virtual rows in ProjectDetail | REPO, TERMINALS, resolver worktrees assembled at render time — no persistence mutation | ✓ Good — v1.3 D-04 |
+| Session-scoped fixture for test isolation | Patches all 5 ~/.joy/ constants once per session; no per-test overhead | ✓ Good — v1.3 D-05 |
 
 ## Evolution
 
@@ -108,4 +135,4 @@ Every artifact for the active project, openable instantly from one keyboard-driv
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-16 after Phase 17 complete — iTerm2 integration bugs fixed (auto-sync removed, tab close on delete/archive, tab focus on h-key creation)*
+*Last updated: 2026-04-22 after v1.3 milestone — Unified Object View, DISPATCH table, iTerm2 tab hardening, icon ribbon, archive browser, test isolation*
