@@ -374,6 +374,7 @@ class ProjectList(Widget, can_focus=True):
         # Save cursor identity before DOM rebuild
         saved_name: str | None = None
         saved_index = self._cursor
+        had_rows_before = len(self._rows) > 0
         if 0 <= self._cursor < len(self._rows):
             saved_name = self._rows[self._cursor].project.name
 
@@ -423,9 +424,14 @@ class ProjectList(Widget, can_focus=True):
                     break
             else:
                 self._cursor = min(saved_index, len(new_rows) - 1)
-        elif new_rows:
+        elif new_rows and not had_rows_before and saved_index == -1:
+            # First-time population: auto-select first item
             self._cursor = 0
+        elif new_rows and saved_index >= 0:
+            # Had cursor but identity lost: clamp to valid range
+            self._cursor = min(saved_index, len(new_rows) - 1)
         else:
+            # Preserve cleared selection (-1) or empty
             self._cursor = -1
         self._update_highlight()
 
