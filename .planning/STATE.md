@@ -73,9 +73,15 @@ Known tech debt for next milestone:
 - test_propagation.py::TestTerminalAutoRemove (6 tests) — references non-existent JoyApp._propagate_terminal_auto_remove
 - test_sync.py (4 tests) — terminal sync / resolver returns empty list for terminals
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260423-k0b | bug: upon refresh, some panes shift focus to the first item, while they should keep focus on the item that was selected before the refresh (if any) | 2026-04-23 | ddcbcab | [260423-k0b-bug-upon-refresh-some-panes-shift-focus-](./quick/260423-k0b-bug-upon-refresh-some-panes-shift-focus-/) |
+
 ## Session Continuity
 
 Last session: 2026-04-22
 Stopped at: v1.3 milestone archived
-Last activity: 2026-04-22 — v1.3 milestone complete
+Last activity: 2026-04-23 - Completed quick task 260423-k0b: bug: upon refresh, some panes shift focus to the first item, while they should keep focus on the item that was selected before the refresh (if any)
 Resume: /gsd-new-milestone to start v1.4 planning
