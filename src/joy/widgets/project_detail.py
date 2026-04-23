@@ -171,6 +171,13 @@ class ProjectDetail(Widget, can_focus=True):
             return
         scroll = self.query_one("#detail-scroll", _DetailScroll)
 
+        # Save cursor identity before DOM rebuild (skip when initial_cursor overrides)
+        saved_identity: tuple[PresetKind, str] | None = None
+        saved_index = self._cursor
+        if initial_cursor is None and 0 <= self._cursor < len(self._rows):
+            item = self._rows[self._cursor].item
+            saved_identity = (item.kind, item.value)
+
         # Clear existing content and reset readonly sentinel
         scroll.remove_children()
         self._readonly_items.clear()
@@ -203,10 +210,20 @@ class ProjectDetail(Widget, can_focus=True):
                 row_index += 1
 
         self._rows = new_rows
+        # Restore cursor by identity match (same pattern as TerminalPane/WorktreePane)
         if initial_cursor is not None:
             self._cursor = max(0, min(initial_cursor, len(new_rows) - 1)) if new_rows else -1
+        elif saved_identity is not None and new_rows:
+            for i, row in enumerate(new_rows):
+                if (row.item.kind, row.item.value) == saved_identity:
+                    self._cursor = i
+                    break
+            else:
+                self._cursor = min(saved_index, len(new_rows) - 1)
+        elif new_rows:
+            self._cursor = 0
         else:
-            self._cursor = 0 if new_rows else -1
+            self._cursor = -1
         self._update_highlight()
 
     def _update_highlight(self) -> None:
