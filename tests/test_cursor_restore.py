@@ -253,3 +253,68 @@ def test_project_detail_initial_cursor_takes_precedence():
             assert detail._cursor == 0, (
                 f"Expected cursor=0 (initial_cursor override), got {detail._cursor}"
             )
+
+    asyncio.run(_run())
+
+
+# ---------------------------------------------------------------------------
+# No-selection (cleared selection) preservation tests
+# ---------------------------------------------------------------------------
+
+
+def test_project_list_preserves_cleared_selection():
+    """After clear_selection (cursor=-1 with rows present), set_projects
+    must preserve cursor=-1 -- NOT jump to 0."""
+    from textual.app import App, ComposeResult
+
+    class _TestApp(App):
+        def compose(self) -> ComposeResult:
+            yield ProjectList(id="project-list")
+
+    async def _run():
+        app = _TestApp()
+        async with app.run_test() as pilot:
+            plist = app.query_one(ProjectList)
+            projects = _make_projects("alpha", "beta", "gamma")
+            plist.set_projects(projects)
+            await pilot.pause(0.1)
+            assert plist._cursor == 0, f"First-time population should start at 0, got {plist._cursor}"
+            # Simulate clear_selection (as done by sync no-match)
+            plist._cursor = -1
+            plist._update_highlight()
+            assert plist._cursor == -1
+            # Refresh with same list
+            plist.set_projects(list(projects))
+            await pilot.pause(0.1)
+            assert plist._cursor == -1, f"Expected cursor=-1 (cleared preserved), got {plist._cursor}"
+
+    asyncio.run(_run())
+
+
+def test_project_detail_preserves_cleared_selection():
+    """After clear_selection (cursor=-1 with rows present), set_project
+    must preserve cursor=-1 -- NOT jump to 0."""
+    from textual.app import App, ComposeResult
+
+    class _TestApp(App):
+        def compose(self) -> ComposeResult:
+            yield ProjectDetail(id="project-detail")
+
+    async def _run():
+        app = _TestApp()
+        async with app.run_test() as pilot:
+            detail = app.query_one(ProjectDetail)
+            project = _make_detail_project()
+            detail.set_project(project)
+            await pilot.pause(0.1)
+            assert detail._cursor == 0, f"First-time population should start at 0, got {detail._cursor}"
+            # Simulate clear_selection
+            detail._cursor = -1
+            detail._update_highlight()
+            assert detail._cursor == -1
+            # Refresh with same project
+            detail.set_project(project)
+            await pilot.pause(0.1)
+            assert detail._cursor == -1, f"Expected cursor=-1 (cleared preserved), got {detail._cursor}"
+
+    asyncio.run(_run())
