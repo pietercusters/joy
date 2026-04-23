@@ -371,6 +371,12 @@ class ProjectList(Widget, can_focus=True):
             # Scroll container not yet mounted -- reschedule
             self.call_after_refresh(lambda: self._rebuild(gen))
             return
+        # Save cursor identity before DOM rebuild
+        saved_name: str | None = None
+        saved_index = self._cursor
+        if 0 <= self._cursor < len(self._rows):
+            saved_name = self._rows[self._cursor].project.name
+
         scroll.remove_children()
 
         # Group projects by repo
@@ -409,7 +415,18 @@ class ProjectList(Widget, can_focus=True):
                 new_rows.append(row)
 
         self._rows = new_rows
-        self._cursor = 0 if new_rows else -1
+        # Restore cursor by identity match (same pattern as TerminalPane/WorktreePane)
+        if saved_name is not None and new_rows:
+            for i, row in enumerate(new_rows):
+                if row.project.name == saved_name:
+                    self._cursor = i
+                    break
+            else:
+                self._cursor = min(saved_index, len(new_rows) - 1)
+        elif new_rows:
+            self._cursor = 0
+        else:
+            self._cursor = -1
         self._update_highlight()
 
     def _update_highlight(self) -> None:
