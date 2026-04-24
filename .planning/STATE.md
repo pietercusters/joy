@@ -73,9 +73,16 @@ Known tech debt for next milestone:
 - test_propagation.py::TestTerminalAutoRemove (6 tests) — references non-existent JoyApp._propagate_terminal_auto_remove
 - test_sync.py (4 tests) — terminal sync / resolver returns empty list for terminals
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260423-k0b | bug: upon refresh, some panes shift focus to the first item, while they should keep focus on the item that was selected before the refresh (if any) | 2026-04-23 | ddcbcab | [260423-k0b-bug-upon-refresh-some-panes-shift-focus-](./quick/260423-k0b-bug-upon-refresh-some-panes-shift-focus-/) |
+| 260423-kd7 | fix: preserve no-selection state and all cursor positions across refresh in all panes | 2026-04-23 | 32824e5 | [260423-kd7-fix-preserve-no-selection-state-and-all-](./quick/260423-kd7-fix-preserve-no-selection-state-and-all-/) |
+
 ## Session Continuity
 
 Last session: 2026-04-22
 Stopped at: v1.3 milestone archived
-Last activity: 2026-04-22 — v1.3 milestone complete
+Last activity: 2026-04-24 - Shipped cursor fix PRs — PR #12
 Resume: /gsd-new-milestone to start v1.4 planning
