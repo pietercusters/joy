@@ -84,5 +84,5 @@ Known tech debt for next milestone:
 
 Last session: 2026-04-22
 Stopped at: v1.3 milestone archived
-Last activity: 2026-04-23 - Completed quick task 260423-kd7: fix: preserve no-selection state and all cursor positions across refresh in all panes
+Last activity: 2026-04-24 - Shipped cursor fix PRs — PR #12
 Resume: /gsd-new-milestone to start v1.4 planning
