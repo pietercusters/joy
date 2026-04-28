@@ -102,24 +102,26 @@ class FakeProjectList(FakeSyncablePane):
 
 
 def _make_project_with_worktree(
-    name: str, repo: str, wt_path: str, agents_session: str | None = None
+    name: str, repo: str, wt_path: str, agents_session: str | None = None,
+    iterm_tab_id: str | None = None,
 ) -> Project:
     objects = [ObjectItem(kind=PresetKind.WORKTREE, value=wt_path, label="wt")]
     if agents_session is not None:
         objects.append(ObjectItem(kind=PresetKind.TERMINALS, value=agents_session, label="agents"))
-    return Project(name=name, repo=repo, objects=objects)
+    return Project(name=name, repo=repo, objects=objects, iterm_tab_id=iterm_tab_id)
 
 
 def _make_worktree(repo_name: str, branch: str, path: str) -> WorktreeInfo:
     return WorktreeInfo(repo_name=repo_name, branch=branch, path=path)
 
 
-def _make_session(session_id: str, session_name: str) -> TerminalSession:
+def _make_session(session_id: str, session_name: str, tab_id: str = "") -> TerminalSession:
     return TerminalSession(
         session_id=session_id,
         session_name=session_name,
         foreground_process="zsh",
         cwd="/tmp",
+        tab_id=tab_id,
     )
 
 
@@ -179,8 +181,9 @@ def test_sync_project_to_terminal():
         name="myproject",
         repo="myrepo",
         objects=[ObjectItem(kind=PresetKind.TERMINALS, value="myrepo-agents", label="agents")],
+        iterm_tab_id="tab1",
     )
-    session = _make_session("s1", "myrepo-agents")
+    session = _make_session("s1", "myrepo-agents", tab_id="tab1")
     index = compute_relationships([proj], [], [session], [])
 
     # Build fake pane: 3 rows, target at index 1
@@ -252,10 +255,11 @@ def test_sync_worktree_to_terminal():
     """
     # Project owns both a worktree and an agent session
     proj = _make_project_with_worktree(
-        "myproject", "myrepo", "/tmp/wt-feat", agents_session="myrepo-agents"
+        "myproject", "myrepo", "/tmp/wt-feat", agents_session="myrepo-agents",
+        iterm_tab_id="tab1",
     )
     wt = _make_worktree("myrepo", "feat", "/tmp/wt-feat")
-    session = _make_session("s1", "myrepo-agents")
+    session = _make_session("s1", "myrepo-agents", tab_id="tab1")
     index = compute_relationships([proj], [wt], [session], [])
 
     # Build terminal pane: 3 rows, target at index 1
@@ -288,8 +292,9 @@ def test_sync_agent_to_project():
         name="myproject",
         repo="myrepo",
         objects=[ObjectItem(kind=PresetKind.TERMINALS, value="myrepo-agents", label="agents")],
+        iterm_tab_id="tab1",
     )
-    session = _make_session("s1", "myrepo-agents")
+    session = _make_session("s1", "myrepo-agents", tab_id="tab1")
     index = compute_relationships([proj], [], [session], [])
 
     # Build fake project list: 3 rows, target at index 1
@@ -324,10 +329,11 @@ def test_sync_agent_to_worktree():
     Mirror of SYNC-01 but triggered from agent->worktree path.
     """
     proj = _make_project_with_worktree(
-        "myproject", "myrepo", "/tmp/wt-feat", agents_session="myrepo-agents"
+        "myproject", "myrepo", "/tmp/wt-feat", agents_session="myrepo-agents",
+        iterm_tab_id="tab1",
     )
     wt = _make_worktree("myrepo", "feat", "/tmp/wt-feat")
-    session = _make_session("s1", "myrepo-agents")
+    session = _make_session("s1", "myrepo-agents", tab_id="tab1")
     index = compute_relationships([proj], [wt], [session], [])
 
     # Build fake worktree pane: 3 rows, target at index 1
