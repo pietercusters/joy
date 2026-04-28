@@ -1,4 +1,4 @@
-"""Left pane: project list widget with keyboard navigation and repo grouping."""
+"""Left pane: project list widget with keyboard navigation and status grouping."""
 from __future__ import annotations
 
 import re
@@ -41,12 +41,12 @@ class _ProjectScroll(VerticalScroll, can_focus=False):
 
 
 # ---------------------------------------------------------------------------
-# GroupHeader: repo section header (duplicated to avoid cross-widget coupling)
+# GroupHeader: section header (duplicated to avoid cross-widget coupling)
 # ---------------------------------------------------------------------------
 
 
 class GroupHeader(Static):
-    """Repo section header for project grouping."""
+    """Section header for project grouping."""
 
     DEFAULT_CSS = """
     GroupHeader {
@@ -82,7 +82,7 @@ class ProjectRow(Static):
         self._has: dict[str, bool] = self._compute_has(project)
         self._wt_count: int = 0
         self._agent_count: int = 0
-        content = self.build_content(project, avail_width, mr_info=None, has=self._has, wt_count=0, agent_count=0)
+        content = self.build_content(project, avail_width, mr_info=None, has=self._has, wt_count=0, agent_count=0, repo_name=project.repo)
         super().__init__(content, **kwargs)
 
     @staticmethod
@@ -106,6 +106,7 @@ class ProjectRow(Static):
         has: dict[str, bool],
         wt_count: int = 0,
         agent_count: int = 0,
+        repo_name: str | None = None,
     ) -> Text:
         """Build a single-line Rich.Text row:
         [status-dot] [space] [name...padding...] [MR-strip] [space] [icon-ribbon]
@@ -163,14 +164,21 @@ class ProjectRow(Static):
             else:
                 ribbon.append(icon, style="grey50 dim")
 
-        # Compute fixed right width: mr_strip_len + separator + ribbon
+        # Repo label (rendered dim between MR strip and ribbon)
+        repo_label = Text()
+        if repo_name:
+            repo_label.append(repo_name, style="dim")
+            repo_label.append(" ")
+
+        # Compute fixed right width: mr_strip_len + repo_label_len + separator + ribbon
         # Ribbon is 6 icons + 5 spaces between them = 11 chars.
         # When mr_info is present, mr_strip already ends with a trailing space so no extra
         # separator is needed. When absent, we add 1 space before the ribbon.
         mr_plain_len = len(mr_strip.plain)
+        repo_label_len = len(repo_label.plain)
         separator = 0 if mr_info is not None else 1
         ribbon_width = 2 * len(ribbon_icons) - 1  # icons + single spaces between them
-        fixed_right = mr_plain_len + separator + ribbon_width
+        fixed_right = mr_plain_len + repo_label_len + separator + ribbon_width
 
         # Fixed left: status-dot (1) + space (1) = 2
         name_budget = avail_width - 2 - fixed_right
@@ -190,6 +198,10 @@ class ProjectRow(Static):
             t.append_text(mr_strip)
         else:
             t.append(" ")  # single space before ribbon when no MR strip
+
+        # Repo label (if any)
+        if repo_label.plain:
+            t.append_text(repo_label)
 
         # Ribbon
         t.append_text(ribbon)
@@ -212,6 +224,7 @@ class ProjectRow(Static):
         self.update(self.build_content(
             self.project, self._avail_width, mr_info, self._has,
             wt_count=wt_count, agent_count=agent_count,
+            repo_name=self.project.repo,
         ))
 
 
@@ -278,17 +291,17 @@ def pick_best_mr(
 
 
 # ---------------------------------------------------------------------------
-# ProjectList: main widget with cursor navigation and repo grouping
+# ProjectList: main widget with cursor navigation and status grouping
 # ---------------------------------------------------------------------------
 
 
 class ProjectList(Widget, can_focus=True):
-    """Left pane: project list grouped by repo with cursor navigation.
+    """Left pane: project list grouped by status with cursor navigation.
 
     Replaces the old ListView-based approach with VerticalScroll + GroupHeader
     + cursor/_rows/--highlight pattern (same as ProjectDetail, TerminalPane,
-    WorktreePane). Projects are grouped under repo headers; unmatched projects
-    appear under 'Other' (shown last).
+    WorktreePane). Projects are grouped under status headers (Active, Blocked,
+    Idle); repo name is shown inline on each row.
     """
 
     BINDINGS = [
@@ -380,37 +393,36 @@ class ProjectList(Widget, can_focus=True):
 
         scroll.remove_children()
 
-        # Group projects by repo
-        repo_names = {r.name for r in self._repos} if self._repos else set()
-        grouped: dict[str, list[Project]] = {}
-        other: list[Project] = []
+        # Status group definitions: internal status -> display header
+        STATUS_ORDER = [
+            ("prio", "Active"),
+            ("hold", "Blocked"),
+            ("idle", "Idle"),
+        ]
+
+        # Bucket projects by status
+        status_buckets: dict[str, list[Project]] = {s: [] for s, _ in STATUS_ORDER}
         for p in self._projects:
-            if p.repo and p.repo in repo_names:
-                grouped.setdefault(p.repo, []).append(p)
-            else:
-                other.append(p)
+            bucket = p.status if p.status in status_buckets else "idle"
+            status_buckets[bucket].append(p)
+
+        # Sort each bucket alphabetically by name
+        for bucket in status_buckets.values():
+            bucket.sort(key=lambda p: p.name.lower())
 
         new_rows: list[ProjectRow] = []
         avail_width = self._get_available_width()
         first_group = True
 
-        # Mount repo groups alphabetically (D-09)
-        for repo_name in sorted(grouped, key=str.lower):
+        for status_key, display_name in STATUS_ORDER:
+            projects_in_group = status_buckets[status_key]
+            if not projects_in_group:
+                continue
             if not first_group:
                 scroll.mount(Static("", classes="section-spacer"))
             first_group = False
-            scroll.mount(GroupHeader(repo_name))
-            for p in grouped[repo_name]:
-                row = ProjectRow(p, avail_width=avail_width)
-                scroll.mount(row)
-                new_rows.append(row)
-
-        # Mount "Other" group last (D-09)
-        if other:
-            if grouped:  # only show "Other" header when there are also repo groups
-                scroll.mount(Static("", classes="section-spacer"))
-                scroll.mount(GroupHeader("Other"))
-            for p in other:
+            scroll.mount(GroupHeader(display_name))
+            for p in projects_in_group:
                 row = ProjectRow(p, avail_width=avail_width)
                 scroll.mount(row)
                 new_rows.append(row)
@@ -745,10 +757,4 @@ class ProjectList(Widget, can_focus=True):
         # Unknown status (e.g. hand-edited TOML) resets to "idle" on first g press
         project.status = cycle.get(project.status, "idle")
         self.app._save_projects_bg()
-        # Re-render just this row
-        row = self._rows[self._cursor]
-        row._has = ProjectRow._compute_has(project)
-        row.update(ProjectRow.build_content(
-            project, row._avail_width, row._mr_info, row._has,
-            wt_count=row._wt_count, agent_count=row._agent_count,
-        ))
+        self.set_projects(list(self.app._projects), self._repos)
