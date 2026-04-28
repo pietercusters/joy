@@ -10,7 +10,7 @@ from datetime import date
 
 import pytest
 
-from joy.models import MRInfo, ObjectItem, PresetKind, Project
+from joy.models import Config, MRInfo, ObjectItem, PresetKind, Project
 
 
 # ---------------------------------------------------------------------------
@@ -41,9 +41,10 @@ def _mr_data(repo: str, branch: str, url: str, number: int) -> dict:
 class _PropContext:
     """Minimal context that mimics the JoyApp interface used by propagation methods."""
 
-    def __init__(self, projects: list[Project], sessions: list | None = None) -> None:
+    def __init__(self, projects: list[Project], sessions: list | None = None, config: Config | None = None) -> None:
         self._projects = projects
         self._current_sessions = sessions or []
+        self._config = config if config is not None else Config()
 
 
 # ---------------------------------------------------------------------------
@@ -77,6 +78,20 @@ class TestMRAutoAdd:
         assert new_obj.value == "https://github.com/x/y/pull/42"
         assert new_obj.label == "PR #42"
         assert new_obj.open_by_default is False
+
+    def test_mr_auto_add_respects_default_open_kinds(self) -> None:
+        """MR auto-add sets open_by_default=True when 'mr' in default_open_kinds."""
+        project = _project_with_branch("joy", "feat-1")
+        config = Config(default_open_kinds=["mr", "worktree"])
+        ctx = _PropContext([project], config=config)
+        mr = _mr_data("joy", "feat-1", "https://github.com/x/y/pull/42", 42)
+
+        messages = _get_propagate_mr(ctx)(mr)
+
+        assert len(project.objects) == 2
+        new_obj = project.objects[-1]
+        assert new_obj.kind == PresetKind.MR
+        assert new_obj.open_by_default is True
 
     def test_mr_auto_add_returns_message(self) -> None:
         """A message is returned when an MR is added."""
