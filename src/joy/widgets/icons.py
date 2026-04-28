@@ -4,7 +4,7 @@
 ICON_MR_OPEN    = "\uea64"   # nf-cod-git_pull_request
 ICON_MR_DRAFT   = "\uebdb"   # nf-cod-git_pull_request_draft
 ICON_MR_CLOSED  = "\uea65"   # nf-cod-git_pull_request_closed
-ICON_MR_MERGED  = "\uf4c9"   # nf-oct-git_merge
+ICON_MR_MERGED  = "\uea64"   # same as ICON_MR_OPEN, differentiated by purple style
 ICON_CI_PASS    = "\uf00c"   # nf-fa-check
 ICON_CI_FAIL    = "\uf00d"   # nf-fa-times
 ICON_CI_PENDING = "\uf192"   # nf-fa-dot_circle_o
