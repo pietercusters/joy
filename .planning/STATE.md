@@ -81,10 +81,11 @@ Known tech debt for next milestone:
 | 260423-kd7 | fix: preserve no-selection state and all cursor positions across refresh in all panes | 2026-04-23 | 32824e5 | [260423-kd7-fix-preserve-no-selection-state-and-all-](./quick/260423-kd7-fix-preserve-no-selection-state-and-all-/) |
 | 260428-gka | remove the tech debt | 2026-04-28 | 5cc7ef9 | [260428-gka-remove-the-tech-debt](./quick/260428-gka-remove-the-tech-debt/) |
 | 260428-gxw | refactor project list: status grouping, inline repo, remove repo headers | 2026-04-28 | 534eb55 | [260428-gxw-refactor-project-list-status-grouping-in](./quick/260428-gxw-refactor-project-list-status-grouping-in/) |
+| 260428-kxu | add purple merged/closed MR icon and update legend | 2026-04-28 | 845ea9c | [260428-kxu-add-purple-merged-closed-mr-icon-and-upd](./quick/260428-kxu-add-purple-merged-closed-mr-icon-and-upd/) |
 
 ## Session Continuity
 
 Last session: 2026-04-22
 Stopped at: v1.3 milestone archived
-Last activity: 2026-04-28 - Completed quick task 260428-gxw: refactor project list status grouping
+Last activity: 2026-04-28 - Completed quick task 260428-kxu: add purple merged MR icon
 Resume: /gsd-new-milestone to start v1.4 planning
