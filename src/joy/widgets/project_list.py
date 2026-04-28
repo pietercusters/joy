@@ -21,6 +21,7 @@ from joy.widgets.icons import (
     ICON_WORKTREE,
     ICON_MR_OPEN,
     ICON_MR_DRAFT,
+    ICON_MR_MERGED,
     ICON_CI_PASS,
     ICON_CI_FAIL,
     ICON_CI_PENDING,
@@ -127,7 +128,9 @@ class ProjectRow(Static):
         mr_strip = Text()
         if mr_info is not None:
             mr_strip.append(f"!{mr_info.mr_number} ", style="dim")
-            if mr_info.is_draft:
+            if not mr_info.is_open:
+                mr_strip.append(ICON_MR_MERGED, style="purple")
+            elif mr_info.is_draft:
                 mr_strip.append(ICON_MR_DRAFT, style="dim")
             else:
                 mr_strip.append(ICON_MR_OPEN, style="green")
@@ -285,6 +288,7 @@ def pick_best_mr(
                 is_draft=False,
                 ci_status=None,
                 url=best_obj.value,
+                is_open=False,
             )
 
     return None
