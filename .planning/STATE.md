@@ -79,10 +79,11 @@ Known tech debt for next milestone:
 |---|-------------|------|--------|-----------|
 | 260423-k0b | bug: upon refresh, some panes shift focus to the first item, while they should keep focus on the item that was selected before the refresh (if any) | 2026-04-23 | ddcbcab | [260423-k0b-bug-upon-refresh-some-panes-shift-focus-](./quick/260423-k0b-bug-upon-refresh-some-panes-shift-focus-/) |
 | 260423-kd7 | fix: preserve no-selection state and all cursor positions across refresh in all panes | 2026-04-23 | 32824e5 | [260423-kd7-fix-preserve-no-selection-state-and-all-](./quick/260423-kd7-fix-preserve-no-selection-state-and-all-/) |
+| 260428-gka | remove the tech debt | 2026-04-28 | 5cc7ef9 | [260428-gka-remove-the-tech-debt](./quick/260428-gka-remove-the-tech-debt/) |
 
 ## Session Continuity
 
 Last session: 2026-04-22
 Stopped at: v1.3 milestone archived
-Last activity: 2026-04-24 - Shipped cursor fix PRs — PR #12
+Last activity: 2026-04-28 - Completed quick task 260428-gka: remove the tech debt
 Resume: /gsd-new-milestone to start v1.4 planning
