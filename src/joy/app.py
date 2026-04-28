@@ -641,13 +641,11 @@ class JoyApp(App):
         project = detail._project
         if project is None:
             return  # silent no-op: data not loaded yet (D-11)
-        # Collect defaults in semantic group display order (D-06)
-        defaults: list[ObjectItem] = []
-        for _label, kinds in SEMANTIC_GROUPS:
-            for kind in kinds:
-                for item in project.objects:
-                    if item.kind == kind and item.open_by_default:
-                        defaults.append(item)
+        # Collect defaults from detail rows (includes virtual rows) in display order
+        defaults: list[ObjectItem] = [
+            row.item for row in detail._rows
+            if row.item.open_by_default
+        ]
         if not defaults:
             return  # silent no-op: no defaults (D-11)
         self._open_defaults(defaults)

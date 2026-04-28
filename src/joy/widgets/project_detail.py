@@ -133,14 +133,19 @@ class ProjectDetail(Widget, can_focus=True):
         for item in project.objects:
             grouped.setdefault(item.kind, []).append(item)
 
+        # Resolve default_open_kinds from app config for virtual rows
+        default_kinds: list[str] = getattr(getattr(self, "app", None), "_config", None) and self.app._config.default_open_kinds or []
+
         # Synthesize REPO row from project.repo if set
         if project.repo:
-            repo_item = ObjectItem(kind=PresetKind.REPO, value=project.repo, label="")
+            repo_item = ObjectItem(kind=PresetKind.REPO, value=project.repo, label="",
+                                   open_by_default=PresetKind.REPO.value in default_kinds)
             grouped.setdefault(PresetKind.REPO, []).append(repo_item)
 
         # Synthesize TERMINALS row from project.iterm_tab_id if set
         if project.iterm_tab_id:
-            terminals_item = ObjectItem(kind=PresetKind.TERMINALS, value=project.iterm_tab_id, label="")
+            terminals_item = ObjectItem(kind=PresetKind.TERMINALS, value=project.iterm_tab_id, label="",
+                                        open_by_default=PresetKind.TERMINALS.value in default_kinds)
             grouped.setdefault(PresetKind.TERMINALS, []).append(terminals_item)
 
         # Synthesize WORKTREE rows from resolver, deduplicated against stored worktrees
@@ -149,7 +154,8 @@ class ProjectDetail(Widget, can_focus=True):
         }
         for wt in self._resolver_worktrees:
             if wt.path not in stored_wt_paths:
-                virt_item = ObjectItem(kind=PresetKind.WORKTREE, value=wt.path, label=wt.branch)
+                virt_item = ObjectItem(kind=PresetKind.WORKTREE, value=wt.path, label=wt.branch,
+                                       open_by_default=PresetKind.WORKTREE.value in default_kinds)
                 grouped.setdefault(PresetKind.WORKTREE, []).append(virt_item)
                 self._readonly_items.add(id(virt_item))
 
