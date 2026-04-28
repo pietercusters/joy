@@ -1,8 +1,7 @@
-"""Unit tests for propagation logic (MR auto-add, terminal auto-remove).
+"""Unit tests for propagation logic (MR auto-add).
 
 Tests cover:
 - MR auto-add (_propagate_mr_auto_add) (PROP-02)
-- Terminal auto-remove (_propagate_terminal_auto_remove)
 - Immutability invariants (PROP-06, PROP-07, PROP-08)
 """
 from __future__ import annotations
@@ -11,7 +10,7 @@ from datetime import date
 
 import pytest
 
-from joy.models import MRInfo, ObjectItem, PresetKind, Project, TerminalSession
+from joy.models import MRInfo, ObjectItem, PresetKind, Project
 
 
 # ---------------------------------------------------------------------------
@@ -35,19 +34,6 @@ def _mr_data(repo: str, branch: str, url: str, number: int) -> dict:
     }
 
 
-def _sessions(names: list[str]) -> list[TerminalSession]:
-    """Return TerminalSession list with the given session names."""
-    return [
-        TerminalSession(
-            session_id=f"sess-{i}",
-            session_name=name,
-            foreground_process="zsh",
-            cwd="/tmp",
-        )
-        for i, name in enumerate(names)
-    ]
-
-
 # ---------------------------------------------------------------------------
 # Minimal mock context for testing propagation methods
 # ---------------------------------------------------------------------------
@@ -55,7 +41,7 @@ def _sessions(names: list[str]) -> list[TerminalSession]:
 class _PropContext:
     """Minimal context that mimics the JoyApp interface used by propagation methods."""
 
-    def __init__(self, projects: list[Project], sessions: list[TerminalSession] | None = None) -> None:
+    def __init__(self, projects: list[Project], sessions: list | None = None) -> None:
         self._projects = projects
         self._current_sessions = sessions or []
 
@@ -68,12 +54,6 @@ def _get_propagate_mr(ctx: _PropContext):
     """Return bound _propagate_mr_auto_add for ctx."""
     from joy.app import JoyApp  # noqa: PLC0415
     return lambda mr_data: JoyApp._propagate_mr_auto_add(ctx, mr_data)
-
-
-def _get_propagate_terminal_remove(ctx: _PropContext):
-    """Return bound _propagate_terminal_auto_remove for ctx."""
-    from joy.app import JoyApp  # noqa: PLC0415
-    return lambda: JoyApp._propagate_terminal_auto_remove(ctx)
 
 
 # ===========================================================================
@@ -184,106 +164,3 @@ class TestMRAutoAdd:
         ctx = _PropContext([project])
         messages = _get_propagate_mr(ctx)({})
         assert messages == []
-
-
-# ===========================================================================
-# TestTerminalAutoRemove -- tests for _propagate_terminal_auto_remove
-# ===========================================================================
-
-class TestTerminalAutoRemove:
-    """Terminal auto-remove propagation."""
-
-    def test_terminal_removed_when_session_absent(self) -> None:
-        """TERMINALS object removed when session name not in active sessions."""
-        project = Project(
-            name="test",
-            objects=[ObjectItem(kind=PresetKind.TERMINALS, value="claude-work")],
-        )
-        ctx = _PropContext([project], sessions=_sessions(["other-session"]))
-
-        messages = _get_propagate_terminal_remove(ctx)()
-
-        assert len(project.objects) == 0
-        assert len(messages) == 1
-        assert "claude-work" in messages[0]
-
-    def test_terminal_kept_when_session_present(self) -> None:
-        """TERMINALS object kept when session name is in active sessions."""
-        project = Project(
-            name="test",
-            objects=[ObjectItem(kind=PresetKind.TERMINALS, value="claude-work")],
-        )
-        ctx = _PropContext([project], sessions=_sessions(["claude-work"]))
-
-        messages = _get_propagate_terminal_remove(ctx)()
-
-        assert len(project.objects) == 1
-        assert messages == []
-
-    def test_no_removal_when_sessions_empty(self) -> None:
-        """Terminal objects NOT removed when sessions list is empty (timing guard)."""
-        project = Project(
-            name="test",
-            objects=[ObjectItem(kind=PresetKind.TERMINALS, value="claude-work")],
-        )
-        ctx = _PropContext([project], sessions=[])
-
-        messages = _get_propagate_terminal_remove(ctx)()
-
-        # Timing guard: empty sessions = iTerm2 hiccup, skip removal
-        assert len(project.objects) == 1
-        assert messages == []
-
-    def test_multiple_projects_terminals_removed(self) -> None:
-        """Terminal auto-remove applies across all projects."""
-        p1 = Project(
-            name="p1",
-            objects=[ObjectItem(kind=PresetKind.TERMINALS, value="sess-a")],
-        )
-        p2 = Project(
-            name="p2",
-            objects=[ObjectItem(kind=PresetKind.TERMINALS, value="sess-b")],
-        )
-        ctx = _PropContext([p1, p2], sessions=_sessions(["sess-a"]))
-
-        messages = _get_propagate_terminal_remove(ctx)()
-
-        assert len(p1.objects) == 1  # sess-a is active -- kept
-        assert len(p2.objects) == 0  # sess-b is absent -- removed
-        assert len(messages) == 1
-        assert "sess-b" in messages[0]
-
-    def test_non_terminal_objects_not_removed(self) -> None:
-        """BRANCH and MR objects are not affected by terminal auto-remove."""
-        project = Project(
-            name="test",
-            objects=[
-                ObjectItem(kind=PresetKind.BRANCH, value="main"),
-                ObjectItem(kind=PresetKind.MR, value="https://github.com/x/y/pull/1"),
-                ObjectItem(kind=PresetKind.TERMINALS, value="absent-session"),
-            ],
-        )
-        ctx = _PropContext([project], sessions=_sessions(["other"]))
-
-        messages = _get_propagate_terminal_remove(ctx)()
-
-        # Terminal removed but branch and MR kept
-        assert len(project.objects) == 2
-        kinds = {obj.kind for obj in project.objects}
-        assert PresetKind.BRANCH in kinds
-        assert PresetKind.MR in kinds
-        assert PresetKind.TERMINALS not in kinds
-
-    def test_removal_message_includes_project_name(self) -> None:
-        """Removal message includes both session name and project name."""
-        project = Project(
-            name="my-project",
-            objects=[ObjectItem(kind=PresetKind.TERMINALS, value="gone-session")],
-        )
-        ctx = _PropContext([project], sessions=_sessions(["other"]))
-
-        messages = _get_propagate_terminal_remove(ctx)()
-
-        assert len(messages) == 1
-        assert "gone-session" in messages[0]
-        assert "my-project" in messages[0]
