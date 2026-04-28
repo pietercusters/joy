@@ -19,6 +19,7 @@ from joy.widgets.icons import (
     ICON_MR_OPEN,
     ICON_MR_DRAFT,
     ICON_MR_MERGED,
+    ICON_MR_CLOSED,
     ICON_CI_PASS,
     ICON_CI_FAIL,
     ICON_CI_PENDING,
@@ -188,8 +189,10 @@ class WorktreeRow(Static):
         # D-02: MR badges between branch name and dirty/upstream indicators
         if mr_info is not None:
             t.append(f"  !{mr_info.mr_number} ", style="dim")
-            if not mr_info.is_open:
+            if mr_info.state == "merged":
                 t.append(ICON_MR_MERGED, style="purple")
+            elif mr_info.state == "closed":
+                t.append(ICON_MR_CLOSED, style="red")
             elif mr_info.is_draft:
                 t.append(ICON_MR_DRAFT, style="dim")
             else:
