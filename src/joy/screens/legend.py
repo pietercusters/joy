@@ -10,7 +10,7 @@ from textual.widgets import Static
 from joy.widgets.object_row import PRESET_ICONS
 from joy.widgets.icons import (
     ICON_BRANCH, ICON_TICKET, ICON_THREAD, ICON_NOTE, ICON_TERMINAL, ICON_WORKTREE,
-    ICON_MR_OPEN, ICON_MR_DRAFT, ICON_MR_CLOSED,
+    ICON_MR_OPEN, ICON_MR_DRAFT, ICON_MR_CLOSED, ICON_MR_MERGED,
     ICON_CI_PASS, ICON_CI_FAIL, ICON_CI_PENDING,
     ICON_DIRTY, ICON_NO_UPSTREAM,
 )
@@ -38,7 +38,8 @@ _PROJECT_RIBBON: list[tuple[str, str]] = [
 _PROJECT_MR: list[tuple[str, str]] = [
     (f"[green]{ICON_MR_OPEN}[/green]",   "MR open"),
     (f"[dim]{ICON_MR_DRAFT}[/dim]",      "MR draft"),
-    (f"[dim]{ICON_MR_CLOSED}[/dim]",     "MR closed / merged"),
+    (f"[purple]{ICON_MR_MERGED}[/purple]", "MR merged"),
+    (f"[dim]{ICON_MR_CLOSED}[/dim]",       "MR closed"),
     (f"[green]{ICON_CI_PASS}[/green]",   "CI passed"),
     (f"[red]{ICON_CI_FAIL}[/red]",       "CI failed"),
     (f"[yellow]{ICON_CI_PENDING}[/yellow]", "CI pending"),
@@ -68,6 +69,7 @@ _WORKTREE_ICONS: list[tuple[str, str]] = [
     (f"[dim]{ICON_NO_UPSTREAM}[/dim]",         "No upstream remote"),
     (f"[green]{ICON_MR_OPEN}[/green]",         "MR open"),
     (f"[dim]{ICON_MR_DRAFT}[/dim]",            "MR draft"),
+    (f"[purple]{ICON_MR_MERGED}[/purple]",   "MR merged"),
     (f"[green]{ICON_CI_PASS}[/green]",         "CI passed"),
     (f"[red]{ICON_CI_FAIL}[/red]",             "CI failed"),
     (f"[yellow]{ICON_CI_PENDING}[/yellow]",    "CI pending"),
