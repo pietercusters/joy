@@ -163,7 +163,7 @@ class MRInfo:
     is_draft: bool
     ci_status: str | None  # "pass" | "fail" | "pending" | None
     url: str = ""  # Full MR/PR web URL, e.g. https://github.com/x/y/pull/1
-    state: str = "open"  # "open" | "merged" | "closed"
+    is_open: bool = True  # False when MR is closed/merged (stored object, no live API match)
 
 
 @dataclass

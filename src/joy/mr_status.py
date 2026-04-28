@@ -72,9 +72,9 @@ def _fetch_github_mrs(
             "-R",
             repo.remote_url,
             "--json",
-            "number,headRefName,isDraft,statusCheckRollup,url,state",
+            "number,headRefName,isDraft,statusCheckRollup,url",
             "--state",
-            "all",
+            "open",
         ],
         capture_output=True,
         text=True,
@@ -90,14 +90,11 @@ def _fetch_github_mrs(
         branch = pr["headRefName"]
         if branch not in active_branches:
             continue  # Not a current worktree branch -- skip
-        if (repo.name, branch) in out:
-            continue  # Keep newest (first in list from gh)
         out[(repo.name, branch)] = MRInfo(
             mr_number=pr["number"],
             is_draft=pr.get("isDraft", False),
             ci_status=_map_gh_ci_status(pr.get("statusCheckRollup", [])),
             url=pr.get("url", ""),
-            state=_map_gh_state(pr.get("state", "OPEN")),
         )
     return out
 
@@ -123,8 +120,6 @@ def _fetch_gitlab_mrs(
             "json",
             "--per-page",
             "100",
-            "--state",
-            "all",
         ],
         capture_output=True,
         text=True,
@@ -140,15 +135,12 @@ def _fetch_gitlab_mrs(
         branch = mr["source_branch"]
         if branch not in active_branches:
             continue
-        if (repo.name, branch) in out:
-            continue  # Keep newest (first in list from glab)
         ci_status = _fetch_glab_ci_status(repo, branch)
         out[(repo.name, branch)] = MRInfo(
             mr_number=mr["iid"],
             is_draft=mr.get("draft", False),
             ci_status=ci_status,
             url=mr.get("web_url", ""),
-            state=_map_glab_state(mr.get("state", "opened")),
         )
     return out
 
@@ -228,13 +220,3 @@ def _map_glab_ci_status(status: str | None) -> str | None:
     if status == "failed":
         return "fail"
     return None
-
-
-def _map_gh_state(state: str) -> str:
-    """Map GitHub PR state to MRInfo.state. GitHub returns OPEN/MERGED/CLOSED."""
-    return {"MERGED": "merged", "CLOSED": "closed"}.get(state, "open")
-
-
-def _map_glab_state(state: str) -> str:
-    """Map GitLab MR state to MRInfo.state. GitLab returns opened/merged/closed."""
-    return {"merged": "merged", "closed": "closed"}.get(state, "open")
