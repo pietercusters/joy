@@ -354,7 +354,8 @@ class JoyApp(App):
                 if project_list._cursor >= 0 and project_list._cursor < len(project_list._rows):
                     current = project_list._rows[project_list._cursor].project
                     resolver_wts = self._rel_index.worktrees_for(current) if self._rel_index else []
-                    self.query_one(ProjectDetail).set_project(current, resolver_worktrees=resolver_wts)
+                    resolver_terms = self._rel_index.terminals_for(current) if self._rel_index else []
+                    self.query_one(ProjectDetail).set_project(current, resolver_worktrees=resolver_wts, resolver_terminals=resolver_terms)
             finally:
                 self._is_syncing = False
 
@@ -513,7 +514,8 @@ class JoyApp(App):
         if self._is_syncing:
             return
         resolver_wts = self._rel_index.worktrees_for(message.project) if self._rel_index else []
-        self.query_one(ProjectDetail).set_project(message.project, resolver_worktrees=resolver_wts)
+        resolver_terms = self._rel_index.terminals_for(message.project) if self._rel_index else []
+        self.query_one(ProjectDetail).set_project(message.project, resolver_worktrees=resolver_wts, resolver_terminals=resolver_terms)
         if self._sync_enabled and self._rel_index is not None:
             self._sync_from_project(message.project)
 
@@ -571,10 +573,10 @@ class JoyApp(App):
             if project is not None:
                 self.query_one(ProjectList).sync_to(project.name)
                 resolver_wts = self._rel_index.worktrees_for(project)
-                self.query_one(ProjectDetail).set_project(project, resolver_worktrees=resolver_wts)
-                terminals = self._rel_index.terminals_for(project)
-                if terminals:
-                    matched = term_pane.sync_to(terminals[0].session_name)
+                resolver_terms = self._rel_index.terminals_for(project)
+                self.query_one(ProjectDetail).set_project(project, resolver_worktrees=resolver_wts, resolver_terminals=resolver_terms)
+                if resolver_terms:
+                    matched = term_pane.sync_to(resolver_terms[0].session_name)
                     if not matched:
                         term_pane.clear_selection()
                 else:
@@ -608,7 +610,8 @@ class JoyApp(App):
             if project is not None:
                 self.query_one(ProjectList).sync_to(project.name)
                 worktrees = self._rel_index.worktrees_for(project)
-                self.query_one(ProjectDetail).set_project(project, resolver_worktrees=worktrees)
+                terminals = self._rel_index.terminals_for(project)
+                self.query_one(ProjectDetail).set_project(project, resolver_worktrees=worktrees, resolver_terminals=terminals)
                 if worktrees:
                     wt = worktrees[0]
                     matched = wt_pane.sync_to(wt.repo_name, wt.branch)
@@ -628,7 +631,8 @@ class JoyApp(App):
         """When Enter pressed on project, update detail and shift focus (D-04)."""
         detail = self.query_one(ProjectDetail)
         resolver_wts = self._rel_index.worktrees_for(message.project) if self._rel_index else []
-        detail.set_project(message.project, resolver_worktrees=resolver_wts)
+        resolver_terms = self._rel_index.terminals_for(message.project) if self._rel_index else []
+        detail.set_project(message.project, resolver_worktrees=resolver_wts, resolver_terminals=resolver_terms)
         # Focus AFTER the DOM rebuild: set_project defers via call_after_refresh,
         # so focusing before that point lets the rebuild displace focus when
         # children are removed and re-mounted. Scheduling after ensures focus
