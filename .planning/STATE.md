@@ -82,10 +82,11 @@ Known tech debt for next milestone:
 | 260428-gka | remove the tech debt | 2026-04-28 | 5cc7ef9 | [260428-gka-remove-the-tech-debt](./quick/260428-gka-remove-the-tech-debt/) |
 | 260428-gxw | refactor project list: status grouping, inline repo, remove repo headers | 2026-04-28 | 534eb55 | [260428-gxw-refactor-project-list-status-grouping-in](./quick/260428-gxw-refactor-project-list-status-grouping-in/) |
 | 260428-kxu | add purple merged/closed MR icon and update legend | 2026-04-28 | 845ea9c | [260428-kxu-add-purple-merged-closed-mr-icon-and-upd](./quick/260428-kxu-add-purple-merged-closed-mr-icon-and-upd/) |
+| 260428-qtn | auto-set open_by_default on new/linked objects based on default_open_kinds | 2026-04-28 | 91a1eb1 | Verified | [260428-qtn-auto-set-open-by-default-on-new-linked-o](./quick/260428-qtn-auto-set-open-by-default-on-new-linked-o/) |
 
 ## Session Continuity
 
-Last session: 2026-04-22
-Stopped at: v1.3 milestone archived
-Last activity: 2026-04-28 - Completed quick task 260428-kxu: add purple merged MR icon
+Last session: 2026-04-28
+Stopped at: Completed quick task 260428-qtn
+Last activity: 2026-04-28 - Completed quick task 260428-qtn: auto-set open_by_default
 Resume: /gsd-new-milestone to start v1.4 planning
