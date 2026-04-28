@@ -323,7 +323,7 @@ class JoyApp(App):
                     kind=PresetKind.MR,
                     value=mr_info.url,
                     label=f"PR #{mr_info.mr_number}",
-                    open_by_default=False,
+                    open_by_default=PresetKind.MR.value in self._config.default_open_kinds,
                 )
                 project.objects.append(new_mr)
                 messages.append(f"\u2295 Added PR #{mr_info.mr_number} to {project.name}")
@@ -688,7 +688,7 @@ class JoyApp(App):
                 return  # Escape exits loop
             def on_value(value: str | None) -> None:
                 if value is not None:
-                    obj = ObjectItem(kind=preset, value=value)
+                    obj = ObjectItem(kind=preset, value=value, open_by_default=preset.value in self._config.default_open_kinds)
                     project.objects.append(obj)
                     self._save_projects_bg()
                     self.query_one(ProjectDetail).set_project(project)
