@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from joy.terminal_sessions import (
     _SHELL_PROCESSES,
+    _read_claude_states,
     _tty_has_claude,
     activate_session,
     fetch_sessions,
@@ -535,3 +538,176 @@ class TestDetectClaude:
         assert result is not None
         sessions, _ = result
         assert sessions[0].is_claude is False
+
+
+# ---------------------------------------------------------------------------
+# _read_claude_states tests
+# ---------------------------------------------------------------------------
+
+
+class TestReadClaudeStates:
+    def test_read_claude_states_returns_empty_when_no_dir(self, tmp_path):
+        """No dir -> empty dict."""
+        with patch.object(Path, "home", return_value=tmp_path):
+            result = _read_claude_states()
+        assert result == {}
+
+    def test_read_claude_states_reads_valid_files(self, tmp_path):
+        """Write sample JSON -> reads correctly."""
+        state_dir = tmp_path / ".joy" / "claude-states"
+        state_dir.mkdir(parents=True)
+        (state_dir / "ttys041.json").write_text(json.dumps({"state": "busy", "session_id": "abc", "ts": 12345}))
+        (state_dir / "ttys042.json").write_text(json.dumps({"state": "idle", "session_id": "def", "ts": 12346}))
+
+        with patch.object(Path, "home", return_value=tmp_path):
+            result = _read_claude_states()
+
+        assert "ttys041" in result
+        assert result["ttys041"]["state"] == "busy"
+        assert "ttys042" in result
+        assert result["ttys042"]["state"] == "idle"
+
+    def test_read_claude_states_skips_corrupt_json(self, tmp_path):
+        """Invalid JSON -> skipped, others still read."""
+        state_dir = tmp_path / ".joy" / "claude-states"
+        state_dir.mkdir(parents=True)
+        (state_dir / "ttys041.json").write_text("NOT VALID JSON {{{")
+        (state_dir / "ttys042.json").write_text(json.dumps({"state": "idle", "session_id": "ok", "ts": 1}))
+
+        with patch.object(Path, "home", return_value=tmp_path):
+            result = _read_claude_states()
+
+        assert "ttys041" not in result
+        assert "ttys042" in result
+
+    def test_read_claude_states_skips_tmp_files(self, tmp_path):
+        """Files ending in .tmp are ignored."""
+        state_dir = tmp_path / ".joy" / "claude-states"
+        state_dir.mkdir(parents=True)
+        (state_dir / "ttys041.json.tmp").write_text(json.dumps({"state": "busy"}))
+        (state_dir / "ttys042.json").write_text(json.dumps({"state": "idle", "session_id": "x", "ts": 1}))
+
+        with patch.object(Path, "home", return_value=tmp_path):
+            result = _read_claude_states()
+
+        assert "ttys041.json" not in result  # .tmp should not appear
+        assert "ttys041" not in result
+        assert "ttys042" in result
+
+
+# ---------------------------------------------------------------------------
+# fetch_sessions + claude_state integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestFetchSessionsClaudeState:
+    def test_fetch_sessions_populates_claude_state_from_hook_file(self):
+        """Mock _read_claude_states -> verify claude_state on session."""
+        mock_session = _make_mock_session(
+            session_id="w0t0p0:abc",
+            name="Main",
+            job_name="claude",
+            cwd="/Users/test/project",
+            tty="/dev/ttys041",
+        )
+        mock_app = _make_mock_app([mock_session])
+
+        def run_until_complete(coro_fn, retry=False):
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(coro_fn(MagicMock()))
+            finally:
+                loop.close()
+
+        with (
+            patch("iterm2.async_get_app", AsyncMock(return_value=mock_app)),
+            patch(
+                "iterm2.connection.Connection.run_until_complete",
+                side_effect=run_until_complete,
+            ),
+            patch("joy.terminal_sessions._tty_has_claude", return_value=False),
+            patch(
+                "joy.terminal_sessions._read_claude_states",
+                return_value={"ttys041": {"state": "waiting_input", "session_id": "abc", "ts": 12345}},
+            ),
+        ):
+            result = fetch_sessions()
+
+        assert result is not None
+        sessions, _ = result
+        assert len(sessions) == 1
+        assert sessions[0].claude_state == "waiting_input"
+
+    def test_fetch_sessions_ignores_state_when_not_claude(self):
+        """is_claude=False -> claude_state=None even if state file exists."""
+        mock_session = _make_mock_session(
+            session_id="w0t0p0:shell",
+            name="General",
+            job_name="zsh",
+            cwd="/Users/test",
+            tty="/dev/ttys041",
+        )
+        mock_app = _make_mock_app([mock_session])
+
+        def run_until_complete(coro_fn, retry=False):
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(coro_fn(MagicMock()))
+            finally:
+                loop.close()
+
+        with (
+            patch("iterm2.async_get_app", AsyncMock(return_value=mock_app)),
+            patch(
+                "iterm2.connection.Connection.run_until_complete",
+                side_effect=run_until_complete,
+            ),
+            patch("joy.terminal_sessions._tty_has_claude", return_value=False),
+            patch(
+                "joy.terminal_sessions._read_claude_states",
+                return_value={"ttys041": {"state": "busy", "session_id": "stale", "ts": 12345}},
+            ),
+        ):
+            result = fetch_sessions()
+
+        assert result is not None
+        sessions, _ = result
+        assert sessions[0].is_claude is False
+        assert sessions[0].claude_state is None
+
+    def test_fetch_sessions_claude_state_none_when_no_file(self):
+        """No state file -> claude_state=None."""
+        mock_session = _make_mock_session(
+            session_id="w0t0p0:abc",
+            name="Main",
+            job_name="claude",
+            cwd="/Users/test/project",
+            tty="/dev/ttys041",
+        )
+        mock_app = _make_mock_app([mock_session])
+
+        def run_until_complete(coro_fn, retry=False):
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(coro_fn(MagicMock()))
+            finally:
+                loop.close()
+
+        with (
+            patch("iterm2.async_get_app", AsyncMock(return_value=mock_app)),
+            patch(
+                "iterm2.connection.Connection.run_until_complete",
+                side_effect=run_until_complete,
+            ),
+            patch("joy.terminal_sessions._tty_has_claude", return_value=False),
+            patch(
+                "joy.terminal_sessions._read_claude_states",
+                return_value={},  # no state files
+            ),
+        ):
+            result = fetch_sessions()
+
+        assert result is not None
+        sessions, _ = result
+        assert sessions[0].is_claude is True
+        assert sessions[0].claude_state is None
