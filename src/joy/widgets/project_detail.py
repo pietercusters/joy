@@ -19,6 +19,7 @@ class _DetailScroll(VerticalScroll, can_focus=False):
 
 from joy.models import ObjectItem, PresetKind, Project, TerminalSession, WorktreeInfo
 from joy.widgets.object_row import KIND_SHORTCUT, ObjectRow, _success_message, _truncate
+from joy.widgets.terminal_pane import INDICATOR_BUSY, INDICATOR_WAITING, INDICATOR_WAITING_INPUT, ICON_CLAUDE
 
 # Semantic group structure for Details pane
 SEMANTIC_GROUPS: list[tuple[str, list[PresetKind]]] = [
@@ -149,7 +150,18 @@ class ProjectDetail(Widget, can_focus=True):
 
         # Synthesize TERMINALS rows from resolver-matched sessions
         for session in self._resolver_terminals:
-            virt_item = ObjectItem(kind=PresetKind.TERMINALS, value=session.session_name, label=session.session_name,
+            if session.is_claude:
+                # Build label with robot icon and state indicator
+                if session.claude_state == "busy":
+                    indicator = INDICATOR_BUSY
+                elif session.claude_state == "waiting_input":
+                    indicator = INDICATOR_WAITING_INPUT
+                else:  # idle or None
+                    indicator = INDICATOR_WAITING
+                label = f"{ICON_CLAUDE} {session.session_name} {indicator}"
+            else:
+                label = session.session_name
+            virt_item = ObjectItem(kind=PresetKind.TERMINALS, value=session.session_name, label=label,
                                    open_by_default=PresetKind.TERMINALS.value in default_kinds)
             grouped.setdefault(PresetKind.TERMINALS, []).append(virt_item)
             self._readonly_items.add(id(virt_item))
