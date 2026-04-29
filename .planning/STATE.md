@@ -84,10 +84,11 @@ Known tech debt for next milestone:
 | 260428-kxu | add purple merged/closed MR icon and update legend | 2026-04-28 | 845ea9c | [260428-kxu-add-purple-merged-closed-mr-icon-and-upd](./quick/260428-kxu-add-purple-merged-closed-mr-icon-and-upd/) |
 | 260428-qtn | auto-set open_by_default on new/linked objects based on default_open_kinds | 2026-04-28 | 91a1eb1 | Verified | [260428-qtn-auto-set-open-by-default-on-new-linked-o](./quick/260428-qtn-auto-set-open-by-default-on-new-linked-o/) |
 | 260429-amk | Implement Claude agent status detection via hooks with TTY-keyed state files | 2026-04-29 | bd1b9c5 | Verified | [260429-amk-implement-claude-agent-status-detection-](./quick/260429-amk-implement-claude-agent-status-detection-/) |
+| 260429-ciy | Show Claude status indicators in ProjectList and ProjectDetail views | 2026-04-29 | d823ecb | [260429-ciy-show-claude-status-indicators-in-project](./quick/260429-ciy-show-claude-status-indicators-in-project/) |
 
 ## Session Continuity
 
 Last session: 2026-04-29
-Stopped at: Completed quick task 260429-amk
-Last activity: 2026-04-29 - Completed quick task 260429-amk: Claude agent status detection via hooks
+Stopped at: Completed quick task 260429-ciy
+Last activity: 2026-04-29 - Completed quick task 260429-ciy: Claude status indicators in views
 Resume: /gsd-new-milestone to start v1.4 planning
