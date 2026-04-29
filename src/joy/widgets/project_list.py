@@ -83,7 +83,8 @@ class ProjectRow(Static):
         self._has: dict[str, bool] = self._compute_has(project)
         self._wt_count: int = 0
         self._agent_count: int = 0
-        content = self.build_content(project, avail_width, mr_info=None, has=self._has, wt_count=0, agent_count=0, repo_name=project.repo)
+        self._claude_states: list[str | None] = []
+        content = self.build_content(project, avail_width, mr_info=None, has=self._has, wt_count=0, agent_count=0, claude_states=(), repo_name=project.repo)
         super().__init__(content, **kwargs)
 
     @staticmethod
@@ -107,21 +108,22 @@ class ProjectRow(Static):
         has: dict[str, bool],
         wt_count: int = 0,
         agent_count: int = 0,
+        claude_states: "list[str | None] | tuple" = (),
         repo_name: str | None = None,
     ) -> Text:
         """Build a single-line Rich.Text row:
-        [status-dot] [space] [name...padding...] [MR-strip] [space] [icon-ribbon]
+        [status-dot] [space] [name [indicators]...padding...] [MR-strip] [space] [icon-ribbon]
         """
         t = Text(no_wrap=True, overflow="ellipsis")
 
         # Status dot (leftmost)
         status = project.status
         if status == "prio":
-            t.append("●", style="green")
+            t.append("\u25cf", style="green")
         elif status == "hold":
-            t.append("●", style="dim")
+            t.append("\u25cf", style="dim")
         else:  # idle
-            t.append("○", style="dim")
+            t.append("\u25cb", style="dim")
         t.append(" ")
 
         # MR strip (built first so we know its length for padding)
@@ -173,6 +175,9 @@ class ProjectRow(Static):
             repo_label.append(repo_name, style="dim")
             repo_label.append(" ")
 
+        # Claude state indicators width (compact: "●●○" with a leading space)
+        indicator_width = len(claude_states) + (1 if claude_states else 0)  # +1 for separating space
+
         # Compute fixed right width: mr_strip_len + repo_label_len + separator + ribbon
         # Ribbon is 6 icons + 5 spaces between them = 11 chars.
         # When mr_info is present, mr_strip already ends with a trailing space so no extra
@@ -184,16 +189,28 @@ class ProjectRow(Static):
         fixed_right = mr_plain_len + repo_label_len + separator + ribbon_width
 
         # Fixed left: status-dot (1) + space (1) = 2
-        name_budget = avail_width - 2 - fixed_right
+        name_budget = avail_width - 2 - fixed_right - indicator_width
         name = project.name
         if len(name) > name_budget and name_budget > 1:
-            name = name[:name_budget - 1] + "…"
+            name = name[:name_budget - 1] + "\u2026"
         elif name_budget <= 1:
-            name = "…"
+            name = "\u2026"
 
-        # Padding between name and right section
+        # Padding between name+indicators and right section
         pad = max(0, name_budget - len(name))
         t.append(name)
+
+        # Claude state indicators (compact colored circles after name)
+        if claude_states:
+            t.append(" ")
+            for state in claude_states:
+                if state == "busy":
+                    t.append("\u25cf", style="green")
+                elif state == "waiting_input":
+                    t.append("\u25cf", style="yellow")
+                else:  # "idle" or None
+                    t.append("\u25cb", style="dim")
+
         t.append(" " * pad)
 
         # MR strip (if any)
@@ -216,17 +233,20 @@ class ProjectRow(Static):
         agent_count: int,
         mr_info: "MRInfo | None" = None,
         avail_width: int | None = None,
+        claude_states: "list[str | None] | tuple" = (),
     ) -> None:
         """Update badge counts, MR info and re-render content."""
         self._mr_info = mr_info
         self._wt_count = wt_count
         self._agent_count = agent_count
+        self._claude_states = list(claude_states)
         if avail_width is not None:
             self._avail_width = avail_width
         self._has = self._compute_has(self.project)  # refresh in case objects changed
         self.update(self.build_content(
             self.project, self._avail_width, mr_info, self._has,
             wt_count=wt_count, agent_count=agent_count,
+            claude_states=claude_states,
             repo_name=self.project.repo,
         ))
 
@@ -748,9 +768,11 @@ class ProjectList(Widget, can_focus=True):
         avail_width = self._get_available_width()
         for row in self._rows:
             wt_count = len(index.worktrees_for(row.project))  # type: ignore[union-attr]
-            agent_count = len(index.terminals_for(row.project))  # type: ignore[union-attr]
+            terminals = index.terminals_for(row.project)  # type: ignore[union-attr]
+            agent_count = len(terminals)
+            claude_states = [s.claude_state for s in terminals if s.is_claude]
             mr_info = pick_best_mr(row.project, mr_data or {}, index) if mr_data else None
-            row.set_counts(wt_count, agent_count, mr_info=mr_info, avail_width=avail_width)
+            row.set_counts(wt_count, agent_count, mr_info=mr_info, avail_width=avail_width, claude_states=claude_states)
 
     def action_toggle_status(self) -> None:
         """Cycle project status: idle → prio → hold → idle (g key)."""
