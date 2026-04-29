@@ -16,6 +16,7 @@ from joy.widgets.terminal_pane import (
     ICON_SESSION,
     INDICATOR_BUSY,
     INDICATOR_WAITING,
+    INDICATOR_WAITING_INPUT,
     GroupHeader,
     SessionRow,
     TerminalPane,
@@ -48,6 +49,7 @@ def _claude_session(
     session_name: str = "claude-joy",
     foreground_process: str = "claude",
     tab_id: str = "",
+    claude_state: str | None = None,
 ) -> TerminalSession:
     return TerminalSession(
         session_id=session_id,
@@ -56,6 +58,7 @@ def _claude_session(
         cwd="/Users/pieter/Github/joy",
         tab_id=tab_id,
         is_claude=True,  # explicitly set — pane uses is_claude, not foreground_process matching
+        claude_state=claude_state,
     )
 
 
@@ -116,21 +119,35 @@ def test_session_row_non_claude_uses_icon_session():
 def test_session_row_claude_uses_icon_claude():
     """Claude SessionRow uses ICON_CLAUDE."""
     session = _claude_session()
-    row = SessionRow(session, is_claude=True, is_busy=True)
+    row = SessionRow(session, is_claude=True, claude_state="busy")
     assert ICON_CLAUDE in str(row.content)
 
 
 def test_session_row_claude_busy_shows_indicator_busy():
     """Claude busy SessionRow shows INDICATOR_BUSY."""
     session = _claude_session()
-    row = SessionRow(session, is_claude=True, is_busy=True)
+    row = SessionRow(session, is_claude=True, claude_state="busy")
     assert INDICATOR_BUSY in str(row.content)
 
 
 def test_session_row_claude_waiting_shows_indicator_waiting():
-    """Claude waiting SessionRow shows INDICATOR_WAITING."""
+    """Claude idle SessionRow shows INDICATOR_WAITING."""
     session = _claude_session()
-    row = SessionRow(session, is_claude=True, is_busy=False)
+    row = SessionRow(session, is_claude=True, claude_state="idle")
+    assert INDICATOR_WAITING in str(row.content)
+
+
+def test_session_row_claude_waiting_input_shows_yellow_indicator():
+    """Claude waiting_input SessionRow shows INDICATOR_WAITING_INPUT."""
+    session = _claude_session()
+    row = SessionRow(session, is_claude=True, claude_state="waiting_input")
+    assert INDICATOR_WAITING_INPUT in str(row.content)
+
+
+def test_session_row_claude_none_state_shows_dim_indicator():
+    """Claude SessionRow with claude_state=None shows dim INDICATOR_WAITING (fallback)."""
+    session = _claude_session()
+    row = SessionRow(session, is_claude=True, claude_state=None)
     assert INDICATOR_WAITING in str(row.content)
 
 

@@ -1012,6 +1012,13 @@ def main() -> None:
     if "--version" in sys.argv:
         print(f"joy {_get_version()}")
         return
+    if "setup-hooks" in sys.argv:
+        from joy.hooks import setup_hooks  # noqa: PLC0415
+        setup_hooks()
+        print("Claude Code hooks installed successfully.")
+        print("  Script: ~/.joy/bin/claude-state-hook.sh")
+        print("  Config: ~/.claude/settings.json")
+        return
     app = JoyApp()
     app.run()
 

@@ -79,7 +79,8 @@ _TERMINAL_ICONS: list[tuple[str, str, str]] = [
     ("\uf120", "Terminal session", ""),
     ("\U000f1325", "Claude agent session", ""),
     ("\u25cf", "Claude busy (running)", "green"),
-    ("\u25cb", "Claude waiting (at prompt)", "dim"),
+    ("\u25cf", "Claude needs input", "yellow"),
+    ("\u25cb", "Claude idle (at prompt)", "dim"),
 ]
 
 
