@@ -176,6 +176,7 @@ class TerminalSession:
     cwd: str
     tab_id: str = ""  # iTerm2 tab this session belongs to
     is_claude: bool = False  # True when claude is detected via multi-signal heuristic
+    claude_state: str | None = None  # "idle" | "busy" | "waiting_input" | None
 
 
 @dataclass
