@@ -470,6 +470,13 @@ class ProjectList(Widget, can_focus=True):
             # Preserve cleared selection (-1) or empty
             self._cursor = -1
         self._update_highlight()
+        # Re-apply badges (claude indicators, MR info, worktree counts) to the
+        # freshly created rows. Without this, any rebuild (e.g. status toggle)
+        # loses badge data until the next periodic refresh cycle.
+        try:
+            self.app._update_badges()
+        except Exception:
+            pass  # app not fully mounted yet — badges will come on next refresh
 
     def _update_highlight(self) -> None:
         """Apply '--highlight' CSS class to the row at the current cursor position."""
