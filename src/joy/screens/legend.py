@@ -77,10 +77,9 @@ _WORKTREE_ICONS: list[tuple[str, str]] = [
 
 _TERMINAL_ICONS: list[tuple[str, str, str]] = [
     ("\uf120", "Terminal session", ""),
-    ("\U000f1325", "Claude agent session", ""),
-    ("\u25cf", "Claude busy (running)", "green"),
-    ("\u25cf", "Claude needs input", "yellow"),
-    ("\u25cb", "Claude idle (at prompt)", "dim"),
+    ("\U000f06a9", "Claude busy (running)", "green"),
+    ("\U000f06a9", "Claude needs input", "yellow"),
+    ("\U000f06a9", "Claude idle (at prompt)", "dim"),
 ]
 
 

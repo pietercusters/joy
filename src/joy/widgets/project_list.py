@@ -12,6 +12,7 @@ from textual.widget import Widget
 from textual.widgets import Static
 
 from joy.models import MRInfo, PresetKind, Project, Repo
+from joy.widgets.terminal_pane import ICON_CLAUDE
 from joy.widgets.icons import (
     ICON_BRANCH,
     ICON_TICKET,
@@ -175,8 +176,8 @@ class ProjectRow(Static):
             repo_label.append(repo_name, style="dim")
             repo_label.append(" ")
 
-        # Claude state indicators width (compact: "●●○" with a leading space)
-        indicator_width = len(claude_states) + (1 if claude_states else 0)  # +1 for separating space
+        # Claude state indicators width: " 󰚩 󰚩" = leading space + (icon + space) per state - trailing
+        indicator_width = (len(claude_states) * 2 + 1) if claude_states else 0
 
         # Compute fixed right width: mr_strip_len + repo_label_len + separator + ribbon
         # Ribbon is 6 icons + 5 spaces between them = 11 chars.
@@ -200,16 +201,18 @@ class ProjectRow(Static):
         pad = max(0, name_budget - len(name))
         t.append(name)
 
-        # Claude state indicators (compact colored circles after name)
+        # Claude state indicators (colored robot icons after name, space-separated)
         if claude_states:
             t.append(" ")
-            for state in claude_states:
+            for i, state in enumerate(claude_states):
+                if i > 0:
+                    t.append(" ")
                 if state == "busy":
-                    t.append("\u25cf", style="green")
+                    t.append(ICON_CLAUDE, style="green")
                 elif state == "waiting_input":
-                    t.append("\u25cf", style="yellow")
+                    t.append(ICON_CLAUDE, style="yellow")
                 else:  # "idle" or None
-                    t.append("\u25cb", style="dim")
+                    t.append(ICON_CLAUDE, style="dim")
 
         t.append(" " * pad)
 

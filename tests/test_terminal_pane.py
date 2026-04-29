@@ -14,9 +14,6 @@ from joy.models import TerminalSession
 from joy.widgets.terminal_pane import (
     ICON_CLAUDE,
     ICON_SESSION,
-    INDICATOR_BUSY,
-    INDICATOR_WAITING,
-    INDICATOR_WAITING_INPUT,
     GroupHeader,
     SessionRow,
     TerminalPane,
@@ -83,11 +80,9 @@ def _other_session(
 
 
 def test_constants_defined():
-    """ICON_SESSION, ICON_CLAUDE, INDICATOR_BUSY, INDICATOR_WAITING are defined."""
+    """ICON_SESSION, ICON_CLAUDE are defined with correct codepoints."""
     assert ICON_SESSION == "\uf120"
-    assert ICON_CLAUDE == "\U000f1325"
-    assert INDICATOR_BUSY == "\u25cf"
-    assert INDICATOR_WAITING == "\u25cb"
+    assert ICON_CLAUDE == "\U000f06a9"
 
 
 # ---------------------------------------------------------------------------
@@ -123,32 +118,32 @@ def test_session_row_claude_uses_icon_claude():
     assert ICON_CLAUDE in str(row.content)
 
 
-def test_session_row_claude_busy_shows_indicator_busy():
-    """Claude busy SessionRow shows INDICATOR_BUSY."""
+def test_session_row_claude_busy_shows_robot_icon():
+    """Claude busy SessionRow contains the robot icon."""
     session = _claude_session()
     row = SessionRow(session, is_claude=True, claude_state="busy")
-    assert INDICATOR_BUSY in str(row.content)
+    assert ICON_CLAUDE in str(row.content)
 
 
-def test_session_row_claude_waiting_shows_indicator_waiting():
-    """Claude idle SessionRow shows INDICATOR_WAITING."""
+def test_session_row_claude_idle_shows_robot_icon():
+    """Claude idle SessionRow contains the robot icon."""
     session = _claude_session()
     row = SessionRow(session, is_claude=True, claude_state="idle")
-    assert INDICATOR_WAITING in str(row.content)
+    assert ICON_CLAUDE in str(row.content)
 
 
-def test_session_row_claude_waiting_input_shows_yellow_indicator():
-    """Claude waiting_input SessionRow shows INDICATOR_WAITING_INPUT."""
+def test_session_row_claude_waiting_input_shows_robot_icon():
+    """Claude waiting_input SessionRow contains the robot icon."""
     session = _claude_session()
     row = SessionRow(session, is_claude=True, claude_state="waiting_input")
-    assert INDICATOR_WAITING_INPUT in str(row.content)
+    assert ICON_CLAUDE in str(row.content)
 
 
-def test_session_row_claude_none_state_shows_dim_indicator():
-    """Claude SessionRow with claude_state=None shows dim INDICATOR_WAITING (fallback)."""
+def test_session_row_claude_none_state_shows_robot_icon():
+    """Claude SessionRow with claude_state=None shows robot icon (fallback)."""
     session = _claude_session()
     row = SessionRow(session, is_claude=True, claude_state=None)
-    assert INDICATOR_WAITING in str(row.content)
+    assert ICON_CLAUDE in str(row.content)
 
 
 def test_session_row_shows_process():
@@ -737,7 +732,7 @@ def test_set_sessions_no_tab_groups_all_go_to_other():
 
 
 def test_set_sessions_claude_dot_marker_preserved_in_project_group():
-    """Claude sessions within a project group still show INDICATOR_BUSY or INDICATOR_WAITING."""
+    """Claude sessions within a project group still show ICON_CLAUDE."""
     from textual.app import App, ComposeResult
 
     class _TestApp(App):
@@ -757,10 +752,7 @@ def test_set_sessions_claude_dot_marker_preserved_in_project_group():
             rows = pane.query(SessionRow)
             assert len(rows) == 1
             content = str(rows[0].content)
-            assert ICON_CLAUDE in content, "Expected Claude icon in row content"
-            assert (INDICATOR_BUSY in content or INDICATOR_WAITING in content), (
-                "Expected Claude busy/waiting indicator in row content"
-            )
+            assert ICON_CLAUDE in content, "Expected Claude robot icon in row content"
 
     asyncio.run(_run())
 

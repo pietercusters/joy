@@ -25,10 +25,7 @@ from joy.models import TerminalSession
 # ---------------------------------------------------------------------------
 
 ICON_SESSION = "\uf120"      # nf-fa-terminal
-ICON_CLAUDE = "\U000f1325"   # nf-md-robot (AI/robot glyph)
-INDICATOR_BUSY = "\u25cf"    # BLACK CIRCLE -- session running claude
-INDICATOR_WAITING = "\u25cb" # WHITE CIRCLE -- session at shell prompt (idle)
-INDICATOR_WAITING_INPUT = "\u25cf"  # BLACK CIRCLE -- claude needs user input (styled yellow)
+ICON_CLAUDE = "\U000f06a9"   # nf-md-robot (classic robot face — Claude indicator)
 
 
 # ---------------------------------------------------------------------------
@@ -133,15 +130,14 @@ class SessionRow(Static):
         t = Text(no_wrap=True, overflow="ellipsis")
 
         if is_claude:
-            t.append(f" {ICON_CLAUDE} ", style="bold")
-            t.append(session.session_name)
+            # Single colored robot icon — color encodes state
             if claude_state == "busy":
-                t.append(f"  {INDICATOR_BUSY}", style="green")
+                t.append(f" {ICON_CLAUDE} ", style="green")
             elif claude_state == "waiting_input":
-                t.append(f"  {INDICATOR_WAITING_INPUT}", style="yellow")
+                t.append(f" {ICON_CLAUDE} ", style="yellow")
             else:
-                # "idle" or None (fallback)
-                t.append(f"  {INDICATOR_WAITING}", style="dim")
+                t.append(f" {ICON_CLAUDE} ", style="dim")
+            t.append(session.session_name)
             t.append(f"  {session.foreground_process}", style="dim")
         else:
             t.append(f" {ICON_SESSION} ", style="bold")
