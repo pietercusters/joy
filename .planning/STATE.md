@@ -83,10 +83,11 @@ Known tech debt for next milestone:
 | 260428-gxw | refactor project list: status grouping, inline repo, remove repo headers | 2026-04-28 | 534eb55 | [260428-gxw-refactor-project-list-status-grouping-in](./quick/260428-gxw-refactor-project-list-status-grouping-in/) |
 | 260428-kxu | add purple merged/closed MR icon and update legend | 2026-04-28 | 845ea9c | [260428-kxu-add-purple-merged-closed-mr-icon-and-upd](./quick/260428-kxu-add-purple-merged-closed-mr-icon-and-upd/) |
 | 260428-qtn | auto-set open_by_default on new/linked objects based on default_open_kinds | 2026-04-28 | 91a1eb1 | Verified | [260428-qtn-auto-set-open-by-default-on-new-linked-o](./quick/260428-qtn-auto-set-open-by-default-on-new-linked-o/) |
+| 260429-amk | Implement Claude agent status detection via hooks with TTY-keyed state files | 2026-04-29 | bd1b9c5 | Verified | [260429-amk-implement-claude-agent-status-detection-](./quick/260429-amk-implement-claude-agent-status-detection-/) |
 
 ## Session Continuity
 
-Last session: 2026-04-28
-Stopped at: Completed quick task 260428-qtn
-Last activity: 2026-04-28 - Completed quick task 260428-qtn: auto-set open_by_default
+Last session: 2026-04-29
+Stopped at: Completed quick task 260429-amk
+Last activity: 2026-04-29 - Completed quick task 260429-amk: Claude agent status detection via hooks
 Resume: /gsd-new-milestone to start v1.4 planning
