@@ -24,6 +24,8 @@ def _read_claude_states() -> dict[str, dict]:
         if f.suffix == ".json" and not f.name.endswith(".tmp"):
             try:
                 data = json.loads(f.read_text())
+                if not isinstance(data, dict):
+                    continue
                 tty = f.stem  # e.g., "ttys041"
                 states[tty] = data
             except Exception:

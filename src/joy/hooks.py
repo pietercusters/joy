@@ -32,14 +32,17 @@ set -euo pipefail
 STATE_DIR="$HOME/.joy/claude-states"
 mkdir -p "$STATE_DIR"
 
-# Read JSON from stdin (Claude Code pipes event data)
-read -r INPUT
+# Read all JSON from stdin (Claude Code pipes event data; may be multi-line)
+INPUT=$(cat)
 
 # Parse event name and session_id with shell builtins (no jq dependency)
 EVENT="${INPUT#*\"hook_event_name\":\"}"
 EVENT="${EVENT%%\"*}"
 SESSION="${INPUT#*\"session_id\":\"}"
 SESSION="${SESSION%%\"*}"
+
+# Guard: bail if parsing failed (e.g., unexpected format)
+[ -z "$EVENT" ] && exit 0
 
 # Walk process tree to find ancestor with real TTY
 PID=$$
@@ -54,6 +57,11 @@ while [ "$PID" != "1" ] && [ -n "$PID" ] && [ "$PID" != "0" ]; do
 done
 
 [ -z "$TTY" ] && exit 0  # Can't determine TTY -- skip silently
+
+# Normalize TTY (strip /dev/ prefix if present, e.g., pts/3 on Linux)
+TTY="${TTY#/dev/}"
+# Replace any remaining slashes with dashes to avoid path issues
+TTY=$(printf '%s' "$TTY" | tr '/' '-')
 
 STATE_FILE="$STATE_DIR/$TTY.json"
 
