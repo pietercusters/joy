@@ -18,6 +18,8 @@ from joy.screens import NameInputModal, NewProjectModal, NewProjectResult, Prese
 from joy.widgets.object_row import _success_message, _truncate
 from joy.widgets.project_detail import SEMANTIC_GROUPS, ProjectDetail
 from joy.widgets.project_list import ProjectList
+from joy.widgets.mr_pane import MRPane
+from joy.widgets.placeholder_pane import PlaceholderPane
 from joy.widgets.terminal_pane import TerminalPane
 from joy.widgets.worktree_pane import WorktreePane
 
@@ -25,6 +27,7 @@ from joy.widgets.worktree_pane import WorktreePane
 _PANE_HINTS: dict[str, str] = {
     "project-list":   "n: New  e: Rename  D: Delete  R: Assign repo  a: Archive  A: Archives",
     "project-detail": "o: Open  n: Add  e: Edit  d: Delete  D: Force del  space: Toggle  r: Repo",
+    "mr-pane":        "o: Open MR",
     "terminal-pane":  "o: Open  n: Add  e: Rename  d: Close  D: Force close",
     "worktrees-pane": "i/Enter: Open IDE",
 }
@@ -38,9 +41,9 @@ class JoyApp(App):
 
     CSS = """
     #pane-grid {
-        grid-size: 2 2;
+        grid-size: 3 2;
         grid-rows: 1fr 1fr;
-        grid-columns: 1fr 1fr;
+        grid-columns: 1fr 1fr 1fr;
     }
     #project-list {
         height: 1fr;
@@ -120,8 +123,10 @@ class JoyApp(App):
         yield Grid(
             ProjectList(id="project-list"),
             ProjectDetail(id="project-detail"),
+            MRPane(id="mr-pane"),
             TerminalPane(id="terminal-pane"),
             WorktreePane(id="worktrees-pane"),
+            PlaceholderPane(id="placeholder-pane"),
             id="pane-grid",
         )
         yield HintBar()
@@ -167,24 +172,23 @@ class JoyApp(App):
         """Load worktree data in background thread and push to pane (D-01, D-07)."""
         from joy.store import load_repos  # noqa: PLC0415
         from joy.worktrees import discover_worktrees  # noqa: PLC0415
-        from joy.mr_status import fetch_mr_data  # noqa: PLC0415
+        from joy.mr_status import fetch_mr_data, BatchMRResult  # noqa: PLC0415
 
         try:
             repos = load_repos()
             worktrees = discover_worktrees(repos, self._config.branch_filter)
 
             # Phase 11 D-06: fetch MR/CI data in same thread
-            mr_data: dict = {}
+            batch_result = BatchMRResult()
             mr_failed = False
             try:
-                mr_data = fetch_mr_data(repos, worktrees)
-                # No heuristic needed — fetch_mr_data returns {} for repos with no open MRs
+                batch_result = fetch_mr_data(repos, worktrees)
             except Exception:
                 mr_failed = True
 
             repo_count = len(repos)
             branch_filter = ", ".join(self._config.branch_filter) if self._config.branch_filter else ""
-            self.app.call_from_thread(self._set_worktrees, worktrees, repo_count, branch_filter, mr_data, mr_failed)
+            self.app.call_from_thread(self._set_worktrees, worktrees, repo_count, branch_filter, batch_result, mr_failed)
             self.app.call_from_thread(self._mark_refresh_success)
         except Exception:
             self.app.call_from_thread(self._mark_refresh_failure)
@@ -211,22 +215,33 @@ class JoyApp(App):
         worktrees: list[WorktreeInfo],
         repo_count: int,
         branch_filter: str,
-        mr_data: dict | None = None,
+        batch_result=None,
         mr_failed: bool = False,
     ) -> None:
         """Push worktree data to the pane widget (D-01). Also captures data for resolver (D-07)."""
+        from joy.mr_status import BatchMRResult  # noqa: PLC0415
+        if batch_result is None:
+            batch_result = BatchMRResult()
         self._mr_fetch_failed = mr_failed
         # Phase 14: store for resolver and set ready-flag (D-07, D-08)
         self._current_worktrees = worktrees
-        self._current_mr_data = mr_data or {}
+        self._current_mr_data = batch_result.by_branch if isinstance(batch_result, BatchMRResult) else (batch_result or {})
         self._worktrees_ready = True
         self._is_syncing = True  # suppress cross-pane sync during pane rebuild
         try:
             await self.query_one(WorktreePane).set_worktrees(
-                worktrees, repo_count=repo_count, branch_filter=branch_filter, mr_data=mr_data
+                worktrees, repo_count=repo_count, branch_filter=branch_filter, mr_data=self._current_mr_data
             )
         finally:
             self._is_syncing = False
+        # Push MR data to MR pane
+        if isinstance(batch_result, BatchMRResult):
+            try:
+                await self.query_one(MRPane).set_mr_data(
+                    batch_result.authored, batch_result.review_requests
+                )
+            except Exception:
+                pass  # MRPane not yet mounted
         self._apply_worktree_link_status_fast(worktrees)
         self._maybe_compute_relationships()
 
@@ -435,11 +450,15 @@ class JoyApp(App):
         self._update_terminal_refresh_label()
 
     def _update_refresh_label(self) -> None:
-        """Push formatted timestamp to WorktreePane border_title (D-01, D-03)."""
+        """Push formatted timestamp to WorktreePane and MRPane border_title (D-01, D-03)."""
         if self._last_refresh_at is None:
             if self._refresh_failed:
                 # WR-05: No successful refresh yet but one has failed — show stale
                 self.query_one(WorktreePane).set_refresh_label("never", stale=True)
+                try:
+                    self.query_one(MRPane).set_refresh_label("never", stale=True, mr_error=self._mr_fetch_failed)
+                except Exception:
+                    pass
             return  # No successful refresh yet
         now = datetime.now(timezone.utc)
         age_seconds = int((now - self._last_refresh_at).total_seconds())
@@ -449,6 +468,12 @@ class JoyApp(App):
         self.query_one(WorktreePane).set_refresh_label(
             timestamp, stale=stale, mr_error=self._mr_fetch_failed
         )
+        try:
+            self.query_one(MRPane).set_refresh_label(
+                timestamp, stale=stale, mr_error=self._mr_fetch_failed
+            )
+        except Exception:
+            pass
 
     def _update_terminal_refresh_label(self) -> None:
         """Push formatted timestamp to TerminalPane border_title (D-16)."""
@@ -491,10 +516,14 @@ class JoyApp(App):
                 elif pane_id in ("project-list", "project-scroll"):
                     self.sub_title = "Projects"
                     pane_id = "project-list"  # normalize for hint lookup
+                elif pane_id == "mr-pane":
+                    self.sub_title = "MRs"
                 elif pane_id == "terminal-pane":
                     self.sub_title = "Terminal"
                 elif pane_id == "worktrees-pane":
                     self.sub_title = "Worktrees"
+                elif pane_id == "placeholder-pane":
+                    self.sub_title = ""
                 else:
                     node = node.parent
                     continue

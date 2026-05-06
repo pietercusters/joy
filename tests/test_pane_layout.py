@@ -1,4 +1,4 @@
-"""Tests for Phase 8: 4-pane grid layout and Tab focus cycling (PANE-01, PANE-02)."""
+"""Tests for 6-pane grid layout and Tab focus cycling (PANE-01, PANE-02)."""
 from __future__ import annotations
 
 import pytest
@@ -33,22 +33,24 @@ def mock_store():
 
 
 # ---------------------------------------------------------------------------
-# PANE-01: 4-pane grid layout
+# PANE-01: 6-pane grid layout (3x2)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_four_panes_in_grid(mock_store):
-    """PANE-01: App shows four panes -- projects (TL), detail (TR), terminal (BL), worktrees (BR)."""
+async def test_six_panes_in_grid(mock_store):
+    """PANE-01: App shows six panes in a 3x2 grid including MR pane and placeholder."""
     app = JoyApp()
     async with app.run_test() as pilot:
         await pilot.pause(0.2)
         await app.workers.wait_for_complete()
-        # All four panes must be queryable in the DOM
+        # All six panes must be queryable in the DOM
         assert app.query_one("#project-list") is not None
         assert app.query_one("#project-detail") is not None
+        assert app.query_one("#mr-pane") is not None
         assert app.query_one("#terminal-pane") is not None
         assert app.query_one("#worktrees-pane") is not None
+        assert app.query_one("#placeholder-pane") is not None
 
 
 @pytest.mark.asyncio
@@ -93,8 +95,8 @@ async def test_terminal_pane_shows_loading_state(mock_store):
 
 
 @pytest.mark.asyncio
-async def test_tab_cycles_four_panes(mock_store):
-    """PANE-02/D-04: Tab visits all four panes in reading order TL->TR->BL->BR."""
+async def test_tab_cycles_five_focusable_panes(mock_store):
+    """PANE-02/D-04: Tab visits 5 focusable panes (placeholder is skipped)."""
     app = JoyApp()
     async with app.run_test() as pilot:
         await pilot.pause(0.2)
@@ -108,15 +110,15 @@ async def test_tab_cycles_four_panes(mock_store):
         # Record starting pane
         pane_ids.append(_get_pane_id(app))
 
-        for _ in range(3):
+        for _ in range(4):
             await pilot.press("tab")
             await pilot.pause(0.05)
             pane_ids.append(_get_pane_id(app))
 
-        # Should have visited 4 distinct panes
-        assert len(set(pane_ids)) == 4, f"Expected 4 distinct panes, got: {pane_ids}"
-        # Order must be: projects -> detail -> terminal -> worktrees
-        expected_order = ["project-list", "project-detail", "terminal-pane", "worktrees-pane"]
+        # Should have visited 5 distinct panes (placeholder is non-focusable, skipped)
+        assert len(set(pane_ids)) == 5, f"Expected 5 distinct panes, got: {pane_ids}"
+        # Order: projects -> detail -> mr-pane -> terminal -> worktrees
+        expected_order = ["project-list", "project-detail", "mr-pane", "terminal-pane", "worktrees-pane"]
         assert pane_ids == expected_order, f"Expected {expected_order}, got {pane_ids}"
 
 
@@ -127,8 +129,8 @@ async def test_tab_wraps_around(mock_store):
     async with app.run_test() as pilot:
         await pilot.pause(0.2)
         await app.workers.wait_for_complete()
-        # Tab 4 times to cycle through all panes and wrap back
-        for _ in range(4):
+        # Tab 5 times to cycle through all 5 focusable panes and wrap back
+        for _ in range(5):
             await pilot.press("tab")
             await pilot.pause(0.05)
         # Should be back at the first pane (projects)
@@ -169,6 +171,10 @@ async def test_sub_title_updates_per_pane(mock_store):
         await pilot.press("tab")
         await pilot.pause(0.05)
         assert app.sub_title == "Detail"
+
+        await pilot.press("tab")
+        await pilot.pause(0.05)
+        assert app.sub_title == "MRs"
 
         await pilot.press("tab")
         await pilot.pause(0.05)
@@ -234,9 +240,9 @@ async def test_existing_enter_and_escape(mock_store):
 def _get_pane_id(app: JoyApp) -> str:
     """Walk from focused widget up to find the pane container ID.
 
-    Pane IDs: project-list, project-detail, terminal-pane, worktrees-pane.
+    Pane IDs: project-list, project-detail, mr-pane, terminal-pane, worktrees-pane, placeholder-pane.
     """
-    pane_ids = {"project-list", "project-detail", "terminal-pane", "worktrees-pane"}
+    pane_ids = {"project-list", "project-detail", "mr-pane", "terminal-pane", "worktrees-pane", "placeholder-pane"}
     node = app.focused
     while node is not None:
         if hasattr(node, "id") and node.id in pane_ids:
