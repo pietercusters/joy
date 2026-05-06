@@ -8,6 +8,11 @@ ICON_CI_PASS    = "\uf00c"   # nf-fa-check
 ICON_CI_FAIL    = "\uf00d"   # nf-fa-times
 ICON_CI_PENDING = "\uf192"   # nf-fa-dot_circle_o
 
+# Review status icons (MR pane)
+ICON_REVIEW_APPROVED  = "\uf00c"   # reuse check mark (same as CI_PASS)
+ICON_REVIEW_CHANGES   = "\uf12a"   # nf-fa-exclamation
+ICON_REVIEW_PENDING   = "\uf192"   # reuse dot circle (same as CI_PENDING)
+
 # Branch/worktree status icons (migrated from worktree_pane.py)
 ICON_BRANCH      = "\ue0a0"        # nf-pl-branch
 ICON_DIRTY       = "\uf111"        # nf-fa-circle

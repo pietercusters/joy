@@ -166,6 +166,21 @@ class MRInfo:
 
 
 @dataclass
+class MRDetail:
+    """Extended MR info for the MR pane. Richer than MRInfo (includes title, review status)."""
+
+    mr_number: int
+    title: str
+    is_draft: bool
+    ci_status: str | None  # "pass" | "fail" | "pending" | None
+    review_status: str | None  # "approved" | "changes_requested" | "review_required" | None
+    url: str = ""
+    repo_name: str = ""
+    branch: str = ""
+    is_review_request: bool = False  # True if user is reviewer, not author
+
+
+@dataclass
 class TerminalSession:
     """An active iTerm2 terminal session. Pure data, no iterm2 objects."""
 
