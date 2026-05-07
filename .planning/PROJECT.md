@@ -4,7 +4,7 @@
 
 `joy` is a keyboard-driven Python TUI for managing coding project artifacts. It gives developers a real-time workspace dashboard — all objects related to a project (branches, MRs, tickets, worktrees, notes, agents, and more) visible at a glance, plus live git worktree status, MR/CI badges, active iTerm2 sessions, and cross-pane intelligence that links worktrees and terminals to their project. Any artifact is openable with a single keystroke. Installable globally via `uv tool install git+<repo>`, configured per-machine in `~/.joy`.
 
-v1.0 delivered the core artifact launcher. v1.1 transformed it into a live workspace dashboard with real-time git, MR/CI, and terminal state. v1.2 added cross-pane relationship intelligence (badge counts, bidirectional sync, auto-propagation). v1.3 unified the detail view and established a consistent per-kind keystroke dispatch table.
+v1.0 delivered the core artifact launcher. v1.1 transformed it into a live workspace dashboard with real-time git, MR/CI, and terminal state. v1.2 added cross-pane relationship intelligence (badge counts, bidirectional sync, auto-propagation). v1.3 unified the detail view and established a consistent per-kind keystroke dispatch table. v1.4 focuses on frontend/backend separation (Ports & Adapters architecture) and UI polish.
 
 ## Core Value
 
@@ -60,9 +60,24 @@ Every artifact for the active project, openable instantly from one keyboard-driv
 - ✓ Project list icon ribbon: status dot (g cycles idle/prio/hold), 6-icon presence ribbon, MR strip — v1.3
 - ✓ New-project modal: single screen with name input, optional repo ListView, branch ListView — v1.3
 
+## Current Milestone: v1.4 Frontend Refactor & UI Polish
+
+**Goal:** Separate frontend from backend using Ports & Adapters architecture, establish a three-layer test strategy, and fix UI bugs/inconsistencies — making the codebase safe for future UI work.
+
+**Target features:**
+- Ports & Adapters architecture: Protocol-based contracts between TUI and backend services
+- Extract PaneCoordinator (cross-pane sync logic as pure Python, no widgets)
+- Extract DataOrchestrator (background data loading, relationship computation)
+- Extract ProjectService (save/archive/reload operations)
+- Reduce app.py from 1,058 LOC monolith to thin Textual wrapper
+- Widget facade methods (public APIs replacing private field access from app.py)
+- Three-layer test strategy: backend service tests (fast, no TUI), widget tests (Textual pilot, fake backend), snapshot tests (sparingly)
+- Audit and fix UI bugs and visual inconsistencies across all panes
+- Fix known tech debt: failing tests in test_propagation.py and test_sync.py
+
 ### Active
 
-(None — planning next milestone)
+(Requirements to be defined below)
 
 ### Out of Scope
 
@@ -87,6 +102,7 @@ Every artifact for the active project, openable instantly from one keyboard-driv
 - v1.1 shipped 2026-04-14: 8 phases, 19 plans, 3,606 src LOC + 5,883 test LOC, 276 fast tests passing
 - v1.2 shipped 2026-04-15: 3 phases, 8 plans, cross-pane intelligence
 - v1.3 shipped 2026-04-22: 1 phase (17) + 21 quick tasks, 6,180 src LOC + 7,923 test LOC
+- v1.4 in progress: frontend/backend separation, Ports & Adapters architecture, UI polish
 - Tech stack: Python 3.11+, Textual 8.x, tomllib (stdlib), tomli_w, iterm2>=2.15 — minimal dependencies
 - Data format: TOML in `~/.joy/` — human-editable; repos.toml, archive.toml added in v1.1/v1.3
 - Pre-existing test failures: test_propagation.py::TestTerminalAutoRemove (references non-existent method), test_sync.py terminal sync (4 tests) — known tech debt
@@ -135,4 +151,4 @@ Every artifact for the active project, openable instantly from one keyboard-driv
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-22 after v1.3 milestone — Unified Object View, DISPATCH table, iTerm2 tab hardening, icon ribbon, archive browser, test isolation*
+*Last updated: 2026-05-07 after v1.4 milestone start — Frontend Refactor & UI Polish*
