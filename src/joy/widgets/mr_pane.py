@@ -90,39 +90,41 @@ class MRRow(Static):
     def build_content(detail: MRDetail) -> Text:
         """Build the rich.Text renderable for a two-line MR row.
 
-        Line 1: MR icon + !number + title (truncated with ellipsis)
-        Line 2: repo name + CI status icon + review status icon + label
+        Line 1: MR icon + !number + title (truncated via no_wrap/ellipsis)
+        Line 2: repo name + CI status icon + review status (always visible)
         """
-        t = Text(no_wrap=True, overflow="ellipsis")
-
-        # Line 1: MR icon + number + title
+        # Line 1: icon + number + title (will truncate with ellipsis if too long)
+        line1 = Text(no_wrap=True, overflow="ellipsis")
         if detail.is_draft:
-            t.append(f" {ICON_MR_DRAFT}", style="dim")
+            line1.append(f" {ICON_MR_DRAFT}", style="dim")
         else:
-            t.append(f" {ICON_MR_OPEN}", style="green")
-        t.append(f" !{detail.mr_number}  ", style="bold")
-        t.append(detail.title)
-        t.append("\n")
+            line1.append(f" {ICON_MR_OPEN}", style="green")
+        line1.append(f" !{detail.mr_number}  ", style="bold")
+        line1.append(detail.title)
 
-        # Line 2: repo name + CI + review status
-        t.append(f"  {detail.repo_name}", style="dim")
+        # Line 2: repo + CI + review status (never truncated — always visible)
+        line2 = Text(no_wrap=True, overflow="ellipsis")
+        line2.append(f"  {detail.repo_name}", style="dim")
 
-        # CI status icons
         if detail.ci_status == "pass":
-            t.append(f"  {ICON_CI_PASS}", style="green")
+            line2.append(f"  {ICON_CI_PASS}", style="green")
         elif detail.ci_status == "fail":
-            t.append(f"  {ICON_CI_FAIL}", style="red")
+            line2.append(f"  {ICON_CI_FAIL}", style="red")
         elif detail.ci_status == "pending":
-            t.append(f"  {ICON_CI_PENDING}", style="yellow")
+            line2.append(f"  {ICON_CI_PENDING}", style="yellow")
 
-        # Review status
         if detail.review_status == "approved":
-            t.append(f"  {ICON_REVIEW_APPROVED} Approved", style="green")
+            line2.append(f"  {ICON_REVIEW_APPROVED} Approved", style="green")
         elif detail.review_status == "changes_requested":
-            t.append(f"  {ICON_REVIEW_CHANGES} Changes", style="red")
+            line2.append(f"  {ICON_REVIEW_CHANGES} Changes", style="red")
         elif detail.review_status == "review_required":
-            t.append(f"  {ICON_REVIEW_PENDING} Pending", style="dim")
+            line2.append(f"  {ICON_REVIEW_PENDING} Pending", style="dim")
 
+        # Combine as two separate Text lines so line 1 truncates independently
+        t = Text()
+        t.append_text(line1)
+        t.append("\n")
+        t.append_text(line2)
         return t
 
 
@@ -172,6 +174,9 @@ class MRPane(Widget, can_focus=True):
     MRRow.--highlight {
         background: $accent 30%;
     }
+    .section-spacer {
+        height: 1;
+    }
     """
 
     def __init__(self, **kwargs) -> None:
@@ -212,6 +217,9 @@ class MRPane(Widget, can_focus=True):
         await scroll.remove_children()
         new_rows: list[MRRow] = []
 
+        # Filter drafts from review requests (not actionable for reviewer)
+        review_requests = [mr for mr in review_requests if not mr.is_draft]
+
         if not authored and not review_requests:
             self._rows = []
             self._cursor = -1
@@ -227,6 +235,10 @@ class MRPane(Widget, can_focus=True):
                 row = MRRow(detail)
                 await scroll.mount(row)
                 new_rows.append(row)
+
+        # Spacer between sections
+        if authored and review_requests:
+            await scroll.mount(Static(" ", classes="section-spacer"))
 
         # Section 2: Review Requests (sorted by mr_number desc)
         if review_requests:
