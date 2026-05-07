@@ -17,6 +17,7 @@ from textual.widgets import Static
 
 from joy.models import MRDetail
 from joy.widgets.icons import (
+    ICON_ACTIONABLE,
     ICON_CI_FAIL,
     ICON_CI_PASS,
     ICON_CI_PENDING,
@@ -95,23 +96,43 @@ class MRRow(Static):
         """
         t = Text(no_wrap=True, overflow="ellipsis")
 
-        # Line 1: icon + number + title (pre-truncate title to fit)
-        prefix = f" X !{detail.mr_number}  "  # icon is 1 char wide
+        # Actionable dot: review requests are always actionable;
+        # authored MRs are actionable when not draft AND (changes_requested
+        # OR ci_failed OR (approved AND ci_pass)).
+        if detail.is_review_request:
+            actionable = True
+        elif detail.is_draft:
+            actionable = False
+        else:
+            actionable = (
+                detail.review_status == "changes_requested"
+                or detail.ci_status == "fail"
+                or (detail.review_status == "approved" and detail.ci_status == "pass")
+            )
+
+        # Line 1: [dot] icon + number + title (pre-truncate title to fit)
+        dot_prefix = f"{ICON_ACTIONABLE} " if actionable else "  "
+        prefix = f"XX !{detail.mr_number}  "  # dot/space + icon + space + number
         title_budget = max(max_width - len(prefix), 5)
         title = detail.title
         if len(title) > title_budget:
             title = title[: title_budget - 1] + "\u2026"
 
-        if detail.is_draft:
-            t.append(f" {ICON_MR_DRAFT}", style="dim")
+        if actionable:
+            t.append(f"{ICON_ACTIONABLE}", style="bold cyan")
         else:
-            t.append(f" {ICON_MR_OPEN}", style="green")
+            t.append(" ")
+
+        if detail.is_draft:
+            t.append(f"{ICON_MR_DRAFT}", style="dim")
+        else:
+            t.append(f"{ICON_MR_OPEN}", style="green")
         t.append(f" !{detail.mr_number}  ", style="bold")
         t.append(title)
         t.append("\n")
 
-        # Line 2: repo + CI + review status (always visible)
-        t.append(f"  {detail.repo_name}", style="dim")
+        # Line 2: repo + CI + review status (always visible, indented to align)
+        t.append(f"   {detail.repo_name}", style="dim")
 
         if detail.ci_status == "pass":
             t.append(f"  {ICON_CI_PASS}", style="green")

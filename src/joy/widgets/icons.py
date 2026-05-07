@@ -13,6 +13,9 @@ ICON_REVIEW_APPROVED  = "\uf00c"   # reuse check mark (same as CI_PASS)
 ICON_REVIEW_CHANGES   = "\uf12a"   # nf-fa-exclamation
 ICON_REVIEW_PENDING   = "\uf192"   # reuse dot circle (same as CI_PENDING)
 
+# Actionable indicator (MR pane)
+ICON_ACTIONABLE   = "\uf111"        # nf-fa-circle (filled dot)
+
 # Branch/worktree status icons (migrated from worktree_pane.py)
 ICON_BRANCH      = "\ue0a0"        # nf-pl-branch
 ICON_DIRTY       = "\uf111"        # nf-fa-circle
