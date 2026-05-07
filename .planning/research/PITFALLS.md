@@ -1,501 +1,270 @@
-# Pitfalls Research: joy
+# Domain Pitfalls: Refactoring Monolithic Textual App to Ports & Adapters
 
-**Domain:** Python TUI project artifact manager (Textual, macOS-only, keyboard-driven)
-**Researched:** 2026-04-10
+**Domain:** Incremental refactoring of a 1,058 LOC Textual TUI (Python) to hexagonal architecture
+**Researched:** 2026-05-07
+**Codebase:** joy v1.3 -> v1.4, ~520 tests across 26 files, Textual 8.x
 
 ---
 
 ## Critical Pitfalls
 
-Mistakes that cause rewrites, broken UX, or unusable shipped product.
+Mistakes that cause test suite collapse, runtime regressions, or rewrites of the refactoring itself.
 
-### CP-1: Blocking the Textual Event Loop
+### Pitfall 1: Widget Private Field Access Creates Hidden Contracts
 
-**What goes wrong:** Any synchronous/blocking call inside an event handler, `on_mount`, or message handler freezes the entire TUI. The screen goes unresponsive -- no key input, no rendering, no feedback. Even a 200ms file read or subprocess call is noticeable.
+**What goes wrong:** app.py accesses `detail._project`, `detail._rows`, `detail._cursor`, `pane._cursor`, `pane._rows`, `project_list._cursor`, `project_list._rows` directly. Widgets also reach up into `self.app._projects`, `self.app._config`, `self.app._save_projects_bg()`, `self.app._close_tab_bg()`, `self.app._current_worktrees`, `self.app._update_badges()`, and more. These bidirectional private-field accesses form an undocumented contract. When you extract services, moving `_projects` off the App object breaks every widget that reads `self.app._projects` -- but the breakage is silent (AttributeError at runtime, not caught by type checkers because the access is through `self.app` which is typed as `App`, not `JoyApp`).
 
-**Why it happens:** Textual runs on asyncio. Coroutines only yield at `await` points. If you call `subprocess.run()`, `open().read()`, or `time.sleep()` inside a handler, the event loop is blocked until it returns. This is the single most common Textual mistake.
+**Why it happens:** Textual's `self.app` returns the `App` base type. Widgets access `self.app._projects` through dynamic attribute lookup, which mypy/pyright cannot verify. The coupling accumulated organically across v1.0-v1.3 because private field access was the fastest path.
 
-**Consequences:** UI appears frozen or dead. Users think the app crashed. Especially bad for joy because `o` (activate object) launches subprocesses (`open`, `osascript`) and those calls MUST be non-blocking.
-
-**Prevention:**
-- Use `@work(thread=True)` decorator or `self.run_worker()` for any I/O or subprocess call
-- Use `asyncio.create_subprocess_exec()` instead of `subprocess.run()` for launching URLs/apps
-- Never use `time.sleep()` -- use `await asyncio.sleep()` or `self.set_timer()`
-- Use `app.call_from_thread()` when a threaded worker needs to update the UI
-
-**Detection:** App freezes momentarily when opening URLs, files, or iTerm2 windows. Profile with `python -X importtime` for import-time issues.
-
-**Phase:** Phase 1 (core TUI) -- establish the pattern from day one. Every object activation handler must be async.
-
-**Confidence:** HIGH -- documented in official Textual docs, confirmed by multiple sources.
-
----
-
-### CP-2: Slow Startup from Eager Imports
-
-**What goes wrong:** The TUI takes 500ms+ to show first paint. For a "snappy developer tool," anything over 300ms feels sluggish. Textual + Rich alone import in ~130-230ms. Add httpx, pydantic, or any heavy library and you easily hit 500ms+.
-
-**Why it happens:** Python evaluates all top-level imports eagerly. Textual and Rich have substantial import trees. Any additional dependency (TOML writer, AppleScript helpers, etc.) compounds the problem.
-
-**Consequences:** Users perceive the tool as slow. For a tool meant to be launched dozens of times daily, even 200ms extra startup is painful.
+**Consequences:** Moving state off JoyApp to a service layer breaks at least 28 call sites across 4 widget files (project_list.py: 18 sites, project_detail.py: 4 sites, terminal_pane.py: 3 sites, worktree_pane.py: 1 site, dispatch.py: 4 comment references). These break silently -- tests that mock `self.app._projects` continue to pass while production code crashes.
 
 **Prevention:**
-- Profile imports early: `python -X importtime -c "from joy.app import JoyApp" 2>&1 | head -30`
-- Move non-essential imports inside functions (e.g., TOML writing only when saving, AppleScript only when activating agents)
-- Use Textual's `Lazy` widget for the detail pane content -- only render visible content on startup
-- Avoid libraries that auto-detect and import optional deps (httpx does this with click/rich)
-- Keep `__init__.py` files minimal -- no imports that trigger dependency chains
-- Target: first paint under 350ms
+1. Before extracting any state, create **facade methods** on JoyApp that wrap every private-field access pattern. Example: `detail._project` becomes `detail.current_project` (a property); `self.app._projects` becomes `self.app.get_projects()` or is replaced by a service the widget receives.
+2. Use `grep -rn "self.app._\|app\._" src/joy/widgets/` as a living checklist. Every hit must be converted to a facade call before the underlying state moves.
+3. Do this facade step FIRST, in a dedicated phase, before any service extraction. This lets you run the full test suite after each facade replacement to verify behavioral equivalence.
 
-**Detection:** Run `time joy` from shell. If it's over 400ms to first paint, investigate.
+**Detection:** Run `grep -rn "\._" src/joy/widgets/ | grep -v "__"` regularly. Any private-field cross-boundary access is a warning sign.
 
-**Phase:** Phase 1 -- measure from the very first prototype. Much harder to fix retroactively.
-
-**Confidence:** HIGH -- Posting (a real Textual app) documented a 40% improvement (580ms to 360ms) using exactly these techniques. Source: https://darren.codes/posts/python-startup-time/
+**Phase guidance:** Phase 1 (facade creation), before any service extraction begins.
 
 ---
 
-### CP-3: Fire-and-Forget Async Tasks (The Heisenbug)
+### Pitfall 2: Session-Scoped Test Fixture Fragility During Module Reorganization
 
-**What goes wrong:** You create an asyncio task with `asyncio.create_task()` but don't store a reference. The garbage collector destroys the task before it completes. The operation silently fails -- no error, no warning, no traceback.
+**What goes wrong:** The `_isolated_store_paths` fixture (conftest.py) patches 5 constants on `joy.store` at session scope: `JOY_DIR`, `PROJECTS_PATH`, `CONFIG_PATH`, `REPOS_PATH`, `ARCHIVE_PATH`. Session-scoped monkeypatch is manually constructed (`mp = pytest.MonkeyPatch()`) because pytest's built-in `monkeypatch` fixture is function-scoped. If you refactor `joy.store` -- for example, splitting it into `joy.adapters.toml_store` or renaming the module -- the patch targets become stale strings. The fixture silently patches non-existent attributes (monkeypatch.setattr raises no error if the module path is wrong and the attribute happens to exist on a different imported name). Tests then read/write to the real `~/.joy/` directory.
 
-**Why it happens:** Unlike threads, asyncio tasks have no lifecycle protection. If no reference exists, GC collects them. This is intermittent and timing-dependent, making it extremely hard to debug.
+**Why it happens:** `mp.setattr("joy.store.JOY_DIR", ...)` uses string-based patching. Moving `JOY_DIR` to a different module means the string target misses. Python's import system caches the old module, so some tests may still work (they imported `joy.store` before the rename) while others fail -- creating nondeterministic test behavior.
 
-**Consequences:** Object activations randomly fail to open. iTerm2 windows sometimes don't create. URLs sometimes don't open. The randomness makes it look like a system issue, not a code bug.
+**Consequences:** Tests silently escape isolation. On a developer machine, this corrupts `~/.joy/projects.toml`. On CI, tests may pass because the directory does not exist (creating it instead). The failure mode is data loss on the developer's machine, not a test failure.
 
 **Prevention:**
-- Always store task references: `self._tasks.add(task); task.add_done_callback(self._tasks.discard)`
-- Use Textual's `@work` decorator instead of raw `create_task()` -- it manages task lifecycle
-- Use `asyncio.TaskGroup` (Python 3.11+) for grouped operations
-- Never use bare `asyncio.create_task()` without storing the result
+1. When moving store constants, update the session fixture **in the same commit**. Never merge a module rename without updating patch targets.
+2. Add a CI assertion at the top of the session fixture: verify that the patched path actually resolves. Example: `assert hasattr(joy.store, "JOY_DIR"), "store path constants moved -- update _isolated_store_paths"`.
+3. Consider switching from string-based patching to direct attribute patching: `mp.setattr(joy.store, "JOY_DIR", tmp)` -- this fails immediately if the module structure changes.
+4. If you create an adapter module that wraps store functions, the adapter should accept paths as constructor arguments (dependency injection), making the session fixture unnecessary for adapter-level tests.
 
-**Detection:** Operations that "sometimes work" are the classic symptom. Add logging to task completion callbacks.
+**Detection:** If any test creates files in `~/.joy/` during a CI run, something is wrong. Add a post-test check: `assert not (Path.home() / ".joy" / "projects.toml.tmp").exists()`.
 
-**Phase:** Phase 1 -- use `@work` from the start and never use raw `create_task`.
-
-**Confidence:** HIGH -- documented by Textual's creator: https://textual.textualize.io/blog/2023/02/11/the-heisenbug-lurking-in-your-async-code/
+**Phase guidance:** Must be addressed in the same phase as any store module refactoring. Do not defer.
 
 ---
 
-### CP-4: Non-Atomic Config File Writes Causing Data Loss
+### Pitfall 3: The `_is_syncing` Guard Cannot Be Extracted Naively
 
-**What goes wrong:** Power loss, crash, or keyboard interrupt during a TOML write leaves `~/.joy/projects.toml` as a zero-byte or half-written file. Next startup fails with a parse error or silently loads empty data. All project configurations lost.
+**What goes wrong:** `_is_syncing` is a mutable boolean on JoyApp that acts as a reentrant-call guard. It prevents infinite loops in the cross-pane sync chain (project highlights worktree, worktree highlights project, etc.). It is set/cleared in 6 methods across app.py (`_set_worktrees`, `_set_terminal_sessions`, `_propagate_changes`, `_sync_from_project`, `_sync_from_worktree`, `_sync_from_session`). If you extract sync logic into a PaneCoordinator service, you must decide who owns the guard: the service or the app. If the service owns it, the app's event handlers (`on_project_list_project_highlighted`, etc.) must check the service's guard -- but they currently check `self._is_syncing` at the top of the handler, BEFORE calling any sync method. If the app owns it, the service cannot set it, creating a split-brain guard.
 
-**Why it happens:** Naive `open("file", "w").write(data)` truncates the file before writing. If the process dies between truncation and write completion, the file is corrupted.
+**Why it happens:** The guard protects against Textual message cascading (highlight change -> message -> handler -> sync -> highlight change -> message...). This is inherently a UI-layer concern, but the sync logic (which pane to move, what to look up in RelationshipIndex) is business logic. The guard straddles both layers.
 
-**Consequences:** Total data loss for all project configurations. For a personal tool that stores workflow state, this is catastrophic.
+**Consequences:** If you get the guard ownership wrong, you get either infinite recursion (sync loop) or dead sync (guard never cleared after exception). Both are hard to reproduce in unit tests because they require the full Textual message pipeline.
 
 **Prevention:**
-- Write to a temp file in the same directory, then `os.replace()` (atomic on POSIX)
-- Pattern: `write to ~/.joy/.projects.toml.tmp` then `os.replace(tmp, target)`
-- Use the `safer` library if you want a drop-in replacement for `open()`
-- Keep a `.bak` copy before writes: `shutil.copy2(target, target + ".bak")`
-- On startup, if main file is corrupt/missing, check for `.bak` and recover
+1. The PaneCoordinator should own the guard and expose it as a context manager: `with coordinator.syncing():`. The app's event handlers call `if coordinator.is_syncing: return` at the top.
+2. All sync methods must use try/finally to clear the guard -- this pattern already exists in app.py and must be preserved.
+3. Write a dedicated test that verifies the guard prevents reentrance: simulate a highlight change during a sync operation and assert no infinite loop.
+4. The guard must remain on the main thread only -- never accessed from worker threads. This is currently true and must stay true.
 
-**Detection:** Corrupt config file on startup. Add a try/except around TOML parsing with recovery logic.
+**Detection:** Any `RecursionError` or frozen UI during cursor movement means the guard is broken.
 
-**Phase:** Phase 2 (data storage) -- implement atomic writes from the first file operation.
-
-**Confidence:** HIGH -- well-established pattern. The `atomicwrites` library is deprecated; use `safer` or manual temp+rename.
+**Phase guidance:** Address during PaneCoordinator extraction. Do not split the guard across layers.
 
 ---
 
-## Common Mistakes
+### Pitfall 4: Worker Thread Lifecycle Breaks When Methods Move Off JoyApp
 
-Frequently made errors in Textual TUI development that degrade quality.
+**What goes wrong:** JoyApp has 14+ methods decorated with `@work(thread=True)`: `_load_data`, `_load_worktrees`, `_load_terminal`, `_save_projects_bg`, `_do_create_tab_for_project`, `_do_activate_tab`, `_save_config_bg`, `_reload_repos`, `_open_defaults`, `_close_sessions_bg`, `_close_tab_bg`, `_copy_value_bg`, `_do_open_global`, `_open_worktree_path`, `_append_to_archive_bg`, `_remove_from_archive_bg`. Textual's `@work` decorator is an instance method decorator that registers the worker with `self` (the widget/app). If you move these methods to a service class, `@work` no longer works -- the service is not a Textual Widget and has no worker management. Additionally, `call_from_thread` is a method on App/Widget, not available on plain Python objects.
 
-### CM-1: Textual Widget Lifecycle Confusion (compose vs on_mount timing)
+**Why it happens:** Textual workers are tightly coupled to the widget lifecycle. `@work` calls `self.run_worker()` internally, which requires the widget's event loop. A service extracted from the app loses access to this infrastructure.
 
-**What goes wrong:** Accessing child widgets or DOM in the wrong lifecycle phase. Trying to query children immediately after `mount()` -- they aren't ready yet. Trying to set reactive attributes in `__init__` before the widget is mounted -- watchers that query DOM crash.
-
-**Why it happens:** Textual guarantees mount completion by the *next* message handler, not immediately. `compose()` yields widgets, but they're not in the DOM until after compose returns.
-
-**Consequences:** AttributeError or NoMatches exceptions during initialization. Widgets appear blank or in wrong state.
+**Consequences:** Moving a `@work(thread=True)` method to a service results in either: (a) `AttributeError: 'Service' object has no attribute 'run_worker'` at runtime, or (b) if you make the service inherit from Widget (antipattern), it gets mounted into the DOM and receives events it should not handle.
 
 **Prevention:**
-- Data loading and widget population goes in `on_mount()`, not `__init__()` or `compose()`
-- Use `self.call_after_refresh()` if you need to act after layout is complete
-- For reactive attributes in `__init__`, use `self.set_reactive(MyWidget.my_attr, value)` instead of direct assignment
-- Never query child widgets inside `compose()` -- they don't exist yet
+1. Keep `@work`-decorated methods on JoyApp (or on widgets). The service layer should be **synchronous pure functions** or **synchronous methods that the app wraps in workers**. Example: service has `def load_worktrees() -> list[WorktreeInfo]` (blocking, pure); app has `@work(thread=True) def _load_worktrees_worker(self): result = self.service.load_worktrees(); self.call_from_thread(self._apply_worktrees, result)`.
+2. The service layer boundary is: "everything that happens inside the thread." The `@work` decorator and `call_from_thread` bridge stay on the Textual side.
+3. Never pass `self.app` or `self` (widget reference) into a service. Pass only data. Services return data. The caller (widget/app) applies it to the UI.
 
-**Detection:** Exceptions during app startup containing "NoMatches" or "not mounted."
+**Detection:** Any import of `textual` in a service module is a warning sign. Service modules should have zero Textual imports.
 
-**Phase:** Phase 1 -- understand the lifecycle before building any widgets.
-
-**Confidence:** HIGH -- documented in Textual official docs and GitHub issues.
+**Phase guidance:** Establish this boundary BEFORE extracting any service. Document it as a project convention.
 
 ---
 
-### CM-2: Textual CSS Sizing and Layout Traps
+### Pitfall 5: Nested Worker Calls Crash Textual
 
-**What goes wrong:** Widgets render at wrong sizes, overflow their containers, or collapse to zero height. The two-pane layout (project list + detail) either doesn't split correctly or one pane dominates.
+**What goes wrong:** Textual crashes when a `@work(thread=True)` method calls another `@work(thread=True)` method directly. In the current codebase, `_do_create_tab_for_project` calls `self._save_projects_bg()` and `self._load_terminal()` via `call_from_thread`, which triggers new workers from the main thread. This works because the inner calls are scheduled on the main thread (via `call_from_thread`), not called directly from the worker thread. But if during refactoring someone removes the `call_from_thread` wrapper and calls the worker method directly from another worker, Textual raises `RuntimeError` or deadlocks.
 
-**Why it happens:** Textual CSS is inspired by web CSS but has significant differences. Common traps:
-- Default `box-sizing` is `border-box` (border/padding reduces content area)
-- `height: auto` auto-detects from content but can collapse to 0 if content is empty
-- Forgetting to set explicit widths on the two panes (use `width: 1fr` and `width: 2fr` for a 1:2 split)
-- Button/Input widgets have default padding/border that make them taller than expected
+**Why it happens:** Textual workers register with the app's worker manager on the thread they are created on. Creating a worker from a worker thread bypasses the event loop's worker tracking, leading to crashes. The current code carefully uses `call_from_thread` to bounce back to the main thread before spawning new workers.
 
-**Consequences:** Broken layout. Detail pane either takes all space or collapses. Scrolling doesn't work in panes.
+**Consequences:** Hard crash with no useful traceback, or a deadlock where the app freezes silently.
 
 **Prevention:**
-- Use `fr` units for the two-pane split: left pane `width: 1fr`, right pane `width: 2fr`
-- Set `height: 1fr` on containers that should fill available space
-- Use Textual's DevTools (`textual run --dev`) to inspect widget dimensions live
-- Set `overflow-y: auto` on the detail pane for scrolling
-- Remove default widget border/padding when building compact layouts: `border: none; padding: 0;`
+1. Document the rule: **never call a @work method from another @work method directly**. Always go through `call_from_thread` to bounce to the main thread first.
+2. In the extracted service layer, this becomes moot: services are synchronous functions called from within a single worker. The worker calls multiple service methods sequentially, then uses `call_from_thread` once to push all results back.
+3. During refactoring, audit every `@work` method's call chain to ensure no direct worker-to-worker calls are introduced.
 
-**Detection:** Visual inspection. Run with `textual run --dev` for live CSS debugging.
+**Detection:** `RuntimeError: Cannot call run_worker from a worker thread` or app freeze during background operations.
 
-**Phase:** Phase 1 -- get the two-pane layout right in the first milestone.
-
-**Confidence:** HIGH -- documented in Textual layout guide and confirmed by GitHub issues.
+**Phase guidance:** Address during DataOrchestrator extraction. The orchestrator should consolidate multiple background operations into fewer workers.
 
 ---
 
-### CM-3: Key Binding Conflicts with Terminal Emulators
+## Moderate Pitfalls
 
-**What goes wrong:** Keyboard shortcuts that work in one terminal don't work in another. Ctrl+key combinations are intercepted by the terminal, tmux, or iTerm2 before reaching the Textual app. Arrow keys stop working in certain contexts.
+### Pitfall 6: Protocol Over-Engineering (Port Explosion)
 
-**Why it happens:** Textual can only receive keys that the terminal emulator forwards. iTerm2, Terminal.app, and tmux all intercept certain key combinations. Ctrl+C, Ctrl+Z, and many Ctrl+letter combos are claimed by the terminal. Even Escape can have timing issues (terminal escape sequences).
-
-**Consequences:** Core navigation breaks for users with different terminal configurations.
+**What goes wrong:** Creating one Protocol per method or per widget interaction leads to 15+ Protocol classes for a ~1,000 LOC app. Each Protocol needs a production implementation and a fake for tests. The cognitive overhead exceeds the benefit. Developers spend more time navigating Protocol definitions than writing features.
 
 **Prevention:**
-- Stick to simple, safe bindings: single letters (`o`, `a`, `e`, `d`), Enter, Escape, Tab, arrow keys
-- Avoid Ctrl+key for primary operations (fine for secondary shortcuts)
-- Test in both iTerm2 and Terminal.app
-- Use Textual's binding priority system for critical bindings: `Binding("o", "activate", priority=True)`
-- Document that joy is designed for iTerm2 but should work in most terminals
+1. Use coarse-grained Protocols. Three is likely the right number for joy: `ProjectServiceProtocol` (CRUD + archive), `DataOrchestratorProtocol` (load/refresh worktrees, terminals, MR data), `PaneCoordinatorProtocol` (sync, guard, badge updates). Maybe a fourth for `TerminalServiceProtocol` if iTerm2 operations are complex enough.
+2. Do NOT create Protocols for: individual store functions (load_projects, save_projects), widget-internal operations, or formatting helpers.
+3. Protocols should have 3-8 methods. If a Protocol has 1-2 methods, it is probably too granular. If it has 10+, split it.
+4. Do NOT use `@runtime_checkable`. It adds overhead and false confidence -- `isinstance` checks on Protocols only verify method names exist, not signatures. Rely on mypy/pyright for Protocol conformance checking.
 
-**Detection:** Test all keybindings in iTerm2 specifically, since that's the target terminal.
+**Detection:** Count Protocol files. If there are more Protocol definitions than service implementations, you have over-engineered.
 
-**Phase:** Phase 1 -- design the keymap once and test early.
-
-**Confidence:** HIGH -- confirmed by Textual FAQ, Posting project docs, and GitHub issues.
+**Phase guidance:** Define Protocols in the FIRST extraction phase. Get the granularity right before building implementations.
 
 ---
 
-### CM-4: Using `webbrowser.open()` Instead of `subprocess.run(["open", ...])`
+### Pitfall 7: Test Migration Creates a Dual-World Period That Never Ends
 
-**What goes wrong:** `webbrowser.open()` doesn't reliably handle custom URL schemes (`notion://`, `obsidian://`, `slack://`). It may open in the wrong app, fail silently, or not handle `file://` paths.
-
-**Why it happens:** `webbrowser.open()` is designed for HTTP URLs and browser control. Custom URL schemes require macOS's `open` command which delegates to the OS URL handler.
-
-**Consequences:** Notion links open in browser instead of Notion app. Obsidian URIs fail. Slack deep links don't work.
+**What goes wrong:** You plan to migrate from `@patch("joy.store.load_projects")` to injecting `FakeProjectService`. But 520 tests cannot be migrated at once. You create the new service and write new tests using fakes, but the old tests still use `@patch`. Both patterns coexist. Over time, the `@patch` tests rot because they patch the old module path (before refactoring), and nobody migrates them because "they still pass." You end up with two testing philosophies, both partially maintained.
 
 **Prevention:**
-- Always use `subprocess.run(["open", url])` or `asyncio.create_subprocess_exec("open", url)` on macOS
-- For app-specific URLs: `subprocess.run(["open", "-a", "Notion", url])` to force the correct app
-- For Obsidian: `subprocess.run(["open", f"obsidian://open?vault={vault}&file={file}"])`
-- URL-encode paths properly: use `urllib.parse.quote()` for file paths with spaces/special chars
+1. Do NOT plan to migrate all existing tests. Many existing tests (test_models.py: 47 tests, test_store.py: 36 tests, test_operations.py: 14 tests, test_resolver.py: 10 tests, test_worktrees.py: 16 tests) test pure functions/modules that will NOT be affected by the refactoring. They do not need migration.
+2. Identify the tests that WILL break: tests that mock `joy.store.load_projects` inside `JoyApp._load_data` (test_tui.py, test_refresh.py, test_pane_layout.py) and tests that access `self.app._*` private fields (test_sync.py fakes, test_propagation.py `_PropContext`).
+3. For the breaking tests: rewrite them to use fake adapters in the SAME commit that changes the production code. Do not create a separate "migrate tests" phase.
+4. For test_propagation.py's `_PropContext`: this is already a manual DI fake. When `_propagate_mr_auto_add` moves to a service, `_PropContext` becomes unnecessary -- the service method takes plain arguments. This is a simplification, not a migration.
+5. Set a deadline: by the end of v1.4, no test should use `@patch` on a path that goes through the service layer. Tests of pure modules (operations.py, worktrees.py, mr_status.py) can keep `@patch` for subprocess mocking -- that is a different concern.
 
-**Detection:** URLs opening in browser instead of the native app.
+**Detection:** `grep -rn "@patch" tests/ | grep -v "subprocess\|operations\|terminal_sessions\|worktrees\|mr_status"` should return zero results after migration.
 
-**Phase:** Phase 2 (object operations) -- this is the core of joy's activate functionality.
-
-**Confidence:** HIGH -- macOS `open` command behavior is well-documented. `webbrowser` limitations confirmed by Python docs.
+**Phase guidance:** Test migration happens IN each extraction phase, not as a separate phase.
 
 ---
 
-### CM-5: TOML Read/Write Library Mismatch
+### Pitfall 8: Losing the `call_after_refresh` Timing Guarantee
 
-**What goes wrong:** Using `tomllib` (stdlib, read-only) for reading but a different library for writing, leading to subtle formatting differences, lost comments, or round-trip corruption.
-
-**Why it happens:** Python's stdlib `tomllib` (3.11+) only reads TOML. For writing, you need a separate library. `tomli-w` is minimal and doesn't preserve style. `tomlkit` preserves style but is heavier.
-
-**Consequences:** Config files lose comments or formatting on save. Users who manually edit `~/.joy/config.toml` find their formatting destroyed.
+**What goes wrong:** Several places in app.py and widgets use `call_after_refresh` to schedule work after the Textual DOM rebuilds (e.g., `detail.call_after_refresh(detail.focus)` in `on_project_list_project_selected`, cursor restoration after `set_projects`). When extracting logic into services, it is tempting to move the "what to do after refresh" logic into the service. But `call_after_refresh` is a Widget method. If the service tells the app "now focus the detail pane," the app must still use `call_after_refresh` to schedule it correctly. If the app forgets the timing wrapper, focus lands on a widget that has been removed and remounted, causing focus to silently fall to the root screen.
 
 **Prevention:**
-- Use `tomlkit` for both reading and writing -- it preserves comments and formatting during round-trips
-- If startup time matters (it does for joy), lazy-import tomlkit: import inside the save function, not at module level
-- Alternative: use `tomllib` for reading (fast, stdlib) and `tomli-w` for writing (fast), but accept that manual formatting will be lost on save
-- Recommendation for joy: `tomllib` for reading (already in stdlib, zero import cost), `tomli-w` for writing (lightweight). Accept lost formatting since users rarely hand-edit these files.
+1. Services should never schedule UI timing. They return results. The app/widget applies results and handles any `call_after_refresh` scheduling.
+2. Document every `call_after_refresh` site (there are at least 4) and ensure they stay in the widget layer.
+3. Write Textual pilot tests for each `call_after_refresh` site to verify focus behavior survives the refactoring.
 
-**Detection:** Save a config, inspect the file, check if comments/formatting survived.
+**Detection:** After refactoring, if pressing Enter on a project no longer focuses the detail pane, or if cursor restoration after project deletion fails, `call_after_refresh` timing was lost.
 
-**Phase:** Phase 2 (data storage) -- decide the library pair before writing any persistence code.
-
-**Confidence:** HIGH -- confirmed by Real Python TOML guide and library comparisons.
+**Phase guidance:** Verify during each extraction phase. No dedicated phase needed.
 
 ---
 
-### CM-6: Focus Traps in Keyboard-Only Navigation
+### Pitfall 9: Breaking Textual Message Routing by Changing Widget Hierarchy
 
-**What goes wrong:** Focus gets stuck in a widget (e.g., an input field, a modal, or a sub-list) with no obvious way to escape. The user presses Escape or Tab and nothing happens. They're trapped.
-
-**Why it happens:** Textual's focus chain follows DOM order. If a widget consumes Escape or Tab without propagating, focus is trapped. Modals that don't handle dismiss properly are the most common cause.
-
-**Consequences:** User has to Ctrl+C to quit. For a keyboard-only tool, this is a critical UX failure.
+**What goes wrong:** Textual routes messages (like `ProjectList.ProjectHighlighted`) by walking up the DOM tree to find a handler. JoyApp handles these messages because it is the root App. If during refactoring you introduce an intermediary container widget (e.g., a `MainPane` wrapper), messages may be caught at the wrong level or not propagated. Similarly, the `on_descendant_focus` handler in app.py walks the DOM tree manually to determine which pane has focus -- changing the widget hierarchy (adding/removing containers) breaks this traversal.
 
 **Prevention:**
-- Always handle Escape to dismiss/unfocus: every modal, input, and dialog must respond to Escape
-- Test the complete focus cycle: Tab through all widgets, Escape from every state
-- Use `self.app.pop_screen()` for screen-based navigation -- built-in Escape handling
-- Implement `action_focus_next` and `action_focus_previous` for Tab/Shift+Tab navigation
-- The project list and detail pane should be the only two focusable regions in the main view
+1. Do NOT change the widget composition (`compose()` method) during the Ports & Adapters refactoring. The widget tree should remain identical. Only the code behind it changes.
+2. If you must change the hierarchy later, update `on_descendant_focus` and all message handlers in the same commit.
+3. Message routing is tested by TUI pilot tests (test_tui.py, test_refresh.py). Run these after any structural change.
 
-**Detection:** Manual testing: try to Tab/Escape from every interactive element.
+**Detection:** Footer hints stop updating, or cursor movement in one pane stops syncing to other panes.
 
-**Phase:** Phase 1 -- design focus management into the navigation model.
-
-**Confidence:** MEDIUM -- based on general TUI UX patterns and Textual focus documentation.
+**Phase guidance:** Explicitly out of scope for the service extraction phases. Note: the v1.4 "UI polish" work should NOT restructure the widget tree until after service extraction is complete.
 
 ---
 
-## iTerm2 Integration Risks
+### Pitfall 10: Circular Import Between Service and App Layers
 
-Specific risks for the `agents` object type that creates/activates named iTerm2 windows.
-
-### IR-1: AppleScript Is Deprecated, but Python API Has Higher Complexity
-
-**What goes wrong:** AppleScript for iTerm2 is in "maintenance mode" and no longer receiving improvements. The official recommendation is to use the iTerm2 Python API. However, the Python API requires iTerm2 to be running and has its own complexity.
-
-**Why it happens:** iTerm2's Python API is more powerful but requires:
-- iTerm2 must be running (can't launch it via the API)
-- Scripts must connect to a running iTerm2 instance via its IPC mechanism
-- The API is async-only with `async_`-prefixed methods
-- Installing the `iterm2` Python package adds a dependency
-
-**Consequences:** Extra complexity. If iTerm2 isn't running, the API can't connect. The `iterm2` package adds import time even when not used.
+**What goes wrong:** The current codebase uses lazy imports (`from joy.store import ...` inside method bodies) specifically to avoid import cycles. When you create a service layer (e.g., `joy.services.project_service`), it needs to import models from `joy.models`. If the service also needs types from `joy.app` (even just for type annotations), you get a circular import: `app -> service -> app`. Similarly, if widgets import the service Protocol from `joy.ports`, and the Protocol references types from `joy.models` that also reference widget types, you get a cycle.
 
 **Prevention:**
-- Use AppleScript via `osascript` for joy's simple use case (create window, set name, activate). It's simpler and sufficient.
-- AppleScript being in "maintenance mode" doesn't mean it's broken -- it just won't get new features. joy's needs are basic.
-- Fall back gracefully: if `osascript` fails, show an error in the TUI rather than crashing
-- Lazy-import the iTerm2 helper module -- never import at top level
-- Launch iTerm2 first if not running: `subprocess.run(["open", "-a", "iTerm"])` then wait briefly before AppleScript
+1. **Strict layering:** `joy.models` imports nothing from `joy`. `joy.ports` imports only from `joy.models`. `joy.services` imports from `joy.ports` and `joy.models`. `joy.widgets` imports from `joy.ports` and `joy.models`. `joy.app` imports everything. No upward dependencies.
+2. Protocols go in `joy.ports` (or a similar module), NOT in the same file as their implementation.
+3. Use `TYPE_CHECKING` guards for any type annotations that would create import cycles:
+   ```python
+   from __future__ import annotations
+   from typing import TYPE_CHECKING
+   if TYPE_CHECKING:
+       from joy.app import JoyApp
+   ```
+4. The existing lazy import pattern (`from joy.store import load_projects` inside method bodies) can be preserved in the thin app wrapper -- it is a valid Python pattern for breaking cycles.
 
-**Detection:** Test with iTerm2 not running. Test with multiple iTerm2 windows already open.
+**Detection:** `ImportError: cannot import name 'X' from partially initialized module 'joy.Y'` at startup.
 
-**Phase:** Phase 3 (agents object type) -- this is a later feature, not critical path.
-
-**Confidence:** MEDIUM -- AppleScript still works, but the iTerm2 team explicitly recommends the Python API. For joy's simple needs, AppleScript is pragmatic.
+**Phase guidance:** Establish the import hierarchy in Phase 1. Enforce it with a simple test that imports each layer independently.
 
 ---
 
-### IR-2: Race Condition in AppleScript Session Targeting
+## Minor Pitfalls
 
-**What goes wrong:** AppleScript sends text or commands to the wrong iTerm2 session/window if the target session was closed or if another session was activated between the "find window" and "write to session" steps.
+### Pitfall 11: Fake Adapters That Drift from Real Behavior
 
-**Why it happens:** There's a documented iTerm2 bug (GitLab issue #5462): if an initial session gets killed and another session is already open, AppleScript writes text to the wrong session. AppleScript commands are not atomic.
-
-**Consequences:** Commands intended for one project's agent window end up in another window. Data leaks between projects.
+**What goes wrong:** You create `FakeProjectService` for tests. Over time, the real `ProjectService` gains edge-case handling (e.g., duplicate name checking, archival stripping of WORKTREE objects) that the fake does not replicate. Tests pass with the fake but fail in production.
 
 **Prevention:**
-- Always identify windows by name, not by index or "current window"
-- After creating/finding a window, immediately set and verify its name property
-- Use a unique naming convention: `joy: <project-name>` to minimize collision risk
-- Add a brief delay (200-500ms) between creating a window and sending commands to it
-- If the target window can't be found by name, create a new one rather than falling back to "current"
-
-**Detection:** Test rapid open/close of iTerm2 windows while joy is activating agents.
-
-**Phase:** Phase 3 (agents) -- build and test carefully with race conditions in mind.
-
-**Confidence:** MEDIUM -- the specific bug is documented, but joy's use case (create/activate by name) is simpler than the documented failure mode (write to session).
+1. Keep fakes minimal -- they should store and return data, not implement business logic. The business logic lives in the service, which is what you are testing.
+2. For critical behaviors (like duplicate detection), write a shared contract test that runs against BOTH the real implementation and the fake.
+3. Accept that fakes will drift slightly. This is fine for unit tests. Integration tests (Textual pilot) use the real service with a test TOML directory.
 
 ---
 
-### IR-3: iTerm2 Window Naming is Session-Level, Not Window-Level
+### Pitfall 12: Premature Extraction of Widget-Internal Logic
 
-**What goes wrong:** iTerm2's AppleScript API sets names on sessions, not windows. A window's "title" is derived from its active session's name. If the window has multiple tabs, the name may not display as expected.
-
-**Why it happens:** iTerm2's hierarchy is: Application > Window > Tab > Session. The "name" property exists on sessions. Window titles are computed from the active tab's active session name, plus iTerm2's title bar configuration.
-
-**Consequences:** Finding a window "by name" requires iterating windows, checking their sessions' names. If the user creates additional tabs in a joy-managed window, the naming may break.
+**What goes wrong:** You extract `_update_highlight`, `_update_badges`, or cursor management into a service. But these are purely widget concerns -- they manipulate CSS classes, scroll positions, and DOM nodes. Extracting them into a service that returns "set highlight to index 3" just adds indirection without enabling independent testing, because you still need a Textual pilot to verify the visual result.
 
 **Prevention:**
-- Set the session name immediately after creation
-- When searching for existing windows, iterate all windows and check their first session's name
-- Use a prefix pattern (`joy:projectname`) that's unlikely to collide with user-set session names
-- Accept that if a user renames the session manually, joy won't find it -- document this behavior
-
-**Detection:** Create a joy agent window, manually add tabs to it, then try to reactivate from joy.
-
-**Phase:** Phase 3 (agents).
-
-**Confidence:** MEDIUM -- based on iTerm2 API documentation for Window and Session objects.
+1. Only extract logic that is testable WITHOUT Textual: data loading, relationship computation, persistence, cross-pane sync decisions (which pane to move, not how to move it).
+2. Leave widget rendering, cursor management, highlight application, and scroll preservation on the widgets.
+3. Rule of thumb: if the method calls `self.query_one()`, `self.add_class()`, `self.scroll_visible()`, or `self.post_message()`, it belongs on the widget.
 
 ---
 
-## Packaging and Distribution Risks
+### Pitfall 13: Over-Typing the Sync Direction Decision
 
-Edge cases with `uv tool install git+...` distribution model.
-
-### PD-1: Entry Point Not Found After Install
-
-**What goes wrong:** `uv tool install git+https://github.com/user/joy` succeeds but running `joy` gives "command not found."
-
-**Why it happens:** The `[project.scripts]` section in `pyproject.toml` is misconfigured or the entry point function doesn't exist. Common mistakes:
-- Typo in the module path: `joy = "joy.app:main"` where `main` doesn't exist in `joy/app.py`
-- Missing `__init__.py` in the package directory
-- The `[build-system]` section is missing or misconfigured
-
-**Consequences:** Users install but can't run the tool. First impression is "broken."
+**What goes wrong:** You create an elaborate type system for sync directions (project->worktree, worktree->project, terminal->project, etc.) with generic types and Union returns. The current implementation is 3 methods (`_sync_from_project`, `_sync_from_worktree`, `_sync_from_session`), each ~20 lines. Adding type-level modeling of sync directions makes the code harder to read without making it safer.
 
 **Prevention:**
-- Test `uv tool install .` locally before pushing
-- Verify the entry point: `[project.scripts]\njoy = "joy.__main__:main"` and ensure that function exists
-- Include `[build-system]\nrequires = ["hatchling"]\nbuild-backend = "hatchling.build"` (or setuptools equivalent)
-- Test in a clean environment: `uv tool install --force git+file:///path/to/local/repo`
-
-**Detection:** `which joy` returns nothing after install.
-
-**Phase:** Phase 1 -- validate the installation path on day one.
-
-**Confidence:** HIGH -- standard Python packaging issue, well-documented.
+1. The PaneCoordinator should have 3 concrete methods matching the current 3 sync methods. No generics, no strategy pattern, no enum of directions.
+2. The `_is_syncing` guard and `try/finally` pattern are the important things to preserve. The method structure is already clean.
 
 ---
 
-### PD-2: Upgrade Doesn't Pull Latest Git Commit
+### Pitfall 14: The `_PropContext` Pattern Implies Easy Extraction but Hides Coupling
 
-**What goes wrong:** Running `uv tool upgrade joy` doesn't fetch new commits from the git repo. The user is stuck on an old version.
-
-**Why it happens:** `uv tool upgrade` respects the originally installed version constraints. For git sources, it may not re-resolve to the latest commit on the branch. The lockfile pins a specific commit hash.
-
-**Consequences:** Users don't get updates. They think they've upgraded but are running old code.
+**What goes wrong:** test_propagation.py already uses a `_PropContext` class that mimics JoyApp's interface for propagation methods. This makes it look like extracting `_propagate_mr_auto_add` into a standalone service is trivial. But the method mutates `project.objects` in-place AND checks `self._config.default_open_kinds`. When moved to a service, you must decide: does the service mutate projects, or does it return a list of mutations for the caller to apply? The current tests assume mutation. Changing to return-mutations breaks test assertions.
 
 **Prevention:**
-- Document the upgrade process: `uv tool install --force git+https://github.com/user/joy` (reinstall, not upgrade)
-- Consider using `uv tool install --reinstall` for updates
-- Pin a version in pyproject.toml and tag releases -- then `uv tool upgrade` works as expected
-- Add a `joy --version` command so users can verify their installed version
-
-**Detection:** `joy --version` shows wrong version after "upgrade."
-
-**Phase:** Phase 1 -- document the install/upgrade process in README.
-
-**Confidence:** HIGH -- confirmed by uv docs and GitHub issues about git dependency locking.
+1. Decide the mutation strategy before extracting: either the service mutates (simpler, matches current behavior) or it returns deltas (purer, but requires rewriting 9 propagation tests).
+2. Recommendation: keep mutation. The projects list is owned by the app and passed by reference. The service mutates it and returns notification messages. This matches the current behavior and minimizes test changes.
+3. The service should receive `config.default_open_kinds` as a parameter, not `config` as a whole object. This makes the dependency explicit without creating a config port.
 
 ---
 
-### PD-3: Missing Implicit Dependencies
+## Phase-Specific Warnings
 
-**What goes wrong:** The tool installs fine in the development environment but fails for users because a dependency that's globally available in dev isn't declared in `pyproject.toml`.
-
-**Why it happens:** `uv tool install` creates an isolated virtual environment. Any package not listed in `[project.dependencies]` won't be available. Common culprits:
-- `tomlkit` or `tomli-w` (not stdlib)
-- `iterm2` Python package (if using the Python API instead of AppleScript)
-- Forgetting to declare `textual` itself
-
-**Consequences:** ImportError on first run. Terrible first experience.
-
-**Prevention:**
-- Test installation in a completely clean environment (new user account or container)
-- Run `uv tool install .` in a fresh directory without a virtualenv active
-- List ALL runtime dependencies in `[project.dependencies]`
-- Use `uv tool install --python 3.12` to test with a specific Python version
-
-**Detection:** ImportError on first run after clean install.
-
-**Phase:** Phase 1 -- CI should test `uv tool install` in a clean environment.
-
-**Confidence:** HIGH -- standard packaging pitfall.
-
----
-
-## Obsidian and URL Scheme Risks
-
-### UR-1: Obsidian URI Path Encoding Breaks on Spaces and Special Characters
-
-**What goes wrong:** Opening `obsidian://open?vault=My Vault&file=My Note` fails because the spaces and special characters aren't properly URL-encoded.
-
-**Why it happens:** The Obsidian URI scheme requires proper percent-encoding for spaces, slashes, and special characters in vault names and file paths. The `open` command on macOS passes the URI as-is to the handler, but shell escaping and URL encoding are separate concerns.
-
-**Consequences:** Notes with spaces in filenames (extremely common) fail to open. Users think Obsidian integration is broken.
-
-**Prevention:**
-- Always URL-encode the vault name and file path: `urllib.parse.quote(vault_name, safe="")` and `urllib.parse.quote(file_path, safe="/")`
-- Build the URI carefully: `f"obsidian://open?vault={quote(vault)}&file={quote(file)}"`
-- Test with file paths containing: spaces, parentheses, apostrophes, unicode characters, and nested directories
-- Shell-escape the full URI when passing to subprocess: use list form `["open", uri]` not string form
-
-**Detection:** Test with a note file named "My Project (2024) Notes/Daily Log.md".
-
-**Phase:** Phase 2 (object operations) -- test encoding edge cases for every URL scheme.
-
-**Confidence:** HIGH -- documented in Obsidian help docs, confirmed by forum posts about encoding issues.
-
----
-
-### UR-2: Notion/Slack URL Scheme Changes Break Deep Links
-
-**What goes wrong:** `notion://` or `slack://` URL schemes change format between app versions, breaking previously-stored deep links.
-
-**Why it happens:** URL schemes for desktop apps are not standardized. Notion has changed its URL scheme format in the past. Slack's deep link format differs between the web and desktop app.
-
-**Consequences:** Stored project URLs stop working after an app update.
-
-**Prevention:**
-- Store the original HTTPS URL, not the scheme-rewritten URL
-- Convert `https://` to `notion://` (or equivalent) at activation time, not at storage time
-- This way, if the scheme changes, you only need to update the conversion logic, not all stored data
-- For Notion: replace `https://www.notion.so/` with `notion://www.notion.so/` at open time
-- For Slack: consider using `open -a Slack <https-url>` instead of scheme rewriting
-
-**Detection:** Stored URLs fail to open in the desktop app after an app update.
-
-**Phase:** Phase 2 (object operations) -- design the storage format to store raw URLs.
-
-**Confidence:** MEDIUM -- based on community reports of scheme changes; not independently verified for current versions.
-
----
-
-## Per-Phase Warnings Summary
-
-| Phase | Pitfall | Severity | Mitigation |
-|-------|---------|----------|------------|
-| Phase 1 (Core TUI) | CP-1: Event loop blocking | CRITICAL | Use @work decorator for all I/O |
-| Phase 1 (Core TUI) | CP-2: Slow startup imports | CRITICAL | Profile imports, lazy-load non-essential |
-| Phase 1 (Core TUI) | CP-3: Task GC heisenbug | CRITICAL | Always use @work, never bare create_task |
-| Phase 1 (Core TUI) | CM-1: Widget lifecycle | HIGH | Load data in on_mount, not compose/init |
-| Phase 1 (Core TUI) | CM-2: CSS layout traps | HIGH | Use fr units, test with --dev |
-| Phase 1 (Core TUI) | CM-3: Key binding conflicts | HIGH | Stick to simple letter keys, test in iTerm2 |
-| Phase 1 (Core TUI) | CM-6: Focus traps | HIGH | Escape always unfocuses/dismisses |
-| Phase 1 (Core TUI) | PD-1: Entry point config | HIGH | Test uv tool install . on day one |
-| Phase 2 (Data/Ops) | CP-4: Non-atomic writes | CRITICAL | Write temp + os.replace pattern |
-| Phase 2 (Data/Ops) | CM-4: webbrowser.open | HIGH | Use subprocess open command |
-| Phase 2 (Data/Ops) | CM-5: TOML library choice | MEDIUM | tomllib read + tomli-w write |
-| Phase 2 (Data/Ops) | UR-1: Obsidian URI encoding | HIGH | URL-encode all path components |
-| Phase 2 (Data/Ops) | UR-2: URL scheme fragility | MEDIUM | Store HTTPS, convert at open time |
-| Phase 3 (Agents) | IR-1: AppleScript deprecation | MEDIUM | Use AppleScript for simplicity, accept risk |
-| Phase 3 (Agents) | IR-2: Session race condition | MEDIUM | Identify by name, add delays |
-| Phase 3 (Agents) | IR-3: Window vs session naming | MEDIUM | Use session name with prefix convention |
-| Distribution | PD-2: Git upgrade behavior | HIGH | Document reinstall-based updates |
-| Distribution | PD-3: Missing dependencies | HIGH | Test clean install in isolation |
-
----
-
-## Key Findings
-
-1. **Event loop blocking is the #1 Textual pitfall.** Every `subprocess.run()`, file read, or external tool invocation must go through `@work(thread=True)` or `asyncio.create_subprocess_exec()`. This must be the default pattern from line one of code, not retrofitted.
-
-2. **Startup time will be a fight.** Textual + Rich alone cost 130-230ms. The Posting project (a real Textual app) documented a 40% reduction by lazy-importing non-essential modules. Joy should measure startup on every PR and target under 350ms to first paint.
-
-3. **Atomic file writes are non-negotiable for `~/.joy/` data.** A single interrupted write can destroy all project configurations. The temp-file-then-rename pattern costs nothing and prevents catastrophic data loss.
-
-4. **AppleScript is simpler than iTerm2's Python API for joy's needs.** The Python API is more powerful but requires iTerm2 to be running and adds dependency complexity. For "create named window + activate by name," AppleScript via `osascript` is the pragmatic choice despite being in maintenance mode.
-
-5. **Store original URLs, not scheme-rewritten URLs.** Converting `https://` to `notion://` at storage time is a data design mistake. Convert at activation time so the storage format remains resilient to URL scheme changes across app versions.
+| Phase Topic | Likely Pitfall | Mitigation |
+|-------------|---------------|------------|
+| Facade methods on widgets | Pitfall 1 (hidden contracts) | grep all `._` cross-boundary access; convert one file at a time; full test run after each |
+| PaneCoordinator extraction | Pitfall 3 (syncing guard ownership), Pitfall 5 (nested workers) | Guard stays on coordinator as context manager; no worker spawning inside coordinator |
+| DataOrchestrator extraction | Pitfall 4 (worker lifecycle), Pitfall 5 (nested workers) | Orchestrator is sync; @work stays on App; orchestrator called from within worker body |
+| ProjectService extraction | Pitfall 2 (session fixture), Pitfall 7 (dual test world), Pitfall 14 (mutation) | Update fixture in same commit; rewrite breaking tests immediately; keep mutation strategy |
+| Protocol definition | Pitfall 6 (port explosion), Pitfall 10 (circular imports) | 3-4 coarse Protocols; strict layering; ports/ module imports only models |
+| Test migration | Pitfall 7 (dual world), Pitfall 11 (fake drift) | Migrate in same commit as production change; shared contract tests for critical fakes |
+| UI polish (separate from extraction) | Pitfall 9 (message routing), Pitfall 12 (premature extraction) | Do NOT change widget tree during extraction phases; save UI work for after services are stable |
 
 ---
 
 ## Sources
 
-- Posting startup optimization: https://darren.codes/posts/python-startup-time/
-- Textual async heisenbug: https://textual.textualize.io/blog/2023/02/11/the-heisenbug-lurking-in-your-async-code/
-- Textual workers guide: https://textual.textualize.io/guide/workers/
-- Textual layout guide: https://textual.textualize.io/guide/layout/
-- Textual CSS guide: https://textual.textualize.io/guide/CSS/
-- Textual input/bindings: https://textual.textualize.io/guide/input/
-- 7 Lessons from Textual: https://www.textualize.io/blog/7-things-ive-learned-building-a-modern-tui-framework/
-- iTerm2 Python API: https://iterm2.com/python-api/window.html
-- iTerm2 AppleScript docs: https://iterm2.com/documentation-scripting.html
-- iTerm2 session race condition bug: https://gitlab.com/gnachman/iterm2/-/work_items/5462
-- Obsidian URI scheme: https://help.obsidian.md/Extending+Obsidian/Obsidian+URI
-- Python TOML guide: https://realpython.com/python-toml/
-- Atomic writes (safer vs atomicwrites): https://docs.bswen.com/blog/2026-04-04-safer-vs-atomicwrites-python/
-- PEP 810 lazy imports: https://peps.python.org/pep-0810/
-- uv tools guide: https://docs.astral.sh/uv/concepts/tools/
-- uv git dependency updates: https://iifx.dev/en/articles/457001353/updating-git-dependencies-with-uv-the-upgrade-solution
+- Textual workers documentation: https://textual.textualize.io/guide/workers/
+- Textual nested worker crash: https://github.com/Textualize/textual/issues/3472
+- Textual call_from_thread discussion: https://github.com/Textualize/textual/discussions/1828
+- Python Protocol spec: https://typing.python.org/en/latest/spec/protocol.html
+- runtime_checkable limitations: https://discuss.python.org/t/is-there-a-downside-to-typing-runtime-checkable/20731
+- isinstance on runtime_checkable side effects: https://github.com/python/cpython/issues/102433
+- Hexagonal architecture pitfalls (2026): https://elpic.medium.com/hexagonal-architecture-in-the-real-world-trade-offs-pitfalls-and-when-not-to-use-it-1f304095f983
+- Hexagonal architecture in Python: https://blog.szymonmiks.pl/p/hexagonal-architecture-in-python/
+- pytest monkeypatch session scope: https://github.com/pytest-dev/pytest/issues/1872
+- Mock.patch as code smell: http://mauveweb.co.uk/posts/2014/09/every-mock-patch-is-a-little-smell.html
+- DI vs mocking in Python: https://betterprogramming.pub/testing-in-python-dependency-injection-vs-mocking-5e542783cb20
+- Strangler fig for incremental migration: https://shopify.engineering/refactoring-legacy-code-strangler-fig-pattern
+- Codebase analysis: grep of app.py, widgets/, tests/ in joy repo (28+ cross-boundary private-field access sites identified)
