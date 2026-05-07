@@ -120,8 +120,9 @@ class MRRow(Static):
         elif detail.review_status == "review_required":
             line2.append(f"  {ICON_REVIEW_PENDING} Pending", style="dim")
 
-        # Combine as two separate Text lines so line 1 truncates independently
-        t = Text()
+        # no_wrap + ellipsis on the parent ensures each line truncates independently;
+        # literal \n still creates a line break (no_wrap only prevents soft-wrapping).
+        t = Text(no_wrap=True, overflow="ellipsis")
         t.append_text(line1)
         t.append("\n")
         t.append_text(line2)
