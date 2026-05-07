@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 
 from joy.models import MRDetail, MRInfo, Repo, WorktreeInfo
@@ -29,12 +30,15 @@ def fetch_mr_data(
     repos: list[Repo],
     worktrees: list[WorktreeInfo],
 ) -> BatchMRResult:
-    """Fetch MR/CI data for all worktrees.
+    """Fetch MR/CI data for all worktrees, with concurrent CLI calls.
 
     Returns a BatchMRResult containing:
     - by_branch: mapping of ``(repo_name, branch) -> MRInfo`` for worktree badges
     - authored: list of MRDetail for MRs authored by the user
     - review_requests: list of MRDetail for MRs where user is reviewer
+
+    All independent CLI calls (per-repo branch fetch, authored, reviewer, and
+    per-branch fallback) run concurrently via ThreadPoolExecutor for speed.
 
     Never raises -- per-repo errors are caught and silently skipped (D-11).
     Returns partial results (some repos may have data, others not).
@@ -46,68 +50,76 @@ def fetch_mr_data(
     for wt in worktrees:
         branches_by_repo.setdefault(wt.repo_name, set()).add(wt.branch)
 
-    for repo in repos:
-        if repo.forge == "unknown":
-            continue  # D-07: skip unknown forges silently
+    eligible_repos = [r for r in repos if r.forge != "unknown"]
+    if not eligible_repos:
+        return result
 
-        # Fetch branch-keyed data (existing behavior for worktree pane)
-        try:
+    # Phase 1: fire all per-repo calls concurrently
+    with ThreadPoolExecutor(max_workers=12) as pool:
+        # Submit per-repo batch calls (branch-keyed, authored, reviewer)
+        branch_futures = {}
+        authored_futures = {}
+        review_futures = {}
+
+        for repo in eligible_repos:
+            active = branches_by_repo.get(repo.name, set())
             if repo.forge == "github":
-                mr_map = _fetch_github_mrs(
-                    repo, branches_by_repo.get(repo.name, set())
-                )
+                branch_futures[pool.submit(_fetch_github_mrs, repo, active)] = repo
+                authored_futures[pool.submit(_fetch_github_authored_mrs, repo)] = repo
+                review_futures[pool.submit(_fetch_github_review_requests, repo)] = repo
             elif repo.forge == "gitlab":
-                mr_map = _fetch_gitlab_mrs(
-                    repo, branches_by_repo.get(repo.name, set())
-                )
-            else:
-                mr_map = {}
-            result.by_branch.update(mr_map)
-        except Exception:
-            mr_map = {}  # D-11: per-repo error silently skipped
+                branch_futures[pool.submit(_fetch_gitlab_mrs, repo, active)] = repo
+                authored_futures[pool.submit(_fetch_gitlab_authored_mrs, repo)] = repo
+                review_futures[pool.submit(_fetch_gitlab_review_requests, repo)] = repo
 
-        # Fetch authored MRs for MR pane
-        try:
-            if repo.forge == "github":
-                authored = _fetch_github_authored_mrs(repo)
-            elif repo.forge == "gitlab":
-                authored = _fetch_gitlab_authored_mrs(repo)
-            else:
-                authored = []
-            result.authored.extend(authored)
-        except Exception:
-            pass  # D-11: per-repo error silently skipped
-
-        # Fetch review requests for MR pane
-        try:
-            if repo.forge == "github":
-                reviews = _fetch_github_review_requests(repo)
-            elif repo.forge == "gitlab":
-                reviews = _fetch_gitlab_review_requests(repo)
-            else:
-                reviews = []
-            result.review_requests.extend(reviews)
-        except Exception:
-            pass  # D-11: per-repo error silently skipped
-
-        # Per-branch fallback: active branches missing from batch by_branch
-        active_branches = branches_by_repo.get(repo.name, set())
-        covered_branches = {
-            branch for (rname, branch) in mr_map if rname == repo.name
-        }
-        leftover_branches = active_branches - covered_branches
-        for branch in leftover_branches:
+        # Collect branch-keyed results (needed for fallback computation)
+        mr_maps_by_repo: dict[str, dict[tuple[str, str], MRInfo]] = {}
+        for future in as_completed(branch_futures):
+            repo = branch_futures[future]
             try:
-                if repo.forge == "github":
-                    fallback = _fetch_github_branch_mr(repo, branch)
-                elif repo.forge == "gitlab":
-                    fallback = _fetch_gitlab_branch_mr(repo, branch)
-                else:
-                    fallback = None
-                if fallback is not None:
-                    result.by_branch[(repo.name, branch)] = fallback
+                mr_map = future.result()
+                result.by_branch.update(mr_map)
+                mr_maps_by_repo[repo.name] = mr_map
             except Exception:
-                pass  # D-11: per-branch fallback error silently skipped
+                mr_maps_by_repo[repo.name] = {}
+
+        # Collect authored results
+        for future in as_completed(authored_futures):
+            try:
+                result.authored.extend(future.result())
+            except Exception:
+                pass
+
+        # Collect reviewer results
+        for future in as_completed(review_futures):
+            try:
+                result.review_requests.extend(future.result())
+            except Exception:
+                pass
+
+        # Phase 2: per-branch fallback for branches missing from batch results
+        fallback_futures: dict = {}
+        for repo in eligible_repos:
+            active_branches = branches_by_repo.get(repo.name, set())
+            mr_map = mr_maps_by_repo.get(repo.name, {})
+            covered = {branch for (rname, branch) in mr_map if rname == repo.name}
+            for branch in active_branches - covered:
+                if repo.forge == "github":
+                    fut = pool.submit(_fetch_github_branch_mr, repo, branch)
+                elif repo.forge == "gitlab":
+                    fut = pool.submit(_fetch_gitlab_branch_mr, repo, branch)
+                else:
+                    continue
+                fallback_futures[fut] = (repo.name, branch)
+
+        for future in as_completed(fallback_futures):
+            repo_name, branch = fallback_futures[future]
+            try:
+                fallback = future.result()
+                if fallback is not None:
+                    result.by_branch[(repo_name, branch)] = fallback
+            except Exception:
+                pass
 
     return result
 
@@ -299,8 +311,8 @@ def _fetch_gitlab_mrs(
 ) -> dict[tuple[str, str], MRInfo]:
     """Fetch open MRs from a GitLab repo via ``glab mr list``.
 
-    One ``glab mr list`` call per repo, plus one ``glab ci get`` per branch
-    that has an MR (CI status not available from list endpoint).
+    One ``glab mr list`` call per repo, plus concurrent ``glab ci get`` calls
+    for branches that have an MR (CI status not available from list endpoint).
     Raises RuntimeError on non-zero exit code from mr list.
     """
     result = subprocess.run(
@@ -324,16 +336,18 @@ def _fetch_gitlab_mrs(
         raise RuntimeError(result.stderr.strip())
 
     mrs = json.loads(result.stdout)
+    # Filter to active branches first, then fetch CI status concurrently
+    matching = [(mr, mr["source_branch"]) for mr in mrs if mr["source_branch"] in active_branches]
+    if not matching:
+        return {}
+
+    ci_statuses = _fetch_glab_ci_statuses_concurrent(repo, [branch for _, branch in matching])
     out: dict[tuple[str, str], MRInfo] = {}
-    for mr in mrs:
-        branch = mr["source_branch"]
-        if branch not in active_branches:
-            continue
-        ci_status = _fetch_glab_ci_status(repo, branch)
+    for mr, branch in matching:
         out[(repo.name, branch)] = MRInfo(
             mr_number=mr["iid"],
             is_draft=mr.get("draft", False),
-            ci_status=ci_status,
+            ci_status=ci_statuses.get(branch),
             url=mr.get("web_url", ""),
         )
     return out
@@ -343,6 +357,7 @@ def _fetch_gitlab_authored_mrs(repo: Repo) -> list[MRDetail]:
     """Fetch open MRs authored by the current user via ``glab mr list --author @me``.
 
     Returns list[MRDetail] with is_review_request=False.
+    CI status calls run concurrently for all returned MRs.
     Raises RuntimeError on non-zero exit code.
     """
     result = subprocess.run(
@@ -368,18 +383,24 @@ def _fetch_gitlab_authored_mrs(repo: Repo) -> list[MRDetail]:
         raise RuntimeError(result.stderr.strip())
 
     mrs = json.loads(result.stdout)
+    if not mrs:
+        return []
+
+    branches = [mr.get("source_branch", "") for mr in mrs]
+    ci_statuses = _fetch_glab_ci_statuses_concurrent(repo, branches)
+
     out: list[MRDetail] = []
     for mr in mrs:
-        ci_status = _fetch_glab_ci_status(repo, mr.get("source_branch", ""))
+        branch = mr.get("source_branch", "")
         out.append(MRDetail(
             mr_number=mr["iid"],
             title=mr.get("title", ""),
             is_draft=mr.get("draft", False),
-            ci_status=ci_status,
+            ci_status=ci_statuses.get(branch),
             review_status=_map_gl_review_status(mr.get("detailed_merge_status")),
             url=mr.get("web_url", ""),
             repo_name=repo.name,
-            branch=mr.get("source_branch", ""),
+            branch=branch,
             is_review_request=False,
         ))
     return out
@@ -389,6 +410,7 @@ def _fetch_gitlab_review_requests(repo: Repo) -> list[MRDetail]:
     """Fetch open MRs where the current user is a reviewer via ``glab mr list --reviewer @me``.
 
     Returns list[MRDetail] with is_review_request=True.
+    CI status calls run concurrently for all returned MRs.
     Raises RuntimeError on non-zero exit code.
     """
     result = subprocess.run(
@@ -414,18 +436,24 @@ def _fetch_gitlab_review_requests(repo: Repo) -> list[MRDetail]:
         raise RuntimeError(result.stderr.strip())
 
     mrs = json.loads(result.stdout)
+    if not mrs:
+        return []
+
+    branches = [mr.get("source_branch", "") for mr in mrs]
+    ci_statuses = _fetch_glab_ci_statuses_concurrent(repo, branches)
+
     out: list[MRDetail] = []
     for mr in mrs:
-        ci_status = _fetch_glab_ci_status(repo, mr.get("source_branch", ""))
+        branch = mr.get("source_branch", "")
         out.append(MRDetail(
             mr_number=mr["iid"],
             title=mr.get("title", ""),
             is_draft=mr.get("draft", False),
-            ci_status=ci_status,
+            ci_status=ci_statuses.get(branch),
             review_status=_map_gl_review_status(mr.get("detailed_merge_status")),
             url=mr.get("web_url", ""),
             repo_name=repo.name,
-            branch=mr.get("source_branch", ""),
+            branch=branch,
             is_review_request=True,
         ))
     return out
@@ -473,6 +501,35 @@ def _fetch_gitlab_branch_mr(repo: Repo, branch: str) -> MRInfo | None:
         )
     except Exception:
         return None
+
+
+def _fetch_glab_ci_statuses_concurrent(
+    repo: Repo, branches: list[str]
+) -> dict[str, str | None]:
+    """Fetch CI status for multiple branches concurrently.
+
+    Returns mapping of branch -> ci_status. Branches that fail return None.
+    """
+    if not branches:
+        return {}
+    # Deduplicate branches (same branch may appear in multiple MRs)
+    unique_branches = list(set(branches))
+    if len(unique_branches) == 1:
+        return {unique_branches[0]: _fetch_glab_ci_status(repo, unique_branches[0])}
+
+    statuses: dict[str, str | None] = {}
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {
+            pool.submit(_fetch_glab_ci_status, repo, branch): branch
+            for branch in unique_branches
+        }
+        for future in as_completed(futures):
+            branch = futures[future]
+            try:
+                statuses[branch] = future.result()
+            except Exception:
+                statuses[branch] = None
+    return statuses
 
 
 def _fetch_glab_ci_status(repo: Repo, branch: str) -> str | None:

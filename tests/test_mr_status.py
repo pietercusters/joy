@@ -585,11 +585,18 @@ class TestFetchGitlabMrs:
                 "detailed_merge_status": "not_approved",
             },
         ]
-        mock_run.side_effect = [
-            _mock_result(stdout=json.dumps(mr_data)),
-            _mock_result(stdout=json.dumps({"status": "success"})),
-            _mock_result(stdout=json.dumps({"status": "failed"})),
-        ]
+        # Dispatch based on command args (CI calls may run concurrently in any order)
+        def _dispatch(*args, **kwargs):
+            cmd = args[0] if args else kwargs.get("args", [])
+            if cmd[0] == "glab" and cmd[1] == "mr":
+                return _mock_result(stdout=json.dumps(mr_data))
+            # CI get: dispatch by branch
+            branch_arg = cmd[cmd.index("--branch") + 1] if "--branch" in cmd else ""
+            if branch_arg == "branch-a":
+                return _mock_result(stdout=json.dumps({"status": "success"}))
+            return _mock_result(stdout=json.dumps({"status": "failed"}))
+
+        mock_run.side_effect = _dispatch
         repo = Repo(
             name="myrepo",
             local_path="/tmp/repo",
@@ -746,22 +753,18 @@ class TestFetchMrData:
         """Per-repo exception is caught; partial results returned."""
         from joy.mr_status import fetch_mr_data
 
-        # First repo (github): all 3 calls fail (branch list, authored, review requests)
-        # Second repo (gitlab): mr list succeeds, ci get succeeds, authored succeeds + ci, review succeeds + ci
-        mock_run.side_effect = [
-            _mock_result(stderr="auth error", returncode=1),  # github branch list fails
-            _mock_result(stderr="auth error", returncode=1),  # github authored fails
-            _mock_result(stderr="auth error", returncode=1),  # github review requests fails
-            # No fallback calls for github since mr_map is empty (no covered branches)
-            # but active branches exist, so fallback for feat-login:
-            _mock_result(stderr="auth error", returncode=1),  # github fallback fails
-            _mock_result(stdout=json.dumps(GITLAB_MR_JSON)),  # gitlab mr list
-            _mock_result(stdout=json.dumps(GITLAB_CI_JSON)),  # gitlab ci get for feat-auth
-            _mock_result(stdout=json.dumps(GITLAB_MR_JSON)),  # gitlab authored
-            _mock_result(stdout=json.dumps(GITLAB_CI_JSON)),  # gitlab ci get for authored
-            _mock_result(stdout=json.dumps(GITLAB_MR_JSON)),  # gitlab review requests
-            _mock_result(stdout=json.dumps(GITLAB_CI_JSON)),  # gitlab ci get for review
-        ]
+        # GitHub calls all fail; GitLab calls all succeed.
+        # Dispatch based on command (concurrent calls make ordering unreliable).
+        def _dispatch(*args, **kwargs):
+            cmd = args[0] if args else kwargs.get("args", [])
+            if cmd[0] == "gh":
+                return _mock_result(stderr="auth error", returncode=1)
+            # glab mr list / glab ci get
+            if cmd[1] == "mr":
+                return _mock_result(stdout=json.dumps(GITLAB_MR_JSON))
+            return _mock_result(stdout=json.dumps(GITLAB_CI_JSON))
+
+        mock_run.side_effect = _dispatch
         repos = [
             Repo(
                 name="gh-repo",
@@ -824,18 +827,17 @@ class TestFetchMrData:
         """Mixed github+gitlab repos return combined results."""
         from joy.mr_status import fetch_mr_data
 
-        mock_run.side_effect = [
-            _mock_result(stdout=json.dumps(GITHUB_PR_JSON)),   # github branch list
-            _mock_result(stdout=json.dumps(GITHUB_PR_JSON)),   # github authored
-            _mock_result(stdout=json.dumps(GITHUB_PR_JSON)),   # github review requests
-            # No fallback needed -- feat-login covered by batch
-            _mock_result(stdout=json.dumps(GITLAB_MR_JSON)),   # gitlab mr list
-            _mock_result(stdout=json.dumps(GITLAB_CI_JSON)),   # gitlab ci get
-            _mock_result(stdout=json.dumps(GITLAB_MR_JSON)),   # gitlab authored
-            _mock_result(stdout=json.dumps(GITLAB_CI_JSON)),   # gitlab ci get for authored
-            _mock_result(stdout=json.dumps(GITLAB_MR_JSON)),   # gitlab review requests
-            _mock_result(stdout=json.dumps(GITLAB_CI_JSON)),   # gitlab ci get for review
-        ]
+        # Dispatch based on command (concurrent calls make ordering unreliable).
+        def _dispatch(*args, **kwargs):
+            cmd = args[0] if args else kwargs.get("args", [])
+            if cmd[0] == "gh":
+                return _mock_result(stdout=json.dumps(GITHUB_PR_JSON))
+            # glab mr list / glab ci get
+            if cmd[1] == "mr":
+                return _mock_result(stdout=json.dumps(GITLAB_MR_JSON))
+            return _mock_result(stdout=json.dumps(GITLAB_CI_JSON))
+
+        mock_run.side_effect = _dispatch
         repos = [
             Repo(
                 name="gh-repo",
@@ -897,7 +899,6 @@ class TestPerBranchFallback:
                 "title": "Fix login",
             }
         ]
-        # Fallback for feat-other returns a PR
         fallback_json = [
             {
                 "number": 55,
@@ -906,12 +907,19 @@ class TestPerBranchFallback:
                 "url": "https://github.com/owner/repo/pull/55",
             }
         ]
-        mock_run.side_effect = [
-            _mock_result(stdout=json.dumps(batch_json)),       # github branch list
-            _mock_result(stdout=json.dumps(batch_json)),       # github authored
-            _mock_result(stdout=json.dumps([])),               # github review requests
-            _mock_result(stdout=json.dumps(fallback_json)),    # github fallback for feat-other
-        ]
+
+        def _dispatch(*args, **kwargs):
+            cmd = args[0] if args else kwargs.get("args", [])
+            # Fallback call uses --head flag
+            if "--head" in cmd:
+                return _mock_result(stdout=json.dumps(fallback_json))
+            # --search means review requests
+            if "--search" in cmd:
+                return _mock_result(stdout=json.dumps([]))
+            # All other gh pr list calls return batch_json
+            return _mock_result(stdout=json.dumps(batch_json))
+
+        mock_run.side_effect = _dispatch
         repos = [
             Repo(
                 name="myrepo",
@@ -926,7 +934,6 @@ class TestPerBranchFallback:
         ]
         result = fetch_mr_data(repos, worktrees)
 
-        # Both branches should be in by_branch
         assert ("myrepo", "feat-login") in result.by_branch
         assert ("myrepo", "feat-other") in result.by_branch
         assert result.by_branch[("myrepo", "feat-login")].mr_number == 42
@@ -948,12 +955,16 @@ class TestPerBranchFallback:
                 "title": "Fix login",
             }
         ]
-        mock_run.side_effect = [
-            _mock_result(stdout=json.dumps(batch_json)),  # github branch list
-            _mock_result(stdout=json.dumps(batch_json)),  # github authored
-            _mock_result(stdout=json.dumps([])),           # github review requests
-            _mock_result(stdout=json.dumps([])),           # github fallback returns empty
-        ]
+
+        def _dispatch(*args, **kwargs):
+            cmd = args[0] if args else kwargs.get("args", [])
+            if "--head" in cmd:
+                return _mock_result(stdout=json.dumps([]))  # fallback returns empty
+            if "--search" in cmd:
+                return _mock_result(stdout=json.dumps([]))
+            return _mock_result(stdout=json.dumps(batch_json))
+
+        mock_run.side_effect = _dispatch
         repos = [
             Repo(
                 name="myrepo",
@@ -976,12 +987,13 @@ class TestPerBranchFallback:
         """When fallback call fails, branch is silently skipped."""
         from joy.mr_status import fetch_mr_data
 
-        mock_run.side_effect = [
-            _mock_result(stdout=json.dumps([])),                 # github branch list (empty)
-            _mock_result(stdout=json.dumps([])),                 # github authored (empty)
-            _mock_result(stdout=json.dumps([])),                 # github review requests (empty)
-            _mock_result(stderr="network error", returncode=1),  # github fallback fails
-        ]
+        def _dispatch(*args, **kwargs):
+            cmd = args[0] if args else kwargs.get("args", [])
+            if "--head" in cmd:
+                return _mock_result(stderr="network error", returncode=1)
+            return _mock_result(stdout=json.dumps([]))  # all batch calls return empty
+
+        mock_run.side_effect = _dispatch
         repos = [
             Repo(
                 name="myrepo",
