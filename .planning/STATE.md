@@ -75,14 +75,15 @@ Known tech debt for next milestone:
 
 ### Quick Tasks Completed
 
-| # | Description | Date | Commit | Directory |
-|---|-------------|------|--------|-----------|
-| 260423-k0b | bug: upon refresh, some panes shift focus to the first item, while they should keep focus on the item that was selected before the refresh (if any) | 2026-04-23 | ddcbcab | [260423-k0b-bug-upon-refresh-some-panes-shift-focus-](./quick/260423-k0b-bug-upon-refresh-some-panes-shift-focus-/) |
-| 260423-kd7 | fix: preserve no-selection state and all cursor positions across refresh in all panes | 2026-04-23 | 32824e5 | [260423-kd7-fix-preserve-no-selection-state-and-all-](./quick/260423-kd7-fix-preserve-no-selection-state-and-all-/) |
+| # | Description | Date | Commit | Status | Directory |
+|---|-------------|------|--------|--------|-----------|
+| 260423-k0b | bug: upon refresh, some panes shift focus to the first item, while they should keep focus on the item that was selected before the refresh (if any) | 2026-04-23 | ddcbcab | | [260423-k0b-bug-upon-refresh-some-panes-shift-focus-](./quick/260423-k0b-bug-upon-refresh-some-panes-shift-focus-/) |
+| 260423-kd7 | fix: preserve no-selection state and all cursor positions across refresh in all panes | 2026-04-23 | 32824e5 | | [260423-kd7-fix-preserve-no-selection-state-and-all-](./quick/260423-kd7-fix-preserve-no-selection-state-and-all-/) |
+| 260506-rc1 | Add two new panes: placeholder pane and MR status pane with author/reviewer sections, pipeline status, and efficient background fetching | 2026-05-06 | 255bf59 | Verified | [260506-rc1-add-two-new-panes-placeholder-pane-and-m](./quick/260506-rc1-add-two-new-panes-placeholder-pane-and-m/) |
 
 ## Session Continuity
 
 Last session: 2026-04-22
 Stopped at: v1.3 milestone archived
-Last activity: 2026-04-24 - Shipped cursor fix PRs — PR #12
+Last activity: 2026-05-06 - Completed quick task 260506-rc1: Add MR pane + placeholder pane
 Resume: /gsd-new-milestone to start v1.4 planning
