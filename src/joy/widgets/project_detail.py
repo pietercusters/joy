@@ -17,8 +17,9 @@ class _DetailScroll(VerticalScroll, can_focus=False):
     the e/d/o bindings on ProjectDetail to silently fail.
     """
 
-from joy.models import ObjectItem, PresetKind, Project, WorktreeInfo
+from joy.models import ObjectItem, PresetKind, Project, TerminalSession, WorktreeInfo
 from joy.widgets.object_row import KIND_SHORTCUT, ObjectRow, _success_message, _truncate
+from joy.widgets.terminal_pane import ICON_CLAUDE
 
 # Semantic group structure for Details pane
 SEMANTIC_GROUPS: list[tuple[str, list[PresetKind]]] = [
@@ -91,13 +92,14 @@ class ProjectDetail(Widget, can_focus=True):
         self._cursor: int = -1
         self._rows: list[ObjectRow] = []
         self._resolver_worktrees: list[WorktreeInfo] = []
+        self._resolver_terminals: list[TerminalSession] = []
         self._readonly_items: set[int] = set()
         self.border_title = "Details"
 
     def compose(self) -> ComposeResult:
         yield _DetailScroll(id="detail-scroll")
 
-    def set_project(self, project: Project, resolver_worktrees: list[WorktreeInfo] | None = None) -> None:
+    def set_project(self, project: Project, resolver_worktrees: list[WorktreeInfo] | None = None, resolver_terminals: list[TerminalSession] | None = None) -> None:
         """Update the displayed project: rebuild grouped object rows and reset cursor.
 
         Defers DOM manipulation via call_after_refresh to ensure VerticalScroll is
@@ -111,10 +113,14 @@ class ProjectDetail(Widget, can_focus=True):
             project: The project to display.
             resolver_worktrees: Optional list of resolver-matched worktrees to show as
                 virtual rows in the detail pane. Defaults to [] (no change if not supplied).
+            resolver_terminals: Optional list of resolver-matched terminal sessions to show as
+                virtual rows in the detail pane. Defaults to [] (no change if not supplied).
         """
         self._project = project
         if resolver_worktrees is not None:
             self._resolver_worktrees = resolver_worktrees
+        if resolver_terminals is not None:
+            self._resolver_terminals = resolver_terminals
         self._render_generation = getattr(self, "_render_generation", 0) + 1
         gen = self._render_generation
         self.call_after_refresh(lambda: self._render_project(gen))
@@ -133,15 +139,25 @@ class ProjectDetail(Widget, can_focus=True):
         for item in project.objects:
             grouped.setdefault(item.kind, []).append(item)
 
+        # Resolve default_open_kinds from app config for virtual rows
+        default_kinds: list[str] = getattr(getattr(self, "app", None), "_config", None) and self.app._config.default_open_kinds or []
+
         # Synthesize REPO row from project.repo if set
         if project.repo:
-            repo_item = ObjectItem(kind=PresetKind.REPO, value=project.repo, label="")
+            repo_item = ObjectItem(kind=PresetKind.REPO, value=project.repo, label="",
+                                   open_by_default=PresetKind.REPO.value in default_kinds)
             grouped.setdefault(PresetKind.REPO, []).append(repo_item)
 
-        # Synthesize TERMINALS row from project.iterm_tab_id if set
-        if project.iterm_tab_id:
-            terminals_item = ObjectItem(kind=PresetKind.TERMINALS, value=project.iterm_tab_id, label="")
-            grouped.setdefault(PresetKind.TERMINALS, []).append(terminals_item)
+        # Synthesize TERMINALS rows from resolver-matched sessions
+        for session in self._resolver_terminals:
+            if session.is_claude:
+                label = f"{ICON_CLAUDE} {session.session_name}"
+            else:
+                label = session.session_name
+            virt_item = ObjectItem(kind=PresetKind.TERMINALS, value=session.session_name, label=label,
+                                   open_by_default=PresetKind.TERMINALS.value in default_kinds)
+            grouped.setdefault(PresetKind.TERMINALS, []).append(virt_item)
+            self._readonly_items.add(id(virt_item))
 
         # Synthesize WORKTREE rows from resolver, deduplicated against stored worktrees
         stored_wt_paths: set[str] = {
@@ -149,7 +165,8 @@ class ProjectDetail(Widget, can_focus=True):
         }
         for wt in self._resolver_worktrees:
             if wt.path not in stored_wt_paths:
-                virt_item = ObjectItem(kind=PresetKind.WORKTREE, value=wt.path, label=wt.branch)
+                virt_item = ObjectItem(kind=PresetKind.WORKTREE, value=wt.path, label=wt.branch,
+                                       open_by_default=PresetKind.WORKTREE.value in default_kinds)
                 grouped.setdefault(PresetKind.WORKTREE, []).append(virt_item)
                 self._readonly_items.add(id(virt_item))
 
@@ -296,11 +313,13 @@ class ProjectDetail(Widget, can_focus=True):
             return
         self.app._start_add_object_loop(self._project)
 
-    def _set_project_with_cursor(self, project: Project, cursor: int, resolver_worktrees: list[WorktreeInfo] | None = None) -> None:
+    def _set_project_with_cursor(self, project: Project, cursor: int, resolver_worktrees: list[WorktreeInfo] | None = None, resolver_terminals: list[TerminalSession] | None = None) -> None:
         """Re-render project and restore cursor near given position."""
         self._project = project
         if resolver_worktrees is not None:
             self._resolver_worktrees = resolver_worktrees
+        if resolver_terminals is not None:
+            self._resolver_terminals = resolver_terminals
         self._render_generation = getattr(self, "_render_generation", 0) + 1
         gen = self._render_generation
         self.call_after_refresh(lambda: self._render_project(gen, initial_cursor=cursor))

@@ -8,13 +8,13 @@ from joy.widgets.project_list import ProjectRow
 from joy.widgets.icons import ICON_WORKTREE, ICON_TERMINAL
 
 
-def _make_project(name: str = "my-project", has_worktree: bool = False, has_terminals: bool = False) -> Project:
+def _make_project(name: str = "my-project", has_worktree: bool = False, has_terminals: bool = False, repo: str | None = None) -> Project:
     objects = []
     if has_worktree:
         objects.append(ObjectItem(kind=PresetKind.WORKTREE, label="wt", value="/path/to/wt"))
     if has_terminals:
         objects.append(ObjectItem(kind=PresetKind.TERMINALS, label="term", value="session"))
-    return Project(name=name, objects=objects)
+    return Project(name=name, objects=objects, repo=repo)
 
 
 def _spans_for_icon(text: Text, icon_char: str) -> list:
@@ -98,3 +98,38 @@ def test_terminal_icon_cyan_when_live_count_nonzero():
     assert any("cyan" in s for s in spans), (
         f"Expected 'cyan' style but got: {spans}"
     )
+
+
+# --- Repo name display tests ---
+
+
+def test_project_row_shows_repo_name_when_set():
+    """Repo name appears dim in row content when project has a repo."""
+    project = _make_project(repo="my-repo")
+    has = ProjectRow._compute_has(project)
+    content = ProjectRow.build_content(project, 80, mr_info=None, has=has, wt_count=0, agent_count=0, repo_name="my-repo")
+    assert "my-repo" in content.plain, f"Expected 'my-repo' in plain text: {content.plain!r}"
+    # Verify dim style on the repo name span
+    repo_spans = [str(span.style) for span in content._spans
+                  if "my-repo" in content.plain[span.start:span.end]]
+    assert repo_spans, "Repo name should have a span"
+    assert all("dim" in s for s in repo_spans), (
+        f"Expected 'dim' style on repo name but got: {repo_spans}"
+    )
+
+
+def test_project_row_hides_repo_name_when_none():
+    """No extra repo text when repo_name is None."""
+    project = _make_project(repo=None)
+    has = ProjectRow._compute_has(project)
+    content_no_repo = ProjectRow.build_content(project, 80, mr_info=None, has=has, wt_count=0, agent_count=0, repo_name=None)
+    # Verify the plain text does NOT contain any repo label
+    # The content should just be: status dot + space + name + padding + space + ribbon
+    assert "my-repo" not in content_no_repo.plain
+
+
+def test_project_row_constructor_passes_repo():
+    """ProjectRow constructor passes repo to build_content."""
+    project = _make_project(repo="test-repo")
+    row = ProjectRow(project)
+    assert "test-repo" in str(row.content), f"Expected 'test-repo' in row content: {str(row.content)!r}"
