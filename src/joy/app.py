@@ -105,6 +105,7 @@ class JoyApp(App):
         self._sync_enabled: bool = True
         # Phase 16: propagation state
         self._current_mr_data: dict = {}
+        self._current_mr_authored: list = []
 
     def check_action(self, action: str, parameters: tuple) -> bool | None:
         """Control which sync toggle binding is visible in the footer. (D-13, SYNC-09)
@@ -226,6 +227,7 @@ class JoyApp(App):
         # Phase 14: store for resolver and set ready-flag (D-07, D-08)
         self._current_worktrees = worktrees
         self._current_mr_data = batch_result.by_branch if isinstance(batch_result, BatchMRResult) else (batch_result or {})
+        self._current_mr_authored = batch_result.authored if isinstance(batch_result, BatchMRResult) else []
         self._worktrees_ready = True
         self._is_syncing = True  # suppress cross-pane sync during pane rebuild
         try:
@@ -414,7 +416,7 @@ class JoyApp(App):
         if self._rel_index is None:
             return
         try:
-            self.query_one(ProjectList).update_badges(self._rel_index, mr_data=self._current_mr_data)
+            self.query_one(ProjectList).update_badges(self._rel_index, mr_data=self._current_mr_data, mr_authored=self._current_mr_authored)
         except Exception:
             pass  # ProjectList not yet mounted — badges will be populated on next cycle
 

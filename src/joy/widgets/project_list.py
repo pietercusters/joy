@@ -276,12 +276,14 @@ def pick_best_mr(
     project: "Project",
     mr_data: dict,
     rel_index: object,
+    mr_authored: list | None = None,
 ) -> "MRInfo | None":
     """Select the most relevant MR for a project row.
 
     Priority:
     1. Live API data for a linked worktree's branch (via rel_index, same repo only)
-    2. Project's own stored MR objects (PresetKind.MR in project.objects)
+    2. Project's own stored MR objects, cross-referenced against live authored
+       MRs to determine open/closed status accurately.
 
     Deliberately avoids broad repo-wide fallback to prevent the same MR
     appearing on multiple projects that share a repo.
@@ -296,8 +298,16 @@ def pick_best_mr(
                 return mr
 
     # Priority 2: project's own stored MR objects (highest-numbered wins)
+    # Cross-reference against live authored MRs to determine open status.
     mr_objects = [obj for obj in project.objects if obj.kind == PresetKind.MR]
     if mr_objects:
+        # Build lookup of live authored MRs by (repo_name, mr_number) for this project's repo
+        live_authored: dict[tuple[str, int], object] = {}
+        if mr_authored and project.repo:
+            for detail in mr_authored:
+                if detail.repo_name == project.repo:
+                    live_authored[(detail.repo_name, detail.mr_number)] = detail
+
         best_num = -1
         best_obj = None
         for obj in mr_objects:
@@ -306,6 +316,16 @@ def pick_best_mr(
                 best_num = num
                 best_obj = obj
         if best_obj is not None and best_num >= 0:
+            # Check if this MR is known open from live API data
+            live = live_authored.get((project.repo, best_num)) if project.repo else None
+            if live is not None:
+                return MRInfo(
+                    mr_number=best_num,
+                    is_draft=live.is_draft,
+                    ci_status=live.ci_status,
+                    url=live.url or best_obj.value,
+                    is_open=True,
+                )
             return MRInfo(
                 mr_number=best_num,
                 is_draft=False,
@@ -769,7 +789,7 @@ class ProjectList(Widget, can_focus=True):
             return 80
         return max(width - 2, 20)  # subtract 2 for left+right padding
 
-    def update_badges(self, index: object, mr_data: dict | None = None) -> None:
+    def update_badges(self, index: object, mr_data: dict | None = None, mr_authored: list | None = None) -> None:
         """Push badge counts and MR info from RelationshipIndex to all project rows.
 
         Called by JoyApp._update_badges() after every completed refresh cycle.
@@ -781,7 +801,7 @@ class ProjectList(Widget, can_focus=True):
             terminals = index.terminals_for(row.project)  # type: ignore[union-attr]
             agent_count = len(terminals)
             claude_states = [s.claude_state for s in terminals if s.is_claude]
-            mr_info = pick_best_mr(row.project, mr_data or {}, index) if mr_data else None
+            mr_info = pick_best_mr(row.project, mr_data or {}, index, mr_authored=mr_authored or []) if mr_data else None
             row.set_counts(wt_count, agent_count, mr_info=mr_info, avail_width=avail_width, claude_states=claude_states)
 
     def action_toggle_status(self) -> None:
