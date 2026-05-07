@@ -18,6 +18,7 @@ from joy.widgets.icons import (
     ICON_NO_UPSTREAM,
     ICON_MR_OPEN,
     ICON_MR_DRAFT,
+    ICON_MR_MERGED,
     ICON_CI_PASS,
     ICON_CI_FAIL,
     ICON_CI_PENDING,
@@ -187,7 +188,9 @@ class WorktreeRow(Static):
         # D-02: MR badges between branch name and dirty/upstream indicators
         if mr_info is not None:
             t.append(f"  !{mr_info.mr_number} ", style="dim")
-            if mr_info.is_draft:
+            if not mr_info.is_open:
+                t.append(ICON_MR_MERGED, style="purple")
+            elif mr_info.is_draft:
                 t.append(ICON_MR_DRAFT, style="dim")
             else:
                 t.append(ICON_MR_OPEN, style="green")

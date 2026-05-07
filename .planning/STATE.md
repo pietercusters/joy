@@ -79,10 +79,17 @@ Known tech debt for next milestone:
 |---|-------------|------|--------|-----------|
 | 260423-k0b | bug: upon refresh, some panes shift focus to the first item, while they should keep focus on the item that was selected before the refresh (if any) | 2026-04-23 | ddcbcab | [260423-k0b-bug-upon-refresh-some-panes-shift-focus-](./quick/260423-k0b-bug-upon-refresh-some-panes-shift-focus-/) |
 | 260423-kd7 | fix: preserve no-selection state and all cursor positions across refresh in all panes | 2026-04-23 | 32824e5 | [260423-kd7-fix-preserve-no-selection-state-and-all-](./quick/260423-kd7-fix-preserve-no-selection-state-and-all-/) |
+| 260428-gka | remove the tech debt | 2026-04-28 | 5cc7ef9 | [260428-gka-remove-the-tech-debt](./quick/260428-gka-remove-the-tech-debt/) |
+| 260428-gxw | refactor project list: status grouping, inline repo, remove repo headers | 2026-04-28 | 534eb55 | [260428-gxw-refactor-project-list-status-grouping-in](./quick/260428-gxw-refactor-project-list-status-grouping-in/) |
+| 260428-kxu | add purple merged/closed MR icon and update legend | 2026-04-28 | 845ea9c | [260428-kxu-add-purple-merged-closed-mr-icon-and-upd](./quick/260428-kxu-add-purple-merged-closed-mr-icon-and-upd/) |
+| 260428-qtn | auto-set open_by_default on new/linked objects based on default_open_kinds | 2026-04-28 | 91a1eb1 | Verified | [260428-qtn-auto-set-open-by-default-on-new-linked-o](./quick/260428-qtn-auto-set-open-by-default-on-new-linked-o/) |
+| 260429-amk | Implement Claude agent status detection via hooks with TTY-keyed state files | 2026-04-29 | bd1b9c5 | Verified | [260429-amk-implement-claude-agent-status-detection-](./quick/260429-amk-implement-claude-agent-status-detection-/) |
+| 260429-ciy | Show Claude status indicators in ProjectList and ProjectDetail views | 2026-04-29 | d823ecb | [260429-ciy-show-claude-status-indicators-in-project](./quick/260429-ciy-show-claude-status-indicators-in-project/) |
+| 260429-j2z | Unify Claude icons: single colored robot icon replaces separate icon+indicator | 2026-04-29 | cc12cee | [260429-j2z-unify-claude-icons-single-colored-robot-](./quick/260429-j2z-unify-claude-icons-single-colored-robot-/) |
 
 ## Session Continuity
 
-Last session: 2026-04-22
-Stopped at: v1.3 milestone archived
-Last activity: 2026-04-24 - Shipped cursor fix PRs — PR #12
+Last session: 2026-04-29
+Stopped at: Completed quick task 260429-j2z
+Last activity: 2026-04-29 - Completed quick task 260429-j2z: Unified Claude robot icons
 Resume: /gsd-new-milestone to start v1.4 planning

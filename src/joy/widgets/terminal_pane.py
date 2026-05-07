@@ -25,9 +25,7 @@ from joy.models import TerminalSession
 # ---------------------------------------------------------------------------
 
 ICON_SESSION = "\uf120"      # nf-fa-terminal
-ICON_CLAUDE = "\U000f1325"   # nf-md-robot (AI/robot glyph)
-INDICATOR_BUSY = "\u25cf"    # BLACK CIRCLE -- session running claude
-INDICATOR_WAITING = "\u25cb" # WHITE CIRCLE -- session at shell prompt
+ICON_CLAUDE = "\U000f06a9"   # nf-md-robot (classic robot face — Claude indicator)
 
 
 # ---------------------------------------------------------------------------
@@ -106,7 +104,7 @@ class SessionRow(Static):
         session: TerminalSession,
         *,
         is_claude: bool = False,
-        is_busy: bool = False,
+        claude_state: str | None = None,
         show_shortcut: bool = False,
         **kwargs,
     ) -> None:
@@ -115,9 +113,9 @@ class SessionRow(Static):
         # Store original data for potential re-rendering
         self._session = session
         self._is_claude = is_claude
-        self._is_busy = is_busy
+        self._claude_state = claude_state
         self._show_shortcut = show_shortcut
-        content = self._build_content(session, is_claude=is_claude, is_busy=is_busy, show_shortcut=show_shortcut)
+        content = self._build_content(session, is_claude=is_claude, claude_state=claude_state, show_shortcut=show_shortcut)
         super().__init__(content, **kwargs)
 
     @staticmethod
@@ -125,19 +123,21 @@ class SessionRow(Static):
         session: TerminalSession,
         *,
         is_claude: bool = False,
-        is_busy: bool = False,
+        claude_state: str | None = None,
         show_shortcut: bool = False,
     ) -> Text:
         """Build the rich.Text renderable for a single-line session row."""
         t = Text(no_wrap=True, overflow="ellipsis")
 
         if is_claude:
-            t.append(f" {ICON_CLAUDE} ", style="bold")
-            t.append(session.session_name)
-            if is_busy:
-                t.append(f"  {INDICATOR_BUSY}", style="green")
+            # Single colored robot icon — color encodes state
+            if claude_state == "busy":
+                t.append(f" {ICON_CLAUDE} ", style="green")
+            elif claude_state == "waiting_input":
+                t.append(f" {ICON_CLAUDE} ", style="yellow")
             else:
-                t.append(f"  {INDICATOR_WAITING}", style="dim")
+                t.append(f" {ICON_CLAUDE} ", style="dim")
+            t.append(session.session_name)
             t.append(f"  {session.foreground_process}", style="dim")
         else:
             t.append(f" {ICON_SESSION} ", style="bold")
@@ -277,10 +277,18 @@ class TerminalPane(Widget, can_focus=True):
         from joy.terminal_sessions import _SHELL_PROCESSES  # noqa: PLC0415
 
         def _sort_key(s: TerminalSession) -> tuple[int, int, str]:
-            """Sort key: Claude-busy first (0,0), Claude-waiting (0,1), other (1,x), then alpha."""
-            is_busy = s.foreground_process.lower() not in _SHELL_PROCESSES
+            """Sort: Claude-waiting_input first (0,0), Claude-busy (0,1), Claude-idle (0,2), other (1,x), then alpha."""
             if s.is_claude:
-                return (0, 0 if is_busy else 1, s.session_name.lower())
+                if s.claude_state == "waiting_input":
+                    return (0, 0, s.session_name.lower())
+                elif s.claude_state == "busy":
+                    return (0, 1, s.session_name.lower())
+                elif s.claude_state == "idle":
+                    return (0, 2, s.session_name.lower())
+                else:
+                    # Fallback: use heuristic when no hook state
+                    is_busy = s.foreground_process.lower() not in _SHELL_PROCESSES
+                    return (0, 1 if is_busy else 2, s.session_name.lower())
             return (1, 0, s.session_name.lower())
 
         new_rows: list[SessionRow] = []
@@ -311,8 +319,13 @@ class TerminalPane(Widget, can_focus=True):
                 scroll.mount(GroupHeader(project_name))
                 group.sort(key=_sort_key)
                 for session in group:
-                    is_busy = session.foreground_process.lower() not in _SHELL_PROCESSES
-                    row = SessionRow(session, is_claude=session.is_claude, is_busy=is_busy, show_shortcut=len(new_rows) == 0)
+                    if session.claude_state is not None:
+                        claude_state = session.claude_state
+                    elif session.is_claude:
+                        claude_state = "busy" if session.foreground_process.lower() not in _SHELL_PROCESSES else "idle"
+                    else:
+                        claude_state = None
+                    row = SessionRow(session, is_claude=session.is_claude, claude_state=claude_state, show_shortcut=len(new_rows) == 0)
                     scroll.mount(row)
                     new_rows.append(row)
         else:
@@ -326,8 +339,13 @@ class TerminalPane(Widget, can_focus=True):
             scroll.mount(GroupHeader("Other"))
             other_sessions.sort(key=_sort_key)
             for session in other_sessions:
-                is_busy = session.foreground_process.lower() not in _SHELL_PROCESSES
-                row = SessionRow(session, is_claude=session.is_claude, is_busy=is_busy, show_shortcut=len(new_rows) == 0)
+                if session.claude_state is not None:
+                    claude_state = session.claude_state
+                elif session.is_claude:
+                    claude_state = "busy" if session.foreground_process.lower() not in _SHELL_PROCESSES else "idle"
+                else:
+                    claude_state = None
+                row = SessionRow(session, is_claude=session.is_claude, claude_state=claude_state, show_shortcut=len(new_rows) == 0)
                 scroll.mount(row)
                 new_rows.append(row)
 

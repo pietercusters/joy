@@ -1,12 +1,36 @@
 """Fetch active iTerm2 sessions via the Python API."""
 from __future__ import annotations
 
+import json
 import subprocess
+from pathlib import Path
 
 from joy.models import TerminalSession
 
 # Shell processes that indicate the shell is in the foreground (Claude is idle/paused).
 _SHELL_PROCESSES = frozenset({"zsh", "bash", "fish", "sh", "dash"})
+
+
+def _read_claude_states() -> dict[str, dict]:
+    """Read all claude state files. Returns {tty_short: {"state": ..., "ts": ...}}.
+
+    Gracefully handles: missing directory, corrupt JSON, .tmp files.
+    """
+    state_dir = Path.home() / ".joy" / "claude-states"
+    states: dict[str, dict] = {}
+    if not state_dir.is_dir():
+        return states
+    for f in state_dir.iterdir():
+        if f.suffix == ".json" and not f.name.endswith(".tmp"):
+            try:
+                data = json.loads(f.read_text())
+                if not isinstance(data, dict):
+                    continue
+                tty = f.stem  # e.g., "ttys041"
+                states[tty] = data
+            except Exception:
+                continue
+    return states
 
 
 def _detect_claude(job: str, tty: str) -> bool:
@@ -91,8 +115,14 @@ def fetch_sessions() -> tuple[list[TerminalSession], set[str]] | None:
     except Exception:
         return None
 
+    claude_states = _read_claude_states()
+
     results: list[TerminalSession] = []
     for session_id, tab_id, name, job, cwd, tty in raw:
+        is_claude = _detect_claude(job, tty)
+        tty_short = tty.removeprefix("/dev/") if tty else ""
+        # Only use hook state when is_claude=True (staleness rule per CONTEXT.md)
+        state_info = claude_states.get(tty_short) if is_claude else None
         results.append(
             TerminalSession(
                 session_id=session_id,
@@ -100,7 +130,8 @@ def fetch_sessions() -> tuple[list[TerminalSession], set[str]] | None:
                 foreground_process=job,
                 cwd=cwd,
                 tab_id=tab_id,
-                is_claude=_detect_claude(job, tty),
+                is_claude=is_claude,
+                claude_state=state_info.get("state") if state_info else None,
             )
         )
     return (results, live_tab_ids)
