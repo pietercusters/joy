@@ -6,6 +6,7 @@
 - ✅ **v1.1 Workspace Intelligence** — Phases 6-13 (shipped 2026-04-14)
 - ✅ **v1.2 Cross-Pane Intelligence** — Phases 14-16 (shipped 2026-04-15)
 - ✅ **v1.3 Unified Object View** — Phase 17 (shipped 2026-04-22)
+- 🚧 **v1.4 Frontend Refactor & UI Polish** — Phases 18-21 (in progress)
 
 ## Phases
 
@@ -60,7 +61,68 @@ Full details: `.planning/milestones/v1.3-ROADMAP.md`
 
 </details>
 
+### 🚧 v1.4 Frontend Refactor & UI Polish (In Progress)
+
+**Milestone Goal:** Separate frontend from backend using Ports & Adapters architecture, establish a three-layer test strategy, and fix UI bugs/inconsistencies — making the codebase safe for future UI work.
+
+- [ ] **Phase 18: Contracts & Facades** - Define Protocol-based port interfaces and add public facade methods to all widgets
+- [ ] **Phase 19: Service Extraction & Backend Tests** - Extract PaneCoordinator, DataOrchestrator, ProjectService from app.py with co-evolved backend tests
+- [ ] **Phase 20: Widget Tests & Snapshots** - Widget-level tests with fake backend injection and snapshot baselines for key screens
+- [ ] **Phase 21: UI Polish** - Systematic audit and fix of visual inconsistencies across all panes
+
+## Phase Details
+
+### Phase 18: Contracts & Facades
+**Goal**: All widget-to-backend boundaries have explicit Protocol contracts and public facade methods — no private field access crosses module boundaries
+**Depends on**: Phase 17 (v1.3 complete)
+**Requirements**: CNTR-01, CNTR-02, CNTR-03, CNTR-04, CNTR-05, ARCH-01
+**Success Criteria** (what must be TRUE):
+  1. A ports.py module exists defining StoragePort, GitDataPort, TerminalPort, and OpenerPort as typing.Protocol classes with typed method signatures
+  2. SyncablePane Protocol exists defining sync_to() and clear_selection() contracts that WorktreePane and TerminalPane satisfy structurally
+  3. app.py no longer accesses any widget private attributes (no _project, _rows, _cursor, _worktrees, _sessions references on widget instances)
+  4. ProjectDetail, WorktreePane, and TerminalPane each expose documented public properties/methods for all data that app.py needs
+  5. No widget imports any Protocol adapter directly — all dependency wiring flows through app.py as composition root
+**Plans**: TBD
+
+### Phase 19: Service Extraction & Backend Tests
+**Goal**: All cross-pane sync, background data loading, and project persistence logic lives in testable pure-Python services outside app.py — with backend tests proving correctness without any TUI dependency
+**Depends on**: Phase 18
+**Requirements**: SRVC-01, SRVC-02, SRVC-03, SRVC-04, SRVC-05, TEST-01, TEST-02, TEST-03, TEST-06, ARCH-02, ARCH-03
+**Success Criteria** (what must be TRUE):
+  1. PaneCoordinator handles all 6 sync directions and its logic is tested via plain pytest (no Textual app, no pilot) with assertions on which panes receive sync_to/clear_selection calls
+  2. DataOrchestrator handles background data loading coordination (_worktrees_ready/_sessions_ready) and relationship computation, tested without TUI
+  3. ProjectService handles project CRUD, archive/unarchive, MR auto-add propagation, and persistence — tested via plain pytest against real TOML files in a tmp directory
+  4. app.py is under 400 lines of code and under 10 instance variables — it composes services and wires them to Textual lifecycle hooks
+  5. All @work(thread=True) decorators remain on app.py methods; extracted services contain zero Textual imports
+  6. The 10 previously-failing tests in test_propagation.py and test_sync.py pass (tech debt resolved)
+  7. All existing tests pass after every individual service extraction (no big-bang migration)
+**Plans**: TBD
+
+### Phase 20: Widget Tests & Snapshots
+**Goal**: Widget behavior is verified through Textual pilot tests using injected fake backends, and key screens have snapshot baselines for visual regression detection
+**Depends on**: Phase 19
+**Requirements**: TEST-04, TEST-05
+**Success Criteria** (what must be TRUE):
+  1. At least one widget test per pane (ProjectList, ProjectDetail, WorktreePane, TerminalPane) runs with FakeBackend adapters injected via constructor — no @patch mocking of internals
+  2. Snapshot baselines exist for at least 3 key screens (initial render, project selected, sync active) captured via pytest-textual-snapshot
+  3. Running `pytest --snapshot-update` regenerates baselines; `pytest` without the flag detects visual regressions
+**Plans**: TBD
+
+### Phase 21: UI Polish
+**Goal**: All four panes render with consistent spacing, alignment, truncation, and focus indicators — visual bugs identified and fixed after architecture stabilization
+**Depends on**: Phase 20
+**Requirements**: UIPOL-01, UIPOL-02
+**Success Criteria** (what must be TRUE):
+  1. A documented audit checklist exists covering spacing, alignment, truncation, and focus indicators for all panes (ProjectList, ProjectDetail, WorktreePane, TerminalPane, MRPane)
+  2. Every bug identified in the audit is fixed — no known visual inconsistencies remain across the five panes
+  3. Focus indicators (border color, highlight styling) behave consistently when tabbing between panes
+**Plans**: TBD
+**UI hint**: yes
+
 ## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 18 → 19 → 20 → 21
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -81,3 +143,7 @@ Full details: `.planning/milestones/v1.3-ROADMAP.md`
 | 15. Cross-Pane Selection Sync | v1.2 | 3/3 | ✓ Complete | 2026-04-15 |
 | 16. Live Data Propagation | v1.2 | 2/2 | ✓ Complete | 2026-04-15 |
 | 17. Fix iTerm2 Integration Bugs | v1.3 | 3/3 | ✓ Complete | 2026-04-16 |
+| 18. Contracts & Facades | v1.4 | 0/? | Not started | - |
+| 19. Service Extraction & Backend Tests | v1.4 | 0/? | Not started | - |
+| 20. Widget Tests & Snapshots | v1.4 | 0/? | Not started | - |
+| 21. UI Polish | v1.4 | 0/? | Not started | - |

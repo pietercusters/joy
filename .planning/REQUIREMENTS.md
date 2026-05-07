@@ -73,33 +73,33 @@ Deferred to future milestone. Tracked but not in current roadmap.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CNTR-01 | TBD | Pending |
-| CNTR-02 | TBD | Pending |
-| CNTR-03 | TBD | Pending |
-| CNTR-04 | TBD | Pending |
-| CNTR-05 | TBD | Pending |
-| SRVC-01 | TBD | Pending |
-| SRVC-02 | TBD | Pending |
-| SRVC-03 | TBD | Pending |
-| SRVC-04 | TBD | Pending |
-| SRVC-05 | TBD | Pending |
-| TEST-01 | TBD | Pending |
-| TEST-02 | TBD | Pending |
-| TEST-03 | TBD | Pending |
-| TEST-04 | TBD | Pending |
-| TEST-05 | TBD | Pending |
-| TEST-06 | TBD | Pending |
-| UIPOL-01 | TBD | Pending |
-| UIPOL-02 | TBD | Pending |
-| ARCH-01 | TBD | Pending |
-| ARCH-02 | TBD | Pending |
-| ARCH-03 | TBD | Pending |
+| CNTR-01 | Phase 18 | Pending |
+| CNTR-02 | Phase 18 | Pending |
+| CNTR-03 | Phase 18 | Pending |
+| CNTR-04 | Phase 18 | Pending |
+| CNTR-05 | Phase 18 | Pending |
+| SRVC-01 | Phase 19 | Pending |
+| SRVC-02 | Phase 19 | Pending |
+| SRVC-03 | Phase 19 | Pending |
+| SRVC-04 | Phase 19 | Pending |
+| SRVC-05 | Phase 19 | Pending |
+| TEST-01 | Phase 19 | Pending |
+| TEST-02 | Phase 19 | Pending |
+| TEST-03 | Phase 19 | Pending |
+| TEST-04 | Phase 20 | Pending |
+| TEST-05 | Phase 20 | Pending |
+| TEST-06 | Phase 19 | Pending |
+| UIPOL-01 | Phase 21 | Pending |
+| UIPOL-02 | Phase 21 | Pending |
+| ARCH-01 | Phase 18 | Pending |
+| ARCH-02 | Phase 19 | Pending |
+| ARCH-03 | Phase 19 | Pending |
 
 **Coverage:**
 - v1.4 requirements: 21 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 21 ⚠️
+- Mapped to phases: 21
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-05-07*
-*Last updated: 2026-05-07 after initial definition*
+*Last updated: 2026-05-07 after roadmap creation*
