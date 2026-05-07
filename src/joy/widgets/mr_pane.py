@@ -78,54 +78,55 @@ class MRRow(Static):
     }
     """
 
-    def __init__(self, detail: MRDetail, **kwargs) -> None:
+    def __init__(self, detail: MRDetail, *, max_width: int = 80, **kwargs) -> None:
         self.url: str = detail.url
         self.repo_name: str = detail.repo_name
         self.branch: str = detail.branch
         self.mr_number: int = detail.mr_number
-        content = self.build_content(detail)
+        content = self.build_content(detail, max_width=max_width)
         super().__init__(content, **kwargs)
 
     @staticmethod
-    def build_content(detail: MRDetail) -> Text:
+    def build_content(detail: MRDetail, max_width: int = 80) -> Text:
         """Build the rich.Text renderable for a two-line MR row.
 
-        Line 1: MR icon + !number + title (truncated via no_wrap/ellipsis)
+        Line 1: MR icon + !number + title (pre-truncated to fit width)
         Line 2: repo name + CI status icon + review status (always visible)
         """
-        # Line 1: icon + number + title (will truncate with ellipsis if too long)
-        line1 = Text(no_wrap=True, overflow="ellipsis")
-        if detail.is_draft:
-            line1.append(f" {ICON_MR_DRAFT}", style="dim")
-        else:
-            line1.append(f" {ICON_MR_OPEN}", style="green")
-        line1.append(f" !{detail.mr_number}  ", style="bold")
-        line1.append(detail.title)
+        t = Text(no_wrap=True, overflow="ellipsis")
 
-        # Line 2: repo + CI + review status (never truncated — always visible)
-        line2 = Text(no_wrap=True, overflow="ellipsis")
-        line2.append(f"  {detail.repo_name}", style="dim")
+        # Line 1: icon + number + title (pre-truncate title to fit)
+        prefix = f" X !{detail.mr_number}  "  # icon is 1 char wide
+        title_budget = max(max_width - len(prefix), 5)
+        title = detail.title
+        if len(title) > title_budget:
+            title = title[: title_budget - 1] + "\u2026"
+
+        if detail.is_draft:
+            t.append(f" {ICON_MR_DRAFT}", style="dim")
+        else:
+            t.append(f" {ICON_MR_OPEN}", style="green")
+        t.append(f" !{detail.mr_number}  ", style="bold")
+        t.append(title)
+        t.append("\n")
+
+        # Line 2: repo + CI + review status (always visible)
+        t.append(f"  {detail.repo_name}", style="dim")
 
         if detail.ci_status == "pass":
-            line2.append(f"  {ICON_CI_PASS}", style="green")
+            t.append(f"  {ICON_CI_PASS}", style="green")
         elif detail.ci_status == "fail":
-            line2.append(f"  {ICON_CI_FAIL}", style="red")
+            t.append(f"  {ICON_CI_FAIL}", style="red")
         elif detail.ci_status == "pending":
-            line2.append(f"  {ICON_CI_PENDING}", style="yellow")
+            t.append(f"  {ICON_CI_PENDING}", style="yellow")
 
         if detail.review_status == "approved":
-            line2.append(f"  {ICON_REVIEW_APPROVED} Approved", style="green")
+            t.append(f"  {ICON_REVIEW_APPROVED} Approved", style="green")
         elif detail.review_status == "changes_requested":
-            line2.append(f"  {ICON_REVIEW_CHANGES} Changes", style="red")
+            t.append(f"  {ICON_REVIEW_CHANGES} Changes", style="red")
         elif detail.review_status == "review_required":
-            line2.append(f"  {ICON_REVIEW_PENDING} Pending", style="dim")
+            t.append(f"  {ICON_REVIEW_PENDING} Pending", style="dim")
 
-        # no_wrap + ellipsis on the parent ensures each line truncates independently;
-        # literal \n still creates a line break (no_wrap only prevents soft-wrapping).
-        t = Text(no_wrap=True, overflow="ellipsis")
-        t.append_text(line1)
-        t.append("\n")
-        t.append_text(line2)
         return t
 
 
@@ -215,6 +216,8 @@ class MRPane(Widget, can_focus=True):
             row = self._rows[self._cursor]
             saved_identity = (row.repo_name, row.mr_number)
 
+        available_width = self._get_available_width()
+
         await scroll.remove_children()
         new_rows: list[MRRow] = []
 
@@ -233,7 +236,7 @@ class MRPane(Widget, can_focus=True):
         if authored:
             await scroll.mount(GroupHeader("My MRs"))
             for detail in sorted(authored, key=lambda d: d.mr_number, reverse=True):
-                row = MRRow(detail)
+                row = MRRow(detail, max_width=available_width)
                 await scroll.mount(row)
                 new_rows.append(row)
 
@@ -245,7 +248,7 @@ class MRPane(Widget, can_focus=True):
         if review_requests:
             await scroll.mount(GroupHeader("Review Requests"))
             for detail in sorted(review_requests, key=lambda d: d.mr_number, reverse=True):
-                row = MRRow(detail)
+                row = MRRow(detail, max_width=available_width)
                 await scroll.mount(row)
                 new_rows.append(row)
 
@@ -279,6 +282,13 @@ class MRPane(Widget, can_focus=True):
             parts.append("fetch failed")
         parts.append(timestamp)
         self.border_title = "  ".join(parts)
+
+    def _get_available_width(self) -> int:
+        """Return usable content width for title truncation."""
+        width = self.content_region.width
+        if width == 0:
+            return 80  # safe default when widget not yet laid out
+        return max(width - 2, 20)  # subtract 2 for padding, floor at 20
 
     def _update_highlight(self, *, emit: bool = True) -> None:
         """Update CSS highlight classes on rows."""
