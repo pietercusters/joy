@@ -48,6 +48,20 @@ class RelationshipIndex:
         """Return the project that owns this terminal session, or None."""
         return self._project_for_terminal.get(session_name)
 
+    # ---------------------------------------------------------------------------
+    # Public facade (Phase 18, CNTR-03)
+    # ---------------------------------------------------------------------------
+
+    @property
+    def linked_worktree_paths(self) -> set[str]:
+        """Set of worktree paths linked to any project."""
+        return set(self._project_for_wt_path.keys())
+
+    @property
+    def linked_worktree_branches(self) -> set[tuple[str, str]]:
+        """Set of (repo_name, branch) tuples linked to any project."""
+        return set(self._project_for_wt_branch.keys())
+
 
 def compute_relationships(
     projects: list[Project],

@@ -107,6 +107,53 @@ class JoyApp(App):
         self._current_mr_data: dict = {}
         self._current_mr_authored: list = []
 
+    # ---------------------------------------------------------------------------
+    # Public facade (Phase 18, CNTR-03 / ARCH-01)
+    # ---------------------------------------------------------------------------
+
+    @property
+    def projects(self) -> list[Project]:
+        """Public read access to project list."""
+        return self._projects
+
+    @property
+    def config(self) -> Config:
+        """Public read access to configuration."""
+        return self._config
+
+    @property
+    def current_worktrees(self) -> list[WorktreeInfo]:
+        """Public read access to last-fetched worktree snapshot."""
+        return self._current_worktrees
+
+    def save_projects(self) -> None:
+        """Public: persist projects to TOML in background."""
+        self._save_projects_bg()
+
+    def close_tab(self, tab_id: str) -> None:
+        """Public: close an iTerm2 tab in background."""
+        self._close_tab_bg(tab_id)
+
+    def append_to_archive(self, archived: ArchivedProject) -> None:
+        """Public: add project to archive in background."""
+        self._append_to_archive_bg(archived)
+
+    def remove_from_archive(self, archived: ArchivedProject) -> None:
+        """Public: remove project from archive in background."""
+        self._remove_from_archive_bg(archived)
+
+    def refresh_terminal(self) -> None:
+        """Public: trigger terminal session reload."""
+        self._load_terminal()
+
+    def start_add_object_loop(self, project: Project) -> None:
+        """Public: start the add-object modal loop for a project."""
+        self._start_add_object_loop(project)
+
+    def update_badges(self) -> None:
+        """Public: push RelationshipIndex badge counts to ProjectList."""
+        self._update_badges()
+
     def check_action(self, action: str, parameters: tuple) -> bool | None:
         """Control which sync toggle binding is visible in the footer. (D-13, SYNC-09)
 
