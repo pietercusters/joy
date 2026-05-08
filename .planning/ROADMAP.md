@@ -162,4 +162,4 @@ Phases execute in numeric order: 18 → 19 → 20 → 21
 | 18. Contracts & Facades | v1.4 | 3/3 | Complete    | 2026-05-08 |
 | 19. Service Extraction & Backend Tests | v1.4 | 4/4 | Complete    | 2026-05-08 |
 | 20. Widget Tests & Snapshots | v1.4 | 3/3 | Complete    | 2026-05-08 |
-| 21. UI Polish | v1.4 | 2/2 | Complete   | 2026-05-08 |
+| 21. UI Polish | v1.4 | 2/2 | Complete    | 2026-05-08 |
