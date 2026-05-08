@@ -42,9 +42,10 @@ class _PropContext:
     """Minimal context that mimics the JoyApp interface used by propagation methods."""
 
     def __init__(self, projects: list[Project], sessions: list | None = None, config: Config | None = None) -> None:
+        from joy.data_orchestrator import DataOrchestrator  # noqa: PLC0415
         self._projects = projects
-        self._current_sessions = sessions or []
         self._config = config if config is not None else Config()
+        self._orchestrator = DataOrchestrator()
 
 
 # ---------------------------------------------------------------------------
