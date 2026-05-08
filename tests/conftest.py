@@ -59,3 +59,52 @@ def _isolated_store_paths(tmp_path_factory):
     mp.setattr("joy.store.ARCHIVE_PATH", tmp / "archive.toml")
     yield
     mp.undo()
+
+
+# ---------------------------------------------------------------------------
+# FakeBackend fixtures (Phase 20, TEST-04)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def fake_storage(sample_project):
+    """FakeStorage pre-loaded with sample_project fixture."""
+    from tests.fakes import FakeStorage
+    from joy.ports import StoragePort
+
+    storage = FakeStorage(projects=[sample_project])
+    assert isinstance(storage, StoragePort)  # runtime Protocol check
+    return storage
+
+
+@pytest.fixture
+def fake_terminal():
+    """FakeTerminal with no sessions (simulates iTerm2 unavailable)."""
+    from tests.fakes import FakeTerminal
+    from joy.ports import TerminalPort
+
+    terminal = FakeTerminal()
+    assert isinstance(terminal, TerminalPort)
+    return terminal
+
+
+@pytest.fixture
+def fake_git_data():
+    """FakeGitData returning empty worktrees by default."""
+    from tests.fakes import FakeGitData
+    from joy.ports import GitDataPort
+
+    git_data = FakeGitData()
+    assert isinstance(git_data, GitDataPort)
+    return git_data
+
+
+@pytest.fixture
+def fake_opener():
+    """FakeOpener that records open calls without subprocess."""
+    from tests.fakes import FakeOpener
+    from joy.ports import OpenerPort
+
+    opener = FakeOpener()
+    assert isinstance(opener, OpenerPort)
+    return opener
