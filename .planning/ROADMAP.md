@@ -129,7 +129,10 @@ Plans:
   1. A documented audit checklist exists covering spacing, alignment, truncation, and focus indicators for all panes (ProjectList, ProjectDetail, WorktreePane, TerminalPane, MRPane)
   2. Every bug identified in the audit is fixed — no known visual inconsistencies remain across the five panes
   3. Focus indicators (border color, highlight styling) behave consistently when tabbing between panes
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 21-01-PLAN.md — Fix CSS inconsistencies across all 5 widget panes
+- [ ] 21-02-PLAN.md — Remove app.py duplicate CSS, update snapshots, visual verification
 **UI hint**: yes
 
 ## Progress
@@ -159,4 +162,4 @@ Phases execute in numeric order: 18 → 19 → 20 → 21
 | 18. Contracts & Facades | v1.4 | 3/3 | Complete    | 2026-05-08 |
 | 19. Service Extraction & Backend Tests | v1.4 | 4/4 | Complete    | 2026-05-08 |
 | 20. Widget Tests & Snapshots | v1.4 | 3/3 | Complete    | 2026-05-08 |
-| 21. UI Polish | v1.4 | 0/? | Not started | - |
+| 21. UI Polish | v1.4 | 0/2 | Not started | - |
