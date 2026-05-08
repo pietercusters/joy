@@ -67,7 +67,7 @@ Full details: `.planning/milestones/v1.3-ROADMAP.md`
 
 - [x] **Phase 18: Contracts & Facades** - Define Protocol-based port interfaces and add public facade methods to all widgets (completed 2026-05-08)
 - [x] **Phase 19: Service Extraction & Backend Tests** - Extract PaneCoordinator, DataOrchestrator, ProjectService from app.py with co-evolved backend tests (completed 2026-05-08)
-- [ ] **Phase 20: Widget Tests & Snapshots** - Widget-level tests with fake backend injection and snapshot baselines for key screens
+- [x] **Phase 20: Widget Tests & Snapshots** - Widget-level tests with fake backend injection and snapshot baselines for key screens (completed 2026-05-08)
 - [ ] **Phase 21: UI Polish** - Systematic audit and fix of visual inconsistencies across all panes
 
 ## Phase Details
@@ -118,8 +118,8 @@ Plans:
 **Plans**: 3 plans
 Plans:
 - [x] 20-01-PLAN.md — Test infrastructure: pytest downgrade, pytest-textual-snapshot, FakeBackend adapters
-- [ ] 20-02-PLAN.md — Widget pilot tests for all four panes (TEST-04)
-- [ ] 20-03-PLAN.md — Snapshot baseline tests for key screens (TEST-05)
+- [x] 20-02-PLAN.md — Widget pilot tests for all four panes (TEST-04)
+- [x] 20-03-PLAN.md — Snapshot baseline tests for key screens (TEST-05)
 
 ### Phase 21: UI Polish
 **Goal**: All four panes render with consistent spacing, alignment, truncation, and focus indicators — visual bugs identified and fixed after architecture stabilization
@@ -158,5 +158,5 @@ Phases execute in numeric order: 18 → 19 → 20 → 21
 | 17. Fix iTerm2 Integration Bugs | v1.3 | 3/3 | ✓ Complete | 2026-04-16 |
 | 18. Contracts & Facades | v1.4 | 3/3 | Complete    | 2026-05-08 |
 | 19. Service Extraction & Backend Tests | v1.4 | 4/4 | Complete    | 2026-05-08 |
-| 20. Widget Tests & Snapshots | v1.4 | 1/3 | In Progress|  |
+| 20. Widget Tests & Snapshots | v1.4 | 3/3 | Complete   | 2026-05-08 |
 | 21. UI Polish | v1.4 | 0/? | Not started | - |
