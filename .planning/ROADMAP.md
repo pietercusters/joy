@@ -102,9 +102,9 @@ Plans:
   7. All existing tests pass after every individual service extraction (no big-bang migration)
 **Plans**: 4 plans
 Plans:
-- [ ] 19-01-PLAN.md — Extract PaneCoordinator (sync logic) + backend tests
-- [ ] 19-02-PLAN.md — Extract DataOrchestrator (data coordination) + backend tests
-- [ ] 19-03-PLAN.md — Extract ProjectService (CRUD/archive) + backend tests
+- [x] 19-01-PLAN.md — Extract PaneCoordinator (sync logic) + backend tests
+- [x] 19-02-PLAN.md — Extract DataOrchestrator (data coordination) + backend tests
+- [x] 19-03-PLAN.md — Extract ProjectService (CRUD/archive) + backend tests
 - [ ] 19-04-PLAN.md — Slim app.py to composition root + verify all constraints
 
 ### Phase 20: Widget Tests & Snapshots
@@ -153,6 +153,6 @@ Phases execute in numeric order: 18 → 19 → 20 → 21
 | 16. Live Data Propagation | v1.2 | 2/2 | ✓ Complete | 2026-04-15 |
 | 17. Fix iTerm2 Integration Bugs | v1.3 | 3/3 | ✓ Complete | 2026-04-16 |
 | 18. Contracts & Facades | v1.4 | 3/3 | Complete    | 2026-05-08 |
-| 19. Service Extraction & Backend Tests | v1.4 | 0/4 | Not started | - |
+| 19. Service Extraction & Backend Tests | v1.4 | 3/4 | In Progress|  |
 | 20. Widget Tests & Snapshots | v1.4 | 0/? | Not started | - |
 | 21. UI Polish | v1.4 | 0/? | Not started | - |
