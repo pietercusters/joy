@@ -87,19 +87,12 @@ class JoyApp(App):
         self._config: Config = Config()
         self._project_svc = ProjectService()
         self._repos: list[Repo] = []
-        self._last_refresh_at: datetime | None = None
-        self._refresh_failed: bool = False
-        self._mr_fetch_failed: bool = False
         self._refresh_timer: object | None = None
         self._label_timer: object | None = None
-        self._terminal_last_refresh_at: datetime | None = None
-        self._terminal_refresh_failed: bool = False
-        self._live_tab_ids: set[str] = set()
-        self._tabs_creating: set[str] = set()  # in-flight guard: project names with tab creation pending
+        self._tabs_creating: set[str] = set()
         # Phase 19: extracted services
         self._orchestrator = DataOrchestrator()
         self._coordinator = PaneCoordinator()
-        # Phase 15: sync toggle state (D-12, D-14)
         self._sync_enabled: bool = True
 
     # ---------------------------------------------------------------------------
@@ -265,7 +258,7 @@ class JoyApp(App):
         from joy.mr_status import BatchMRResult  # noqa: PLC0415
         if batch_result is None:
             batch_result = BatchMRResult()
-        self._mr_fetch_failed = mr_failed
+        self._orchestrator.mr_fetch_failed = mr_failed
         # Phase 19: delegate data readiness to orchestrator
         mr_data = batch_result.by_branch if isinstance(batch_result, BatchMRResult) else (batch_result or {})
         mr_authored = batch_result.authored if isinstance(batch_result, BatchMRResult) else []
@@ -295,7 +288,7 @@ class JoyApp(App):
     ) -> None:
         """Push terminal session data to the pane widget (D-15). Also captures data for resolver (D-07)."""
         live_tab_ids = live_tab_ids or set()
-        self._live_tab_ids = live_tab_ids
+        self._orchestrator._live_tab_ids = live_tab_ids
         # Phase 19: delegate data readiness + stale tab healing to orchestrator
         self._orchestrator.mark_sessions_ready(sessions or [])
         healed = self._orchestrator.heal_stale_tabs(self._project_svc.projects, sessions, live_tab_ids)
@@ -399,81 +392,62 @@ class JoyApp(App):
 
     def _mark_refresh_success(self) -> None:
         """Record successful refresh and update timestamp display."""
-        self._last_refresh_at = datetime.now(timezone.utc)
-        self._refresh_failed = False
+        self._orchestrator.mark_refresh_success()
         self._update_refresh_label()
 
     def _mark_refresh_failure(self) -> None:
-        """Record failed refresh and update timestamp display with stale warning (REFR-04)."""
-        self._refresh_failed = True
+        """Record failed refresh and update timestamp display."""
+        self._orchestrator.mark_refresh_failure()
         self._update_refresh_label()
 
     def _mark_terminal_refresh_success(self) -> None:
         """Record successful terminal refresh and update label."""
-        self._terminal_last_refresh_at = datetime.now(timezone.utc)
-        self._terminal_refresh_failed = False
+        self._orchestrator.mark_terminal_refresh_success()
         self._update_terminal_refresh_label()
 
     def _mark_terminal_refresh_failure(self) -> None:
-        """Record failed terminal refresh and update label with stale warning."""
-        self._terminal_refresh_failed = True
+        """Record failed terminal refresh and update label."""
+        self._orchestrator.mark_terminal_refresh_failure()
         self._update_terminal_refresh_label()
 
     def _update_refresh_label(self) -> None:
-        """Push formatted timestamp to WorktreePane and MRPane border_title (D-01, D-03)."""
-        if self._last_refresh_at is None:
-            if self._refresh_failed:
-                # WR-05: No successful refresh yet but one has failed — show stale
+        """Push formatted timestamp to WorktreePane and MRPane border_title."""
+        import time
+        orch = self._orchestrator
+        if orch.last_refresh_at is None:
+            if orch.refresh_failed:
                 self.query_one(WorktreePane).set_refresh_label("never", stale=True)
                 try:
-                    self.query_one(MRPane).set_refresh_label("never", stale=True, mr_error=self._mr_fetch_failed)
+                    self.query_one(MRPane).set_refresh_label("never", stale=True, mr_error=orch.mr_fetch_failed)
                 except Exception:
                     pass
-            return  # No successful refresh yet
-        now = datetime.now(timezone.utc)
-        age_seconds = int((now - self._last_refresh_at).total_seconds())
-        timestamp = self._format_age(age_seconds)
-        # D-04: stale if age > 2x interval OR refresh failed
-        stale = self._refresh_failed or age_seconds > (2 * self._config.refresh_interval)
-        self.query_one(WorktreePane).set_refresh_label(
-            timestamp, stale=stale, mr_error=self._mr_fetch_failed
-        )
+            return
+        age_seconds = int(time.monotonic() - orch.last_refresh_at)
+        timestamp = DataOrchestrator.format_age(age_seconds)
+        stale = orch.refresh_failed or age_seconds > (2 * self._config.refresh_interval)
+        self.query_one(WorktreePane).set_refresh_label(timestamp, stale=stale, mr_error=orch.mr_fetch_failed)
         try:
-            self.query_one(MRPane).set_refresh_label(
-                timestamp, stale=stale, mr_error=self._mr_fetch_failed
-            )
+            self.query_one(MRPane).set_refresh_label(timestamp, stale=stale, mr_error=orch.mr_fetch_failed)
         except Exception:
             pass
 
     def _update_terminal_refresh_label(self) -> None:
-        """Push formatted timestamp to TerminalPane border_title (D-16)."""
-        if self._terminal_last_refresh_at is None:
-            if self._terminal_refresh_failed:
+        """Push formatted timestamp to TerminalPane border_title."""
+        import time
+        orch = self._orchestrator
+        if orch.terminal_last_refresh_at is None:
+            if orch.terminal_refresh_failed:
                 self.query_one(TerminalPane).set_refresh_label("never", stale=True)
             return
-        now = datetime.now(timezone.utc)
-        age_seconds = int((now - self._terminal_last_refresh_at).total_seconds())
-        timestamp = self._format_age(age_seconds)
-        stale = self._terminal_refresh_failed or age_seconds > (2 * self._config.refresh_interval)
+        age_seconds = int(time.monotonic() - orch.terminal_last_refresh_at)
+        timestamp = DataOrchestrator.format_age(age_seconds)
+        stale = orch.terminal_refresh_failed or age_seconds > (2 * self._config.refresh_interval)
         self.query_one(TerminalPane).set_refresh_label(timestamp, stale=stale)
 
     def _update_all_refresh_labels(self) -> None:
         """Periodic label update for both worktree and terminal panes."""
         self._update_refresh_label()
         self._update_terminal_refresh_label()
-
-    @staticmethod
-    def _format_age(seconds: int) -> str:
-        """Format age in seconds to human-readable relative string (D-02)."""
-        if seconds < 5:
-            return "just now"
-        if seconds < 60:
-            return f"{seconds}s ago"
-        minutes = seconds // 60
-        if minutes < 60:
-            return f"{minutes}m ago"
-        hours = minutes // 60
-        return f"{hours}h ago"
 
     def on_descendant_focus(self, event) -> None:
         """Update sub_title and HintBar pane hints based on which pane has focus (D-08, D-13)."""

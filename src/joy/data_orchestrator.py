@@ -20,6 +20,13 @@ class DataOrchestrator:
         self._current_sessions: list[TerminalSession] = []
         self._current_mr_data: dict = {}
         self._current_mr_authored: list = []
+        self._live_tab_ids: set[str] = set()
+        # Refresh tracking state (moved from app.py in Plan 19-04)
+        self.last_refresh_at: float | None = None
+        self.refresh_failed: bool = False
+        self.mr_fetch_failed: bool = False
+        self.terminal_last_refresh_at: float | None = None
+        self.terminal_refresh_failed: bool = False
 
     # ---------------------------------------------------------------------------
     # Properties
@@ -209,3 +216,39 @@ class DataOrchestrator:
             for p in projects
             if p.iterm_tab_id and p.iterm_tab_id in live_tab_ids
         ]
+
+    # ---------------------------------------------------------------------------
+    # Refresh tracking
+    # ---------------------------------------------------------------------------
+
+    def mark_refresh_success(self) -> None:
+        """Record successful worktree/MR refresh."""
+        import time
+        self.last_refresh_at = time.monotonic()
+        self.refresh_failed = False
+
+    def mark_refresh_failure(self) -> None:
+        """Record failed worktree/MR refresh."""
+        self.refresh_failed = True
+
+    def mark_terminal_refresh_success(self) -> None:
+        """Record successful terminal session refresh."""
+        import time
+        self.terminal_last_refresh_at = time.monotonic()
+        self.terminal_refresh_failed = False
+
+    def mark_terminal_refresh_failure(self) -> None:
+        """Record failed terminal session refresh."""
+        self.terminal_refresh_failed = True
+
+    @staticmethod
+    def format_age(seconds: int) -> str:
+        """Format seconds since last refresh as human-readable string."""
+        if seconds < 60:
+            return f"{seconds}s ago"
+        minutes = seconds // 60
+        if minutes < 60:
+            return f"{minutes}m ago"
+        hours = minutes // 60
+        remaining = minutes % 60
+        return f"{hours}h{remaining}m ago"
