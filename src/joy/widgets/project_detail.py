@@ -70,18 +70,28 @@ class ProjectDetail(Widget, can_focus=True):
         width: 1fr;
         height: 1fr;
         overflow-y: auto;
+        border: solid $surface-lighten-2;
     }
     ProjectDetail > VerticalScroll {
         width: 1fr;
         height: 1fr;
     }
+    ProjectDetail:focus {
+        border: solid $accent;
+    }
+    ProjectDetail:focus-within {
+        border: solid $accent;
+    }
     ProjectDetail:focus-within ObjectRow.--highlight {
+        background: $accent;
+    }
+    ProjectDetail:focus ObjectRow.--highlight {
         background: $accent;
     }
     ObjectRow.--highlight {
         background: $accent 30%;
     }
-    .section-spacer {
+    ProjectDetail .section-spacer {
         height: 1;
     }
     """

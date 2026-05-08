@@ -48,20 +48,6 @@ class JoyApp(App):
         grid-rows: 1fr 1fr;
         grid-columns: 1fr 1fr 1fr;
     }
-    #project-list {
-        height: 1fr;
-        border: solid $surface-lighten-2;
-    }
-    #project-list:focus-within {
-        border: solid $accent;
-    }
-    #project-detail {
-        height: 1fr;
-        border: solid $surface-lighten-2;
-    }
-    #project-detail:focus-within {
-        border: solid $accent;
-    }
     """
 
     BINDINGS = [

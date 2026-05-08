@@ -368,6 +368,16 @@ class ProjectList(Widget, can_focus=True):
     ]
 
     DEFAULT_CSS = """
+    ProjectList {
+        height: 1fr;
+        border: solid $surface-lighten-2;
+    }
+    ProjectList:focus {
+        border: solid $accent;
+    }
+    ProjectList:focus-within {
+        border: solid $accent;
+    }
     ProjectList:focus-within ProjectRow.--highlight {
         background: $accent;
     }
