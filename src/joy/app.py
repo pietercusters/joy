@@ -415,8 +415,8 @@ class JoyApp(App):
             try:
                 project_list = self.query_one(ProjectList)
                 project_list.set_projects(self._projects, self._repos)
-                if project_list._cursor >= 0 and project_list._cursor < len(project_list._rows):
-                    current = project_list._rows[project_list._cursor].project
+                current = project_list.current_project
+                if current is not None:
                     resolver_wts = self._rel_index.worktrees_for(current) if self._rel_index else []
                     resolver_terms = self._rel_index.terminals_for(current) if self._rel_index else []
                     self.query_one(ProjectDetail).set_project(current, resolver_worktrees=resolver_wts, resolver_terminals=resolver_terms)
@@ -450,8 +450,8 @@ class JoyApp(App):
         if self._rel_index is None:
             return
         from joy.widgets.worktree_pane import WorktreePane as _WorktreePane  # noqa: PLC0415
-        linked_paths: set[str] = set(self._rel_index._project_for_wt_path.keys())
-        linked_branches: set[tuple[str, str]] = set(self._rel_index._project_for_wt_branch.keys())
+        linked_paths = self._rel_index.linked_worktree_paths
+        linked_branches = self._rel_index.linked_worktree_branches
         try:
             pane = self.query_one(_WorktreePane)
             pane.set_linked_paths(linked_paths, linked_branches)
@@ -720,14 +720,10 @@ class JoyApp(App):
     def action_open_all_defaults(self) -> None:
         """Open all open_by_default objects for the current project (ACT-02, D-10)."""
         detail = self.query_one(ProjectDetail)
-        project = detail._project
+        project = detail.current_project
         if project is None:
             return  # silent no-op: data not loaded yet (D-11)
-        # Collect defaults from detail rows (includes virtual rows) in display order
-        defaults: list[ObjectItem] = [
-            row.item for row in detail._rows
-            if row.item.open_by_default
-        ]
+        defaults = detail.default_items
         if not defaults:
             return  # silent no-op: no defaults (D-11)
         self._open_defaults(defaults)
@@ -854,7 +850,7 @@ class JoyApp(App):
         """Dispatch keystroke for *kind* using the DISPATCH table (4-state taxonomy)."""
         from joy.dispatch import DISPATCH  # noqa: PLC0415
         detail = self.query_one(ProjectDetail)
-        project = detail._project
+        project = detail.current_project
         if project is None:
             self.notify("No project selected", markup=False)
             return
@@ -956,10 +952,11 @@ class JoyApp(App):
         except Exception:
             self.notify("Worktrees pane not available", markup=False)
             return
-        if pane._cursor < 0 or not pane._rows or pane._cursor >= len(pane._rows):
+        wt = pane.highlighted_worktree
+        if wt is None:
             self.notify("No worktree selected", markup=False)
             return
-        self._open_worktree_path(pane._rows[pane._cursor].path)
+        self._open_worktree_path(wt.path)
 
     @work(thread=True, exit_on_error=False)
     def _open_worktree_path(self, path: str) -> None:

@@ -473,7 +473,7 @@ class TerminalPane(Widget, can_focus=True):
         if session_id:
             self.app.call_from_thread(self.app.notify, f"Created session: {name}", markup=False)
             # Trigger refresh to pick up new session
-            self.app.call_from_thread(self.app._load_terminal)
+            self.app.call_from_thread(self.app.refresh_terminal)
         else:
             self.app.call_from_thread(self.app.notify, "Failed to create session", severity="error", markup=False)
 
@@ -501,7 +501,7 @@ class TerminalPane(Widget, can_focus=True):
         if ok:
             self.app.call_from_thread(self.app.notify, f"Renamed session", markup=False)
             # Trigger refresh to rebuild pane with new name
-            self.app.call_from_thread(self.app._load_terminal)
+            self.app.call_from_thread(self.app.refresh_terminal)
         else:
             self.app.call_from_thread(self.app.notify, "Failed to rename session", severity="error", markup=False)
 
@@ -532,7 +532,7 @@ class TerminalPane(Widget, can_focus=True):
         ok = _ts.close_session(session_id, force=force)
         if ok:
             self.app.call_from_thread(self.app.notify, f"Closed session: {name}", markup=False)
-            self.app.call_from_thread(self.app._load_terminal)
+            self.app.call_from_thread(self.app.refresh_terminal)
         else:
             # Graceful close failed -- offer force close
             if not force:
