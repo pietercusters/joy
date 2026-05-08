@@ -4,7 +4,7 @@ milestone: v1.4
 milestone_name: Frontend Refactor & UI Polish
 status: executing
 stopped_at: Roadmap created for v1.4 (4 phases, 21 requirements)
-last_updated: "2026-05-08T12:41:56.697Z"
+last_updated: "2026-05-08T17:09:55.484Z"
 last_activity: 2026-05-08
 progress:
   total_phases: 4

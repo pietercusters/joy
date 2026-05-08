@@ -4,7 +4,7 @@
 
 `joy` is a keyboard-driven Python TUI for managing coding project artifacts. It gives developers a real-time workspace dashboard — all objects related to a project (branches, MRs, tickets, worktrees, notes, agents, and more) visible at a glance, plus live git worktree status, MR/CI badges, active iTerm2 sessions, and cross-pane intelligence that links worktrees and terminals to their project. Any artifact is openable with a single keystroke. Installable globally via `uv tool install git+<repo>`, configured per-machine in `~/.joy`.
 
-v1.0 delivered the core artifact launcher. v1.1 transformed it into a live workspace dashboard with real-time git, MR/CI, and terminal state. v1.2 added cross-pane relationship intelligence (badge counts, bidirectional sync, auto-propagation). v1.3 unified the detail view and established a consistent per-kind keystroke dispatch table. v1.4 focuses on frontend/backend separation (Ports & Adapters architecture) and UI polish.
+v1.0 delivered the core artifact launcher. v1.1 transformed it into a live workspace dashboard with real-time git, MR/CI, and terminal state. v1.2 added cross-pane relationship intelligence (badge counts, bidirectional sync, auto-propagation). v1.3 unified the detail view and established a consistent per-kind keystroke dispatch table. v1.4 separated frontend from backend using Ports & Adapters architecture (Protocol contracts, extracted services, three-layer test strategy) and polished UI consistency across all panes.
 
 ## Core Value
 
@@ -59,25 +59,20 @@ Every artifact for the active project, openable instantly from one keyboard-driv
 - ✓ Project archive/unarchive: `a`/`A` bindings, archive.toml cold storage, ArchiveBrowserModal — v1.3
 - ✓ Project list icon ribbon: status dot (g cycles idle/prio/hold), 6-icon presence ribbon, MR strip — v1.3
 - ✓ New-project modal: single screen with name input, optional repo ListView, branch ListView — v1.3
-
-## Current Milestone: v1.4 Frontend Refactor & UI Polish
-
-**Goal:** Separate frontend from backend using Ports & Adapters architecture, establish a three-layer test strategy, and fix UI bugs/inconsistencies — making the codebase safe for future UI work.
-
-**Target features:**
-- Ports & Adapters architecture: Protocol-based contracts between TUI and backend services
-- Extract PaneCoordinator (cross-pane sync logic as pure Python, no widgets)
-- Extract DataOrchestrator (background data loading, relationship computation)
-- Extract ProjectService (save/archive/reload operations)
-- Reduce app.py from 1,058 LOC monolith to thin Textual wrapper
-- Widget facade methods (public APIs replacing private field access from app.py)
-- Three-layer test strategy: backend service tests (fast, no TUI), widget tests (Textual pilot, fake backend), snapshot tests (sparingly)
-- Audit and fix UI bugs and visual inconsistencies across all panes
-- Fix known tech debt: failing tests in test_propagation.py and test_sync.py
+- ✓ Protocol contracts in ports.py (StoragePort, GitDataPort, TerminalPort, OpenerPort, SyncablePane) — v1.4
+- ✓ Widget public facades replacing private field access from app.py — v1.4
+- ✓ PaneCoordinator extracted: all 6 sync directions as pure Python service — v1.4
+- ✓ DataOrchestrator extracted: background data loading and relationship computation — v1.4
+- ✓ ProjectService extracted: CRUD, archive/unarchive, persistence — v1.4
+- ✓ Backend service tests: 48 tests for PaneCoordinator, DataOrchestrator, ProjectService — v1.4
+- ✓ Widget pilot tests: 14 Textual pilot tests across 4 panes with FakeBackend injection — v1.4
+- ✓ Snapshot baselines: 3 SVG visual regression tests via pytest-textual-snapshot — v1.4
+- ✓ CSS consistency: self-contained focus/border/highlight in all 5 panes — v1.4
+- ✓ Previously failing tests in test_propagation.py and test_sync.py fixed — v1.4
 
 ### Active
 
-(Requirements to be defined below)
+(No active requirements — next milestone not yet planned)
 
 ### Out of Scope
 
@@ -102,10 +97,10 @@ Every artifact for the active project, openable instantly from one keyboard-driv
 - v1.1 shipped 2026-04-14: 8 phases, 19 plans, 3,606 src LOC + 5,883 test LOC, 276 fast tests passing
 - v1.2 shipped 2026-04-15: 3 phases, 8 plans, cross-pane intelligence
 - v1.3 shipped 2026-04-22: 1 phase (17) + 21 quick tasks, 6,180 src LOC + 7,923 test LOC
-- v1.4 in progress: frontend/backend separation, Ports & Adapters architecture, UI polish
+- v1.4 shipped 2026-05-08: 4 phases, 12 plans, Ports & Adapters architecture, 3-layer test strategy, UI polish
 - Tech stack: Python 3.11+, Textual 8.x, tomllib (stdlib), tomli_w, iterm2>=2.15 — minimal dependencies
 - Data format: TOML in `~/.joy/` — human-editable; repos.toml, archive.toml added in v1.1/v1.3
-- Pre-existing test failures: test_propagation.py::TestTerminalAutoRemove (references non-existent method), test_sync.py terminal sync (4 tests) — known tech debt
+- Pre-existing test failure: test_refresh.py::test_terminal_load_on_mount — known tech debt (unrelated to any milestone)
 
 ## Constraints
 
@@ -141,6 +136,11 @@ Every artifact for the active project, openable instantly from one keyboard-driv
 | DISPATCH table per kind in dispatch.py | Keystroke routing as data (4-state per kind) eliminates app.py if/else sprawl | ✓ Good — v1.3 D-03 |
 | Virtual rows in ProjectDetail | REPO, TERMINALS, resolver worktrees assembled at render time — no persistence mutation | ✓ Good — v1.3 D-04 |
 | Session-scoped fixture for test isolation | Patches all 5 ~/.joy/ constants once per session; no per-test overhead | ✓ Good — v1.3 D-05 |
+| Ports & Adapters with Protocol contracts | 5 typed protocols in ports.py for all widget-backend boundaries | ✓ Good — v1.4 |
+| Service extraction (3 services) | PaneCoordinator, DataOrchestrator, ProjectService — pure Python, fully testable | ✓ Good — v1.4 |
+| FakeBackend via set_* method injection | Widget constructors use **kwargs — data injection via public methods, not constructor DI | ✓ Good — v1.4 |
+| pytest-textual-snapshot for visual regression | SVG baselines with snap_compare; requires pytest<9 (syrupy compatibility) | ✓ Good — v1.4 |
+| Self-contained widget CSS | Each pane owns its border/focus/highlight CSS in DEFAULT_CSS — no app.py CSS duplication | ✓ Good — v1.4 |
 
 ## Evolution
 
@@ -151,4 +151,4 @@ Every artifact for the active project, openable instantly from one keyboard-driv
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-07 after v1.4 milestone start — Frontend Refactor & UI Polish*
+*Last updated: 2026-05-08 after v1.4 milestone — Frontend Refactor & UI Polish shipped*
