@@ -131,7 +131,7 @@ Plans:
   3. Focus indicators (border color, highlight styling) behave consistently when tabbing between panes
 **Plans**: 2 plans
 Plans:
-- [ ] 21-01-PLAN.md — Fix CSS inconsistencies across all 5 widget panes
+- [x] 21-01-PLAN.md — Fix CSS inconsistencies across all 5 widget panes
 - [ ] 21-02-PLAN.md — Remove app.py duplicate CSS, update snapshots, visual verification
 **UI hint**: yes
 
@@ -162,4 +162,4 @@ Phases execute in numeric order: 18 → 19 → 20 → 21
 | 18. Contracts & Facades | v1.4 | 3/3 | Complete    | 2026-05-08 |
 | 19. Service Extraction & Backend Tests | v1.4 | 4/4 | Complete    | 2026-05-08 |
 | 20. Widget Tests & Snapshots | v1.4 | 3/3 | Complete    | 2026-05-08 |
-| 21. UI Polish | v1.4 | 0/2 | Not started | - |
+| 21. UI Polish | v1.4 | 1/2 | In Progress|  |

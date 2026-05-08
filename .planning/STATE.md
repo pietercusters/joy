@@ -4,14 +4,14 @@ milestone: v1.4
 milestone_name: Frontend Refactor & UI Polish
 status: executing
 stopped_at: Roadmap created for v1.4 (4 phases, 21 requirements)
-last_updated: "2026-05-08T12:05:24.266Z"
-last_activity: 2026-05-08
+last_updated: "2026-05-08T12:19:37.630Z"
+last_activity: 2026-05-08 -- Phase 21 execution started
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 10
+  total_plans: 12
   completed_plans: 10
-  percent: 100
+  percent: 83
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-07)
 
 **Core value:** Every artifact for the active project, openable instantly from one keyboard-driven interface.
-**Current focus:** Phase 20 — Widget Tests & Snapshots
+**Current focus:** Phase 21 — UI Polish
 
 ## Current Position
 
-Phase: 21
-Plan: Not started
-Status: Executing Phase 20
-Last activity: 2026-05-08
+Phase: 21 (UI Polish) — EXECUTING
+Plan: 1 of 2
+Status: Executing Phase 21
+Last activity: 2026-05-08 -- Phase 21 execution started
 
 Progress: ░░░░░░░░░░░░░░░░░░░░ 0% (0/4 phases)
 
