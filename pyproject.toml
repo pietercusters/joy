@@ -21,14 +21,16 @@ packages = ["src/joy"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = ["-m", "not slow and not macos_integration"]
+addopts = ["-m", "not slow and not macos_integration and not snapshot"]
 markers = [
     "macos_integration: tests requiring live macOS apps (iTerm2, Notion, etc.)",
     "slow: tests using Textual pilot (async TUI driver, 6-12s each) -- run with -m slow",
+    "snapshot: snapshot baseline tests using pytest-textual-snapshot -- run with -m snapshot",
 ]
 
 [dependency-groups]
 dev = [
-    "pytest>=9.0.3",
+    "pytest>=8.4,<9",
     "pytest-asyncio>=0.25",
+    "pytest-textual-snapshot>=1.1.0",
 ]
