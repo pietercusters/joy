@@ -380,7 +380,7 @@ class TerminalPane(Widget, can_focus=True):
             self._rows[self._cursor].add_class("--highlight")
             self._rows[self._cursor].scroll_visible()
             # Post message only when not in a sync operation (D-03, Pitfall 1 prevention)
-            if not getattr(self.app, "_is_syncing", False):
+            if not getattr(getattr(self.app, "_coordinator", None), "is_syncing", False):
                 self.post_message(
                     self.SessionHighlighted(self._rows[self._cursor].session_name)
                 )

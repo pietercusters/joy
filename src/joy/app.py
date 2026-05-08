@@ -13,6 +13,7 @@ from textual.widgets import Header
 
 from joy.models import ArchivedProject, Config, ObjectItem, PresetKind, Project, Repo, TerminalSession, WorktreeInfo
 from joy.widgets.hint_bar import HintBar
+from joy.pane_coordinator import PaneCoordinator
 from joy.resolver import RelationshipIndex
 from joy.screens import NameInputModal, NewProjectModal, NewProjectResult, PresetPickerModal, SettingsModal, ValueInputModal
 from joy.widgets.object_row import _success_message, _truncate
@@ -99,8 +100,8 @@ class JoyApp(App):
         self._current_sessions: list[TerminalSession] = []
         self._live_tab_ids: set[str] = set()
         self._tabs_creating: set[str] = set()  # in-flight guard: project names with tab creation pending
-        # Phase 15: cross-pane sync guard (D-03)
-        self._is_syncing: bool = False
+        # Phase 15/19: cross-pane sync coordinator (D-03)
+        self._coordinator = PaneCoordinator()
         # Phase 15: sync toggle state (D-12, D-14) — toggle binding added in Plan 03
         self._sync_enabled: bool = True
         # Phase 16: propagation state
@@ -276,13 +277,13 @@ class JoyApp(App):
         self._current_mr_data = batch_result.by_branch if isinstance(batch_result, BatchMRResult) else (batch_result or {})
         self._current_mr_authored = batch_result.authored if isinstance(batch_result, BatchMRResult) else []
         self._worktrees_ready = True
-        self._is_syncing = True  # suppress cross-pane sync during pane rebuild
+        self._coordinator._is_syncing = True  # suppress cross-pane sync during pane rebuild
         try:
             await self.query_one(WorktreePane).set_worktrees(
                 worktrees, repo_count=repo_count, branch_filter=branch_filter, mr_data=self._current_mr_data
             )
         finally:
-            self._is_syncing = False
+            self._coordinator._is_syncing = False
         # Push MR data to MR pane
         if isinstance(batch_result, BatchMRResult):
             try:
@@ -325,11 +326,11 @@ class JoyApp(App):
             if p.iterm_tab_id and p.iterm_tab_id in live_tab_ids
         ]
 
-        self._is_syncing = True  # suppress cross-pane sync during pane rebuild
+        self._coordinator._is_syncing = True  # suppress cross-pane sync during pane rebuild
         try:
             await self.query_one(TerminalPane).set_sessions(sessions, tab_groups=tab_groups)
         finally:
-            self._is_syncing = False
+            self._coordinator._is_syncing = False
         self._maybe_compute_relationships()
 
     def _maybe_compute_relationships(self) -> None:
@@ -411,7 +412,7 @@ class JoyApp(App):
 
         # D-12: rebuild panes if anything changed, guarded by _is_syncing
         if messages:
-            self._is_syncing = True
+            self._coordinator._is_syncing = True
             try:
                 project_list = self.query_one(ProjectList)
                 project_list.set_projects(self._projects, self._repos)
@@ -421,7 +422,7 @@ class JoyApp(App):
                     resolver_terms = self._rel_index.terminals_for(current) if self._rel_index else []
                     self.query_one(ProjectDetail).set_project(current, resolver_worktrees=resolver_wts, resolver_terminals=resolver_terms)
             finally:
-                self._is_syncing = False
+                self._coordinator._is_syncing = False
 
     def _apply_worktree_link_status_fast(self, worktrees: list[WorktreeInfo]) -> None:
         """Apply linked/unlinked CSS immediately after worktrees load, without waiting for _rel_index.
@@ -589,119 +590,42 @@ class JoyApp(App):
         self, message: ProjectList.ProjectHighlighted
     ) -> None:
         """When highlight moves, update detail pane and drive cross-pane sync. (SYNC-01, SYNC-02)"""
-        if self._is_syncing:
+        if self._coordinator.is_syncing:
             return
         resolver_wts = self._rel_index.worktrees_for(message.project) if self._rel_index else []
         resolver_terms = self._rel_index.terminals_for(message.project) if self._rel_index else []
         self.query_one(ProjectDetail).set_project(message.project, resolver_worktrees=resolver_wts, resolver_terminals=resolver_terms)
         if self._sync_enabled and self._rel_index is not None:
-            self._sync_from_project(message.project)
-
-    def _sync_from_project(self, project: Project) -> None:
-        """Drive WorktreePane and TerminalPane to first items related to project. (D-04)
-
-        Calls clear_selection() on panes that cannot match the active project.
-        Called with _is_syncing guard. Uses try/finally to always clear the guard.
-        """
-        self._is_syncing = True
-        try:
-            assert self._rel_index is not None
-            wt_pane = self.query_one(WorktreePane)
-            term_pane = self.query_one(TerminalPane)
-
-            worktrees = self._rel_index.worktrees_for(project)
-            if worktrees:
-                wt = worktrees[0]
-                matched = wt_pane.sync_to(wt.repo_name, wt.branch)
-                if not matched:
-                    wt_pane.clear_selection()
-            else:
-                wt_pane.clear_selection()
-
-            terminals = self._rel_index.terminals_for(project)
-            if terminals:
-                matched = term_pane.sync_to(terminals[0].session_name)
-                if not matched:
-                    term_pane.clear_selection()
-            else:
-                term_pane.clear_selection()
-        finally:
-            self._is_syncing = False
+            self._coordinator.sync_from_project(
+                message.project, self._rel_index,
+                self.query_one(WorktreePane), self.query_one(TerminalPane),
+            )
 
     def on_worktree_pane_worktree_highlighted(
         self, message: WorktreePane.WorktreeHighlighted
     ) -> None:
         """Worktree cursor moved: sync ProjectList and TerminalPane. (SYNC-03, SYNC-04)"""
-        if self._is_syncing:
+        if self._coordinator.is_syncing:
             return
         if self._sync_enabled and self._rel_index is not None:
-            self._sync_from_worktree(message.worktree)
-
-    def _sync_from_worktree(self, worktree: WorktreeInfo) -> None:
-        """Drive ProjectList and TerminalPane based on a highlighted worktree. (D-05)
-
-        Calls clear_selection() on TerminalPane when no terminal matches the project.
-        """
-        self._is_syncing = True
-        try:
-            assert self._rel_index is not None
-            wt_pane = self.query_one(WorktreePane)
-            term_pane = self.query_one(TerminalPane)
-            project = self._rel_index.project_for_worktree(worktree)
-            if project is not None:
-                self.query_one(ProjectList).sync_to(project.name)
-                resolver_wts = self._rel_index.worktrees_for(project)
-                resolver_terms = self._rel_index.terminals_for(project)
-                self.query_one(ProjectDetail).set_project(project, resolver_worktrees=resolver_wts, resolver_terminals=resolver_terms)
-                if resolver_terms:
-                    matched = term_pane.sync_to(resolver_terms[0].session_name)
-                    if not matched:
-                        term_pane.clear_selection()
-                else:
-                    term_pane.clear_selection()
-            else:
-                # Worktree not linked to any project — clear other panes
-                term_pane.clear_selection()
-        finally:
-            self._is_syncing = False
+            self._coordinator.sync_from_worktree(
+                message.worktree, self._rel_index,
+                self.query_one(ProjectList), self.query_one(ProjectDetail),
+                self.query_one(TerminalPane),
+            )
 
     def on_terminal_pane_session_highlighted(
         self, message: TerminalPane.SessionHighlighted
     ) -> None:
         """Terminal session cursor moved: sync ProjectList and WorktreePane. (SYNC-05, SYNC-06)"""
-        if self._is_syncing:
+        if self._coordinator.is_syncing:
             return
         if self._sync_enabled and self._rel_index is not None:
-            self._sync_from_session(message.session_name)
-
-    def _sync_from_session(self, session_name: str) -> None:
-        """Drive ProjectList and WorktreePane based on a highlighted terminal session. (D-06)
-
-        Calls clear_selection() on WorktreePane when no worktree matches the project.
-        """
-        self._is_syncing = True
-        try:
-            assert self._rel_index is not None
-            wt_pane = self.query_one(WorktreePane)
-            term_pane = self.query_one(TerminalPane)
-            project = self._rel_index.project_for_terminal(session_name)
-            if project is not None:
-                self.query_one(ProjectList).sync_to(project.name)
-                worktrees = self._rel_index.worktrees_for(project)
-                terminals = self._rel_index.terminals_for(project)
-                self.query_one(ProjectDetail).set_project(project, resolver_worktrees=worktrees, resolver_terminals=terminals)
-                if worktrees:
-                    wt = worktrees[0]
-                    matched = wt_pane.sync_to(wt.repo_name, wt.branch)
-                    if not matched:
-                        wt_pane.clear_selection()
-                else:
-                    wt_pane.clear_selection()
-            else:
-                # Session not linked to any project — clear other panes
-                wt_pane.clear_selection()
-        finally:
-            self._is_syncing = False
+            self._coordinator.sync_from_session(
+                message.session_name, self._rel_index,
+                self.query_one(ProjectList), self.query_one(ProjectDetail),
+                self.query_one(WorktreePane),
+            )
 
     def on_project_list_project_selected(
         self, message: ProjectList.ProjectSelected

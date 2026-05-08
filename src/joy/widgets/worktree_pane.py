@@ -416,7 +416,7 @@ class WorktreePane(Widget, can_focus=True):
             self._rows[self._cursor].add_class("--highlight")
             self._rows[self._cursor].scroll_visible()
             # Post message only on user navigation, not during refresh or sync (D-03, Pitfall 1)
-            if emit and not getattr(self.app, "_is_syncing", False):
+            if emit and not getattr(getattr(self.app, "_coordinator", None), "is_syncing", False):
                 row = self._rows[self._cursor]
                 wt = WorktreeInfo(
                     repo_name=row.repo_name,
