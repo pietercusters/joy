@@ -43,7 +43,8 @@ class _PropContext:
 
     def __init__(self, projects: list[Project], sessions: list | None = None, config: Config | None = None) -> None:
         from joy.data_orchestrator import DataOrchestrator  # noqa: PLC0415
-        self._projects = projects
+        from joy.project_service import ProjectService  # noqa: PLC0415
+        self._project_svc = ProjectService(projects)
         self._config = config if config is not None else Config()
         self._orchestrator = DataOrchestrator()
 

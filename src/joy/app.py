@@ -15,6 +15,7 @@ from joy.models import ArchivedProject, Config, ObjectItem, PresetKind, Project,
 from joy.widgets.hint_bar import HintBar
 from joy.data_orchestrator import DataOrchestrator
 from joy.pane_coordinator import PaneCoordinator
+from joy.project_service import ProjectService
 from joy.resolver import RelationshipIndex
 from joy.screens import NameInputModal, NewProjectModal, NewProjectResult, PresetPickerModal, SettingsModal, ValueInputModal
 from joy.widgets.object_row import _success_message, _truncate
@@ -84,7 +85,7 @@ class JoyApp(App):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self._config: Config = Config()
-        self._projects: list[Project] = []
+        self._project_svc = ProjectService()
         self._repos: list[Repo] = []
         self._last_refresh_at: datetime | None = None
         self._refresh_failed: bool = False
@@ -108,7 +109,7 @@ class JoyApp(App):
     @property
     def projects(self) -> list[Project]:
         """Public read access to project list."""
-        return self._projects
+        return self._project_svc.projects
 
     @property
     def config(self) -> Config:
@@ -189,7 +190,7 @@ class JoyApp(App):
 
     def _set_projects(self, projects: list[Project], config: Config | None = None, repos: list[Repo] | None = None) -> None:
         """Update the project list widget with loaded projects (called from thread)."""
-        self._projects = projects
+        self._project_svc.set_projects(projects)
         if config is not None:
             self._config = config
         if repos is not None:
@@ -297,13 +298,13 @@ class JoyApp(App):
         self._live_tab_ids = live_tab_ids
         # Phase 19: delegate data readiness + stale tab healing to orchestrator
         self._orchestrator.mark_sessions_ready(sessions or [])
-        healed = self._orchestrator.heal_stale_tabs(self._projects, sessions, live_tab_ids)
+        healed = self._orchestrator.heal_stale_tabs(self._project_svc.projects, sessions, live_tab_ids)
         if healed:
             self._save_projects_bg()
             for name in healed:
                 self.notify(f"'{name}' tab closed \u2014 press h to relink", markup=False)
 
-        tab_groups = self._orchestrator.build_tab_groups(self._projects, live_tab_ids)
+        tab_groups = self._orchestrator.build_tab_groups(self._project_svc.projects, live_tab_ids)
 
         self._coordinator._is_syncing = True  # suppress cross-pane sync during pane rebuild
         try:
@@ -314,7 +315,7 @@ class JoyApp(App):
 
     def _maybe_compute_relationships(self) -> None:
         """Compute RelationshipIndex and run propagation when both workers complete (D-07, D-08)."""
-        rel_index = self._orchestrator.maybe_compute_relationships(self._projects, self._repos)
+        rel_index = self._orchestrator.maybe_compute_relationships(self._project_svc.projects, self._repos)
         if rel_index is None:
             return
         self._update_badges()
@@ -323,7 +324,7 @@ class JoyApp(App):
 
     def _propagate_mr_auto_add(self, mr_data: dict) -> list[str]:
         """Auto-add MR objects for detected PRs — delegates to DataOrchestrator."""
-        return self._orchestrator.propagate_mr_auto_add(mr_data, self._projects, self._config)
+        return self._orchestrator.propagate_mr_auto_add(mr_data, self._project_svc.projects, self._config)
 
     def _propagate_changes(self, mr_data: dict) -> None:
         """Run propagation after both data sources are ready (D-09, D-10, D-11, D-12).
@@ -346,7 +347,7 @@ class JoyApp(App):
             self._coordinator._is_syncing = True
             try:
                 project_list = self.query_one(ProjectList)
-                project_list.set_projects(self._projects, self._repos)
+                project_list.set_projects(self._project_svc.projects, self._repos)
                 current = project_list.current_project
                 if current is not None:
                     resolver_wts = self._orchestrator.rel_index.worktrees_for(current) if self._orchestrator.rel_index else []
@@ -358,7 +359,7 @@ class JoyApp(App):
     def _apply_worktree_link_status_fast(self, worktrees: list[WorktreeInfo]) -> None:
         """Apply linked/unlinked CSS immediately after worktrees load — delegates computation to orchestrator."""
         from joy.widgets.worktree_pane import WorktreePane as _WorktreePane  # noqa: PLC0415
-        linked_paths, linked_branches = self._orchestrator.compute_linked_worktree_sets(self._projects, worktrees)
+        linked_paths, linked_branches = self._orchestrator.compute_linked_worktree_sets(self._project_svc.projects, worktrees)
         try:
             self.query_one(_WorktreePane).set_linked_paths(linked_paths, linked_branches)
         except Exception:
@@ -576,22 +577,21 @@ class JoyApp(App):
             if result is None:
                 return
             # D-04: Check duplicate name
-            if any(p.name == result.name for p in self._projects):
+            if self._project_svc.has_project(result.name):
                 self.notify(f"Project '{result.name}' already exists", severity="error", markup=False)
                 return
             # Create project with optional repo and branch pre-filled
-            project = Project(name=result.name, repo=result.repo)
-            if result.branch:
-                project.objects.append(ObjectItem(kind=PresetKind.BRANCH, value=result.branch))
-            self._projects.append(project)
+            project = self._project_svc.create_project(
+                name=result.name, repo=result.repo, branch=result.branch,
+            )
             self._save_projects_bg()
             project_list = self.query_one(ProjectList)
-            project_list.set_projects(self._projects, self._repos)
+            project_list.set_projects(self._project_svc.projects, self._repos)
             # Select the new project (last in list). Use call_after_refresh so
             # the reactive chain from set_projects (clear + append) settles
             # before we override the index — otherwise the ListView may reset
             # to index 0 after our select_index call.
-            new_index = len(self._projects) - 1
+            new_index = len(self._project_svc.projects) - 1
             project_list.call_after_refresh(lambda: project_list.select_index(new_index))
             self.query_one(ProjectDetail).set_project(project)
             self.notify(f"Created project: '{result.name}'", markup=False)
@@ -620,7 +620,7 @@ class JoyApp(App):
     def _save_projects_bg(self) -> None:
         """Persist projects to TOML in background thread (D-16)."""
         from joy.store import save_projects  # noqa: PLC0415
-        save_projects(self._projects)
+        save_projects(self._project_svc.projects)
 
     @work(thread=True, exit_on_error=False)
     def _do_create_tab_for_project(self, project: Project) -> None:
@@ -847,7 +847,7 @@ class JoyApp(App):
     def _apply_repos(self, repos: list[Repo]) -> None:
         """Apply reloaded repos to the app state and refresh dependent widgets."""
         self._repos = repos
-        self.query_one(ProjectList).set_projects(self._projects, self._repos)
+        self.query_one(ProjectList).set_projects(self._project_svc.projects, self._repos)
         self._load_worktrees()
 
     @work(thread=True, exit_on_error=False)
