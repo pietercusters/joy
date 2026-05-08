@@ -204,6 +204,9 @@ class TerminalPane(Widget, can_focus=True):
     TerminalPane:focus-within SessionRow.--highlight {
         background: $accent;
     }
+    TerminalPane:focus SessionRow.--highlight {
+        background: $accent;
+    }
     SessionRow.--highlight {
         background: $accent 30%;
     }
@@ -380,10 +383,21 @@ class TerminalPane(Widget, can_focus=True):
             self._rows[self._cursor].add_class("--highlight")
             self._rows[self._cursor].scroll_visible()
             # Post message only when not in a sync operation (D-03, Pitfall 1 prevention)
-            if not getattr(self.app, "_is_syncing", False):
+            if not getattr(getattr(self.app, "_coordinator", None), "is_syncing", False):
                 self.post_message(
                     self.SessionHighlighted(self._rows[self._cursor].session_name)
                 )
+
+    # ---------------------------------------------------------------------------
+    # Public facade (Phase 18, CNTR-05)
+    # ---------------------------------------------------------------------------
+
+    @property
+    def highlighted_session(self) -> str | None:
+        """The session_name of the currently highlighted session, or None."""
+        if 0 <= self._cursor < len(self._rows):
+            return self._rows[self._cursor].session_name
+        return None
 
     def sync_to(self, session_name: str) -> bool:
         """Move cursor to matching session_name row without posting SessionHighlighted.
@@ -462,7 +476,7 @@ class TerminalPane(Widget, can_focus=True):
         if session_id:
             self.app.call_from_thread(self.app.notify, f"Created session: {name}", markup=False)
             # Trigger refresh to pick up new session
-            self.app.call_from_thread(self.app._load_terminal)
+            self.app.call_from_thread(self.app.refresh_terminal)
         else:
             self.app.call_from_thread(self.app.notify, "Failed to create session", severity="error", markup=False)
 
@@ -490,7 +504,7 @@ class TerminalPane(Widget, can_focus=True):
         if ok:
             self.app.call_from_thread(self.app.notify, f"Renamed session", markup=False)
             # Trigger refresh to rebuild pane with new name
-            self.app.call_from_thread(self.app._load_terminal)
+            self.app.call_from_thread(self.app.refresh_terminal)
         else:
             self.app.call_from_thread(self.app.notify, "Failed to rename session", severity="error", markup=False)
 
@@ -521,7 +535,7 @@ class TerminalPane(Widget, can_focus=True):
         ok = _ts.close_session(session_id, force=force)
         if ok:
             self.app.call_from_thread(self.app.notify, f"Closed session: {name}", markup=False)
-            self.app.call_from_thread(self.app._load_terminal)
+            self.app.call_from_thread(self.app.refresh_terminal)
         else:
             # Graceful close failed -- offer force close
             if not force:

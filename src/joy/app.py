@@ -13,6 +13,9 @@ from textual.widgets import Header
 
 from joy.models import ArchivedProject, Config, ObjectItem, PresetKind, Project, Repo, TerminalSession, WorktreeInfo
 from joy.widgets.hint_bar import HintBar
+from joy.data_orchestrator import DataOrchestrator
+from joy.pane_coordinator import PaneCoordinator
+from joy.project_service import ProjectService
 from joy.resolver import RelationshipIndex
 from joy.screens import NameInputModal, NewProjectModal, NewProjectResult, PresetPickerModal, SettingsModal, ValueInputModal
 from joy.widgets.object_row import _success_message, _truncate
@@ -45,20 +48,6 @@ class JoyApp(App):
         grid-rows: 1fr 1fr;
         grid-columns: 1fr 1fr 1fr;
     }
-    #project-list {
-        height: 1fr;
-        border: solid $surface-lighten-2;
-    }
-    #project-list:focus-within {
-        border: solid $accent;
-    }
-    #project-detail {
-        height: 1fr;
-        border: solid $surface-lighten-2;
-    }
-    #project-detail:focus-within {
-        border: solid $accent;
-    }
     """
 
     BINDINGS = [
@@ -82,30 +71,62 @@ class JoyApp(App):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self._config: Config = Config()
-        self._projects: list[Project] = []
+        self._project_svc = ProjectService()
         self._repos: list[Repo] = []
-        self._last_refresh_at: datetime | None = None
-        self._refresh_failed: bool = False
-        self._mr_fetch_failed: bool = False
         self._refresh_timer: object | None = None
         self._label_timer: object | None = None
-        self._terminal_last_refresh_at: datetime | None = None
-        self._terminal_refresh_failed: bool = False
-        # Phase 14: relationship resolver state (D-06, D-07)
-        self._rel_index: RelationshipIndex | None = None
-        self._worktrees_ready: bool = False
-        self._sessions_ready: bool = False
-        self._current_worktrees: list[WorktreeInfo] = []
-        self._current_sessions: list[TerminalSession] = []
-        self._live_tab_ids: set[str] = set()
-        self._tabs_creating: set[str] = set()  # in-flight guard: project names with tab creation pending
-        # Phase 15: cross-pane sync guard (D-03)
-        self._is_syncing: bool = False
-        # Phase 15: sync toggle state (D-12, D-14) — toggle binding added in Plan 03
+        self._tabs_creating: set[str] = set()
+        # Phase 19: extracted services
+        self._orchestrator = DataOrchestrator()
+        self._coordinator = PaneCoordinator()
         self._sync_enabled: bool = True
-        # Phase 16: propagation state
-        self._current_mr_data: dict = {}
-        self._current_mr_authored: list = []
+
+    # ---------------------------------------------------------------------------
+    # Public facade (Phase 18, CNTR-03 / ARCH-01)
+    # ---------------------------------------------------------------------------
+
+    @property
+    def projects(self) -> list[Project]:
+        """Public read access to project list."""
+        return self._project_svc.projects
+
+    @property
+    def config(self) -> Config:
+        """Public read access to configuration."""
+        return self._config
+
+    @property
+    def current_worktrees(self) -> list[WorktreeInfo]:
+        """Public read access to last-fetched worktree snapshot."""
+        return self._orchestrator.current_worktrees
+
+    def save_projects(self) -> None:
+        """Public: persist projects to TOML in background."""
+        self._save_projects_bg()
+
+    def close_tab(self, tab_id: str) -> None:
+        """Public: close an iTerm2 tab in background."""
+        self._close_tab_bg(tab_id)
+
+    def append_to_archive(self, archived: ArchivedProject) -> None:
+        """Public: add project to archive in background."""
+        self._append_to_archive_bg(archived)
+
+    def remove_from_archive(self, archived: ArchivedProject) -> None:
+        """Public: remove project from archive in background."""
+        self._remove_from_archive_bg(archived)
+
+    def refresh_terminal(self) -> None:
+        """Public: trigger terminal session reload."""
+        self._load_terminal()
+
+    def start_add_object_loop(self, project: Project) -> None:
+        """Public: start the add-object modal loop for a project."""
+        self._start_add_object_loop(project)
+
+    def update_badges(self) -> None:
+        """Public: push RelationshipIndex badge counts to ProjectList."""
+        self._update_badges()
 
     def check_action(self, action: str, parameters: tuple) -> bool | None:
         """Control which sync toggle binding is visible in the footer. (D-13, SYNC-09)
@@ -148,7 +169,7 @@ class JoyApp(App):
 
     def _set_projects(self, projects: list[Project], config: Config | None = None, repos: list[Repo] | None = None) -> None:
         """Update the project list widget with loaded projects (called from thread)."""
-        self._projects = projects
+        self._project_svc.set_projects(projects)
         if config is not None:
             self._config = config
         if repos is not None:
@@ -223,19 +244,18 @@ class JoyApp(App):
         from joy.mr_status import BatchMRResult  # noqa: PLC0415
         if batch_result is None:
             batch_result = BatchMRResult()
-        self._mr_fetch_failed = mr_failed
-        # Phase 14: store for resolver and set ready-flag (D-07, D-08)
-        self._current_worktrees = worktrees
-        self._current_mr_data = batch_result.by_branch if isinstance(batch_result, BatchMRResult) else (batch_result or {})
-        self._current_mr_authored = batch_result.authored if isinstance(batch_result, BatchMRResult) else []
-        self._worktrees_ready = True
-        self._is_syncing = True  # suppress cross-pane sync during pane rebuild
+        self._orchestrator.mr_fetch_failed = mr_failed
+        # Phase 19: delegate data readiness to orchestrator
+        mr_data = batch_result.by_branch if isinstance(batch_result, BatchMRResult) else (batch_result or {})
+        mr_authored = batch_result.authored if isinstance(batch_result, BatchMRResult) else []
+        self._orchestrator.mark_worktrees_ready(worktrees, mr_data=mr_data, mr_authored=mr_authored)
+        self._coordinator._is_syncing = True  # suppress cross-pane sync during pane rebuild
         try:
             await self.query_one(WorktreePane).set_worktrees(
-                worktrees, repo_count=repo_count, branch_filter=branch_filter, mr_data=self._current_mr_data
+                worktrees, repo_count=repo_count, branch_filter=branch_filter, mr_data=self._orchestrator.current_mr_data
             )
         finally:
-            self._is_syncing = False
+            self._coordinator._is_syncing = False
         # Push MR data to MR pane
         if isinstance(batch_result, BatchMRResult):
             try:
@@ -254,97 +274,36 @@ class JoyApp(App):
     ) -> None:
         """Push terminal session data to the pane widget (D-15). Also captures data for resolver (D-07)."""
         live_tab_ids = live_tab_ids or set()
-        self._live_tab_ids = live_tab_ids
-        # Phase 14: store for resolver (treat None as empty — pitfall 2 avoidance)
-        self._current_sessions = sessions or []
-        self._sessions_ready = True
+        self._orchestrator._live_tab_ids = live_tab_ids
+        # Phase 19: delegate data readiness + stale tab healing to orchestrator
+        self._orchestrator.mark_sessions_ready(sessions or [])
+        healed = self._orchestrator.heal_stale_tabs(self._project_svc.projects, sessions, live_tab_ids)
+        if healed:
+            self._save_projects_bg()
+            for name in healed:
+                self.notify(f"'{name}' tab closed \u2014 press h to relink", markup=False)
 
-        # Stale tab heal: when iTerm2 is available, check each project's iterm_tab_id
-        if sessions is not None:
-            needs_save = False
-            for project in self._projects:
-                if project.iterm_tab_id and project.iterm_tab_id not in live_tab_ids:
-                    # Stale: tab closed externally; clear link (D-05, D-06)
-                    project.iterm_tab_id = None
-                    needs_save = True
-                    self.notify(f"'{project.name}' tab closed \u2014 press h to relink", markup=False)
-            if needs_save:
-                self._save_projects_bg()
+        tab_groups = self._orchestrator.build_tab_groups(self._project_svc.projects, live_tab_ids)
 
-        # Build tab_groups for the pane: projects with live tabs, in project list order
-        tab_groups = [
-            (p.name, p.iterm_tab_id)
-            for p in self._projects
-            if p.iterm_tab_id and p.iterm_tab_id in live_tab_ids
-        ]
-
-        self._is_syncing = True  # suppress cross-pane sync during pane rebuild
+        self._coordinator._is_syncing = True  # suppress cross-pane sync during pane rebuild
         try:
             await self.query_one(TerminalPane).set_sessions(sessions, tab_groups=tab_groups)
         finally:
-            self._is_syncing = False
+            self._coordinator._is_syncing = False
         self._maybe_compute_relationships()
 
     def _maybe_compute_relationships(self) -> None:
-        """Compute RelationshipIndex and run propagation when both workers complete (D-07, D-08, Phase 16).
-
-        Called from _set_worktrees and _set_terminal_sessions — both run on the main thread
-        via call_from_thread, so no asyncio coordination needed. Uses two boolean flags.
-        Ready-flags are reset immediately to prevent stale-data races on subsequent cycles.
-        """
-        if not (self._worktrees_ready and self._sessions_ready):
+        """Compute RelationshipIndex and run propagation when both workers complete (D-07, D-08)."""
+        rel_index = self._orchestrator.maybe_compute_relationships(self._project_svc.projects, self._repos)
+        if rel_index is None:
             return
-        # Reset flags before computing (prevents stale-data on next cycle)
-        self._worktrees_ready = False
-        self._sessions_ready = False
-        from joy.resolver import compute_relationships  # noqa: PLC0415 — lazy import avoids import cycle
-        self._rel_index = compute_relationships(
-            self._projects,
-            self._current_worktrees,
-            self._current_sessions,
-            self._repos,
-        )
         self._update_badges()
-        self._propagate_changes(self._current_mr_data)
+        self._propagate_changes(self._orchestrator.current_mr_data)
         self._update_worktree_link_status()
 
     def _propagate_mr_auto_add(self, mr_data: dict) -> list[str]:
-        """Auto-add MR objects for detected PRs (PROP-02, D-02, D-03, D-05).
-
-        Returns list of notification messages for each MR added.
-        """
-        messages: list[str] = []
-        if not mr_data:
-            return messages
-        for (repo_name, branch), mr_info in mr_data.items():
-            if not mr_info.url:
-                continue
-            for project in self._projects:
-                if project.repo is None:
-                    continue  # PROP-08 / D-05
-                if project.repo != repo_name:
-                    continue
-                has_branch = any(
-                    obj.kind == PresetKind.BRANCH and obj.value == branch
-                    for obj in project.objects
-                )
-                if not has_branch:
-                    continue
-                already_has_mr = any(
-                    obj.kind == PresetKind.MR and obj.value == mr_info.url
-                    for obj in project.objects
-                )
-                if already_has_mr:
-                    continue
-                new_mr = ObjectItem(
-                    kind=PresetKind.MR,
-                    value=mr_info.url,
-                    label=f"PR #{mr_info.mr_number}",
-                    open_by_default=PresetKind.MR.value in self._config.default_open_kinds,
-                )
-                project.objects.append(new_mr)
-                messages.append(f"\u2295 Added PR #{mr_info.mr_number} to {project.name}")
-        return messages
+        """Auto-add MR objects for detected PRs — delegates to DataOrchestrator."""
+        return self._orchestrator.propagate_mr_auto_add(mr_data, self._project_svc.projects, self._config)
 
     def _propagate_changes(self, mr_data: dict) -> None:
         """Run propagation after both data sources are ready (D-09, D-10, D-11, D-12).
@@ -364,35 +323,22 @@ class JoyApp(App):
 
         # D-12: rebuild panes if anything changed, guarded by _is_syncing
         if messages:
-            self._is_syncing = True
+            self._coordinator._is_syncing = True
             try:
                 project_list = self.query_one(ProjectList)
-                project_list.set_projects(self._projects, self._repos)
-                if project_list._cursor >= 0 and project_list._cursor < len(project_list._rows):
-                    current = project_list._rows[project_list._cursor].project
-                    resolver_wts = self._rel_index.worktrees_for(current) if self._rel_index else []
-                    resolver_terms = self._rel_index.terminals_for(current) if self._rel_index else []
+                project_list.set_projects(self._project_svc.projects, self._repos)
+                current = project_list.current_project
+                if current is not None:
+                    resolver_wts = self._orchestrator.rel_index.worktrees_for(current) if self._orchestrator.rel_index else []
+                    resolver_terms = self._orchestrator.rel_index.terminals_for(current) if self._orchestrator.rel_index else []
                     self.query_one(ProjectDetail).set_project(current, resolver_worktrees=resolver_wts, resolver_terminals=resolver_terms)
             finally:
-                self._is_syncing = False
+                self._coordinator._is_syncing = False
 
     def _apply_worktree_link_status_fast(self, worktrees: list[WorktreeInfo]) -> None:
-        """Apply linked/unlinked CSS immediately after worktrees load, without waiting for _rel_index.
-
-        Replicates the worktree-matching passes of compute_relationships so dim styling
-        appears on first render instead of after terminal sessions also complete.
-        """
+        """Apply linked/unlinked CSS immediately after worktrees load — delegates computation to orchestrator."""
         from joy.widgets.worktree_pane import WorktreePane as _WorktreePane  # noqa: PLC0415
-        linked_paths: set[str] = set()
-        linked_branches: set[tuple[str, str]] = set()
-        for project in self._projects:
-            for obj in project.objects:
-                if obj.kind == PresetKind.WORKTREE:
-                    if any(wt.path == obj.value for wt in worktrees):
-                        linked_paths.add(obj.value)
-                elif obj.kind == PresetKind.BRANCH and project.repo is not None:
-                    if any(wt.repo_name == project.repo and wt.branch == obj.value for wt in worktrees):
-                        linked_branches.add((project.repo, obj.value))
+        linked_paths, linked_branches = self._orchestrator.compute_linked_worktree_sets(self._project_svc.projects, worktrees)
         try:
             self.query_one(_WorktreePane).set_linked_paths(linked_paths, linked_branches)
         except Exception:
@@ -400,11 +346,11 @@ class JoyApp(App):
 
     def _update_worktree_link_status(self) -> None:
         """Push linked/unlinked status to WorktreePane rows after rel_index is computed."""
-        if self._rel_index is None:
+        if self._orchestrator.rel_index is None:
             return
         from joy.widgets.worktree_pane import WorktreePane as _WorktreePane  # noqa: PLC0415
-        linked_paths: set[str] = set(self._rel_index._project_for_wt_path.keys())
-        linked_branches: set[tuple[str, str]] = set(self._rel_index._project_for_wt_branch.keys())
+        linked_paths = self._orchestrator.rel_index.linked_worktree_paths
+        linked_branches = self._orchestrator.rel_index.linked_worktree_branches
         try:
             pane = self.query_one(_WorktreePane)
             pane.set_linked_paths(linked_paths, linked_branches)
@@ -413,10 +359,10 @@ class JoyApp(App):
 
     def _update_badges(self) -> None:
         """Push RelationshipIndex badge counts to ProjectList rows (D-08, D-11, BADGE-03)."""
-        if self._rel_index is None:
+        if self._orchestrator.rel_index is None:
             return
         try:
-            self.query_one(ProjectList).update_badges(self._rel_index, mr_data=self._current_mr_data, mr_authored=self._current_mr_authored)
+            self.query_one(ProjectList).update_badges(self._orchestrator.rel_index, mr_data=self._orchestrator.current_mr_data, mr_authored=self._orchestrator.current_mr_authored)
         except Exception:
             pass  # ProjectList not yet mounted — badges will be populated on next cycle
 
@@ -432,81 +378,62 @@ class JoyApp(App):
 
     def _mark_refresh_success(self) -> None:
         """Record successful refresh and update timestamp display."""
-        self._last_refresh_at = datetime.now(timezone.utc)
-        self._refresh_failed = False
+        self._orchestrator.mark_refresh_success()
         self._update_refresh_label()
 
     def _mark_refresh_failure(self) -> None:
-        """Record failed refresh and update timestamp display with stale warning (REFR-04)."""
-        self._refresh_failed = True
+        """Record failed refresh and update timestamp display."""
+        self._orchestrator.mark_refresh_failure()
         self._update_refresh_label()
 
     def _mark_terminal_refresh_success(self) -> None:
         """Record successful terminal refresh and update label."""
-        self._terminal_last_refresh_at = datetime.now(timezone.utc)
-        self._terminal_refresh_failed = False
+        self._orchestrator.mark_terminal_refresh_success()
         self._update_terminal_refresh_label()
 
     def _mark_terminal_refresh_failure(self) -> None:
-        """Record failed terminal refresh and update label with stale warning."""
-        self._terminal_refresh_failed = True
+        """Record failed terminal refresh and update label."""
+        self._orchestrator.mark_terminal_refresh_failure()
         self._update_terminal_refresh_label()
 
     def _update_refresh_label(self) -> None:
-        """Push formatted timestamp to WorktreePane and MRPane border_title (D-01, D-03)."""
-        if self._last_refresh_at is None:
-            if self._refresh_failed:
-                # WR-05: No successful refresh yet but one has failed — show stale
+        """Push formatted timestamp to WorktreePane and MRPane border_title."""
+        import time
+        orch = self._orchestrator
+        if orch.last_refresh_at is None:
+            if orch.refresh_failed:
                 self.query_one(WorktreePane).set_refresh_label("never", stale=True)
                 try:
-                    self.query_one(MRPane).set_refresh_label("never", stale=True, mr_error=self._mr_fetch_failed)
+                    self.query_one(MRPane).set_refresh_label("never", stale=True, mr_error=orch.mr_fetch_failed)
                 except Exception:
                     pass
-            return  # No successful refresh yet
-        now = datetime.now(timezone.utc)
-        age_seconds = int((now - self._last_refresh_at).total_seconds())
-        timestamp = self._format_age(age_seconds)
-        # D-04: stale if age > 2x interval OR refresh failed
-        stale = self._refresh_failed or age_seconds > (2 * self._config.refresh_interval)
-        self.query_one(WorktreePane).set_refresh_label(
-            timestamp, stale=stale, mr_error=self._mr_fetch_failed
-        )
+            return
+        age_seconds = int(time.monotonic() - orch.last_refresh_at)
+        timestamp = DataOrchestrator.format_age(age_seconds)
+        stale = orch.refresh_failed or age_seconds > (2 * self._config.refresh_interval)
+        self.query_one(WorktreePane).set_refresh_label(timestamp, stale=stale, mr_error=orch.mr_fetch_failed)
         try:
-            self.query_one(MRPane).set_refresh_label(
-                timestamp, stale=stale, mr_error=self._mr_fetch_failed
-            )
+            self.query_one(MRPane).set_refresh_label(timestamp, stale=stale, mr_error=orch.mr_fetch_failed)
         except Exception:
             pass
 
     def _update_terminal_refresh_label(self) -> None:
-        """Push formatted timestamp to TerminalPane border_title (D-16)."""
-        if self._terminal_last_refresh_at is None:
-            if self._terminal_refresh_failed:
+        """Push formatted timestamp to TerminalPane border_title."""
+        import time
+        orch = self._orchestrator
+        if orch.terminal_last_refresh_at is None:
+            if orch.terminal_refresh_failed:
                 self.query_one(TerminalPane).set_refresh_label("never", stale=True)
             return
-        now = datetime.now(timezone.utc)
-        age_seconds = int((now - self._terminal_last_refresh_at).total_seconds())
-        timestamp = self._format_age(age_seconds)
-        stale = self._terminal_refresh_failed or age_seconds > (2 * self._config.refresh_interval)
+        age_seconds = int(time.monotonic() - orch.terminal_last_refresh_at)
+        timestamp = DataOrchestrator.format_age(age_seconds)
+        stale = orch.terminal_refresh_failed or age_seconds > (2 * self._config.refresh_interval)
         self.query_one(TerminalPane).set_refresh_label(timestamp, stale=stale)
 
     def _update_all_refresh_labels(self) -> None:
         """Periodic label update for both worktree and terminal panes."""
         self._update_refresh_label()
         self._update_terminal_refresh_label()
-
-    @staticmethod
-    def _format_age(seconds: int) -> str:
-        """Format age in seconds to human-readable relative string (D-02)."""
-        if seconds < 5:
-            return "just now"
-        if seconds < 60:
-            return f"{seconds}s ago"
-        minutes = seconds // 60
-        if minutes < 60:
-            return f"{minutes}m ago"
-        hours = minutes // 60
-        return f"{hours}h ago"
 
     def on_descendant_focus(self, event) -> None:
         """Update sub_title and HintBar pane hints based on which pane has focus (D-08, D-13)."""
@@ -542,127 +469,50 @@ class JoyApp(App):
         self, message: ProjectList.ProjectHighlighted
     ) -> None:
         """When highlight moves, update detail pane and drive cross-pane sync. (SYNC-01, SYNC-02)"""
-        if self._is_syncing:
+        if self._coordinator.is_syncing:
             return
-        resolver_wts = self._rel_index.worktrees_for(message.project) if self._rel_index else []
-        resolver_terms = self._rel_index.terminals_for(message.project) if self._rel_index else []
+        resolver_wts = self._orchestrator.rel_index.worktrees_for(message.project) if self._orchestrator.rel_index else []
+        resolver_terms = self._orchestrator.rel_index.terminals_for(message.project) if self._orchestrator.rel_index else []
         self.query_one(ProjectDetail).set_project(message.project, resolver_worktrees=resolver_wts, resolver_terminals=resolver_terms)
-        if self._sync_enabled and self._rel_index is not None:
-            self._sync_from_project(message.project)
-
-    def _sync_from_project(self, project: Project) -> None:
-        """Drive WorktreePane and TerminalPane to first items related to project. (D-04)
-
-        Calls clear_selection() on panes that cannot match the active project.
-        Called with _is_syncing guard. Uses try/finally to always clear the guard.
-        """
-        self._is_syncing = True
-        try:
-            assert self._rel_index is not None
-            wt_pane = self.query_one(WorktreePane)
-            term_pane = self.query_one(TerminalPane)
-
-            worktrees = self._rel_index.worktrees_for(project)
-            if worktrees:
-                wt = worktrees[0]
-                matched = wt_pane.sync_to(wt.repo_name, wt.branch)
-                if not matched:
-                    wt_pane.clear_selection()
-            else:
-                wt_pane.clear_selection()
-
-            terminals = self._rel_index.terminals_for(project)
-            if terminals:
-                matched = term_pane.sync_to(terminals[0].session_name)
-                if not matched:
-                    term_pane.clear_selection()
-            else:
-                term_pane.clear_selection()
-        finally:
-            self._is_syncing = False
+        if self._sync_enabled and self._orchestrator.rel_index is not None:
+            self._coordinator.sync_from_project(
+                message.project, self._orchestrator.rel_index,
+                self.query_one(WorktreePane), self.query_one(TerminalPane),
+            )
 
     def on_worktree_pane_worktree_highlighted(
         self, message: WorktreePane.WorktreeHighlighted
     ) -> None:
         """Worktree cursor moved: sync ProjectList and TerminalPane. (SYNC-03, SYNC-04)"""
-        if self._is_syncing:
+        if self._coordinator.is_syncing:
             return
-        if self._sync_enabled and self._rel_index is not None:
-            self._sync_from_worktree(message.worktree)
-
-    def _sync_from_worktree(self, worktree: WorktreeInfo) -> None:
-        """Drive ProjectList and TerminalPane based on a highlighted worktree. (D-05)
-
-        Calls clear_selection() on TerminalPane when no terminal matches the project.
-        """
-        self._is_syncing = True
-        try:
-            assert self._rel_index is not None
-            wt_pane = self.query_one(WorktreePane)
-            term_pane = self.query_one(TerminalPane)
-            project = self._rel_index.project_for_worktree(worktree)
-            if project is not None:
-                self.query_one(ProjectList).sync_to(project.name)
-                resolver_wts = self._rel_index.worktrees_for(project)
-                resolver_terms = self._rel_index.terminals_for(project)
-                self.query_one(ProjectDetail).set_project(project, resolver_worktrees=resolver_wts, resolver_terminals=resolver_terms)
-                if resolver_terms:
-                    matched = term_pane.sync_to(resolver_terms[0].session_name)
-                    if not matched:
-                        term_pane.clear_selection()
-                else:
-                    term_pane.clear_selection()
-            else:
-                # Worktree not linked to any project — clear other panes
-                term_pane.clear_selection()
-        finally:
-            self._is_syncing = False
+        if self._sync_enabled and self._orchestrator.rel_index is not None:
+            self._coordinator.sync_from_worktree(
+                message.worktree, self._orchestrator.rel_index,
+                self.query_one(ProjectList), self.query_one(ProjectDetail),
+                self.query_one(TerminalPane),
+            )
 
     def on_terminal_pane_session_highlighted(
         self, message: TerminalPane.SessionHighlighted
     ) -> None:
         """Terminal session cursor moved: sync ProjectList and WorktreePane. (SYNC-05, SYNC-06)"""
-        if self._is_syncing:
+        if self._coordinator.is_syncing:
             return
-        if self._sync_enabled and self._rel_index is not None:
-            self._sync_from_session(message.session_name)
-
-    def _sync_from_session(self, session_name: str) -> None:
-        """Drive ProjectList and WorktreePane based on a highlighted terminal session. (D-06)
-
-        Calls clear_selection() on WorktreePane when no worktree matches the project.
-        """
-        self._is_syncing = True
-        try:
-            assert self._rel_index is not None
-            wt_pane = self.query_one(WorktreePane)
-            term_pane = self.query_one(TerminalPane)
-            project = self._rel_index.project_for_terminal(session_name)
-            if project is not None:
-                self.query_one(ProjectList).sync_to(project.name)
-                worktrees = self._rel_index.worktrees_for(project)
-                terminals = self._rel_index.terminals_for(project)
-                self.query_one(ProjectDetail).set_project(project, resolver_worktrees=worktrees, resolver_terminals=terminals)
-                if worktrees:
-                    wt = worktrees[0]
-                    matched = wt_pane.sync_to(wt.repo_name, wt.branch)
-                    if not matched:
-                        wt_pane.clear_selection()
-                else:
-                    wt_pane.clear_selection()
-            else:
-                # Session not linked to any project — clear other panes
-                wt_pane.clear_selection()
-        finally:
-            self._is_syncing = False
+        if self._sync_enabled and self._orchestrator.rel_index is not None:
+            self._coordinator.sync_from_session(
+                message.session_name, self._orchestrator.rel_index,
+                self.query_one(ProjectList), self.query_one(ProjectDetail),
+                self.query_one(WorktreePane),
+            )
 
     def on_project_list_project_selected(
         self, message: ProjectList.ProjectSelected
     ) -> None:
         """When Enter pressed on project, update detail and shift focus (D-04)."""
         detail = self.query_one(ProjectDetail)
-        resolver_wts = self._rel_index.worktrees_for(message.project) if self._rel_index else []
-        resolver_terms = self._rel_index.terminals_for(message.project) if self._rel_index else []
+        resolver_wts = self._orchestrator.rel_index.worktrees_for(message.project) if self._orchestrator.rel_index else []
+        resolver_terms = self._orchestrator.rel_index.terminals_for(message.project) if self._orchestrator.rel_index else []
         detail.set_project(message.project, resolver_worktrees=resolver_wts, resolver_terminals=resolver_terms)
         # Focus AFTER the DOM rebuild: set_project defers via call_after_refresh,
         # so focusing before that point lets the rebuild displace focus when
@@ -673,14 +523,10 @@ class JoyApp(App):
     def action_open_all_defaults(self) -> None:
         """Open all open_by_default objects for the current project (ACT-02, D-10)."""
         detail = self.query_one(ProjectDetail)
-        project = detail._project
+        project = detail.current_project
         if project is None:
             return  # silent no-op: data not loaded yet (D-11)
-        # Collect defaults from detail rows (includes virtual rows) in display order
-        defaults: list[ObjectItem] = [
-            row.item for row in detail._rows
-            if row.item.open_by_default
-        ]
+        defaults = detail.default_items
         if not defaults:
             return  # silent no-op: no defaults (D-11)
         self._open_defaults(defaults)
@@ -691,22 +537,21 @@ class JoyApp(App):
             if result is None:
                 return
             # D-04: Check duplicate name
-            if any(p.name == result.name for p in self._projects):
+            if self._project_svc.has_project(result.name):
                 self.notify(f"Project '{result.name}' already exists", severity="error", markup=False)
                 return
             # Create project with optional repo and branch pre-filled
-            project = Project(name=result.name, repo=result.repo)
-            if result.branch:
-                project.objects.append(ObjectItem(kind=PresetKind.BRANCH, value=result.branch))
-            self._projects.append(project)
+            project = self._project_svc.create_project(
+                name=result.name, repo=result.repo, branch=result.branch,
+            )
             self._save_projects_bg()
             project_list = self.query_one(ProjectList)
-            project_list.set_projects(self._projects, self._repos)
+            project_list.set_projects(self._project_svc.projects, self._repos)
             # Select the new project (last in list). Use call_after_refresh so
             # the reactive chain from set_projects (clear + append) settles
             # before we override the index — otherwise the ListView may reset
             # to index 0 after our select_index call.
-            new_index = len(self._projects) - 1
+            new_index = len(self._project_svc.projects) - 1
             project_list.call_after_refresh(lambda: project_list.select_index(new_index))
             self.query_one(ProjectDetail).set_project(project)
             self.notify(f"Created project: '{result.name}'", markup=False)
@@ -735,7 +580,7 @@ class JoyApp(App):
     def _save_projects_bg(self) -> None:
         """Persist projects to TOML in background thread (D-16)."""
         from joy.store import save_projects  # noqa: PLC0415
-        save_projects(self._projects)
+        save_projects(self._project_svc.projects)
 
     @work(thread=True, exit_on_error=False)
     def _do_create_tab_for_project(self, project: Project) -> None:
@@ -758,7 +603,7 @@ class JoyApp(App):
         """Activate the iTerm2 tab for a project by finding a session in that tab."""
         from joy.terminal_sessions import activate_session  # noqa: PLC0415
         # Snapshot on call — _current_sessions may be replaced by main thread concurrently
-        sessions = list(self._current_sessions)
+        sessions = list(self._orchestrator.current_sessions)
         for session in sessions:
             if session.tab_id == tab_id:
                 activate_session(session.session_id)
@@ -807,7 +652,7 @@ class JoyApp(App):
         """Dispatch keystroke for *kind* using the DISPATCH table (4-state taxonomy)."""
         from joy.dispatch import DISPATCH  # noqa: PLC0415
         detail = self.query_one(ProjectDetail)
-        project = detail._project
+        project = detail.current_project
         if project is None:
             self.notify("No project selected", markup=False)
             return
@@ -847,8 +692,8 @@ class JoyApp(App):
             return project.iterm_tab_id  # direct field
         # Resolver worktrees: return path of first matched worktree for WORKTREE kind
         if kind == PresetKind.WORKTREE:
-            if self._rel_index is not None:
-                worktrees = self._rel_index.worktrees_for(project)
+            if self._orchestrator.rel_index is not None:
+                worktrees = self._orchestrator.rel_index.worktrees_for(project)
                 if worktrees:
                     return worktrees[0].path
             # Fall through to objects[] (stored WORKTREE items)
@@ -909,10 +754,11 @@ class JoyApp(App):
         except Exception:
             self.notify("Worktrees pane not available", markup=False)
             return
-        if pane._cursor < 0 or not pane._rows or pane._cursor >= len(pane._rows):
+        wt = pane.highlighted_worktree
+        if wt is None:
             self.notify("No worktree selected", markup=False)
             return
-        self._open_worktree_path(pane._rows[pane._cursor].path)
+        self._open_worktree_path(wt.path)
 
     @work(thread=True, exit_on_error=False)
     def _open_worktree_path(self, path: str) -> None:
@@ -961,7 +807,7 @@ class JoyApp(App):
     def _apply_repos(self, repos: list[Repo]) -> None:
         """Apply reloaded repos to the app state and refresh dependent widgets."""
         self._repos = repos
-        self.query_one(ProjectList).set_projects(self._projects, self._repos)
+        self.query_one(ProjectList).set_projects(self._project_svc.projects, self._repos)
         self._load_worktrees()
 
     @work(thread=True, exit_on_error=False)

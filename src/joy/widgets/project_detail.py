@@ -70,18 +70,28 @@ class ProjectDetail(Widget, can_focus=True):
         width: 1fr;
         height: 1fr;
         overflow-y: auto;
+        border: solid $surface-lighten-2;
     }
     ProjectDetail > VerticalScroll {
         width: 1fr;
         height: 1fr;
     }
+    ProjectDetail:focus {
+        border: solid $accent;
+    }
+    ProjectDetail:focus-within {
+        border: solid $accent;
+    }
     ProjectDetail:focus-within ObjectRow.--highlight {
+        background: $accent;
+    }
+    ProjectDetail:focus ObjectRow.--highlight {
         background: $accent;
     }
     ObjectRow.--highlight {
         background: $accent 30%;
     }
-    .section-spacer {
+    ProjectDetail .section-spacer {
         height: 1;
     }
     """
@@ -140,7 +150,9 @@ class ProjectDetail(Widget, can_focus=True):
             grouped.setdefault(item.kind, []).append(item)
 
         # Resolve default_open_kinds from app config for virtual rows
-        default_kinds: list[str] = getattr(getattr(self, "app", None), "_config", None) and self.app._config.default_open_kinds or []
+        app = getattr(self, "app", None)
+        app_config = getattr(app, "config", None) if app is not None else None
+        default_kinds: list[str] = app_config.default_open_kinds if app_config is not None else []
 
         # Synthesize REPO row from project.repo if set
         if project.repo:
@@ -286,9 +298,9 @@ class ProjectDetail(Widget, can_focus=True):
         """Run open_object in background thread to avoid blocking TUI."""
         from joy.operations import open_object  # noqa: PLC0415
         try:
-            open_object(item=item, config=self.app._config)
+            open_object(item=item, config=self.app.config)
             self.app.notify(
-                _success_message(item, self.app._config),
+                _success_message(item, self.app.config),
                 markup=False,
             )
         except Exception:
@@ -311,7 +323,7 @@ class ProjectDetail(Widget, can_focus=True):
         """Open add-object flow for current project (MGMT-01, D-05, D-07)."""
         if self._project is None:
             return
-        self.app._start_add_object_loop(self._project)
+        self.app.start_add_object_loop(self._project)
 
     def _set_project_with_cursor(self, project: Project, cursor: int, resolver_worktrees: list[WorktreeInfo] | None = None, resolver_terminals: list[TerminalSession] | None = None) -> None:
         """Re-render project and restore cursor near given position."""
@@ -410,8 +422,8 @@ class ProjectDetail(Widget, can_focus=True):
     def _save_toggle(self) -> None:
         """Persist toggle change to TOML in background thread (D-12)."""
         from joy.store import save_projects  # noqa: PLC0415
-        if hasattr(self.app, "_projects"):
-            save_projects(self.app._projects)
+        if hasattr(self.app, "projects"):
+            save_projects(self.app.projects)
 
     @property
     def highlighted_object(self) -> ObjectItem | None:
@@ -419,3 +431,25 @@ class ProjectDetail(Widget, can_focus=True):
         if self._project and 0 <= self._cursor < len(self._rows):
             return self._rows[self._cursor].item
         return None
+
+    # ---------------------------------------------------------------------------
+    # Public facade (Phase 18, CNTR-04)
+    # ---------------------------------------------------------------------------
+
+    @property
+    def current_project(self) -> Project | None:
+        """The currently displayed project."""
+        return self._project
+
+    @property
+    def default_items(self) -> list[ObjectItem]:
+        """All items with open_by_default=True from current rows."""
+        return [row.item for row in self._rows if row.item.open_by_default]
+
+    def clear(self) -> None:
+        """Clear the detail pane (no project selected)."""
+        self._project = None
+        self._rows = []
+        self._cursor = -1
+        scroll = self.query_one("#detail-scroll")
+        scroll.remove_children()

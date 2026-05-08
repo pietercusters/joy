@@ -265,6 +265,9 @@ class WorktreePane(Widget, can_focus=True):
     WorktreePane:focus-within WorktreeRow.--highlight {
         background: $accent;
     }
+    WorktreePane:focus WorktreeRow.--highlight {
+        background: $accent;
+    }
     WorktreeRow.--highlight {
         background: $accent 30%;
     }
@@ -416,7 +419,7 @@ class WorktreePane(Widget, can_focus=True):
             self._rows[self._cursor].add_class("--highlight")
             self._rows[self._cursor].scroll_visible()
             # Post message only on user navigation, not during refresh or sync (D-03, Pitfall 1)
-            if emit and not getattr(self.app, "_is_syncing", False):
+            if emit and not getattr(getattr(self.app, "_coordinator", None), "is_syncing", False):
                 row = self._rows[self._cursor]
                 wt = WorktreeInfo(
                     repo_name=row.repo_name,
@@ -424,6 +427,18 @@ class WorktreePane(Widget, can_focus=True):
                     path=row.path,
                 )
                 self.post_message(self.WorktreeHighlighted(wt))
+
+    # ---------------------------------------------------------------------------
+    # Public facade (Phase 18, CNTR-05)
+    # ---------------------------------------------------------------------------
+
+    @property
+    def highlighted_worktree(self) -> WorktreeInfo | None:
+        """The currently highlighted worktree, or None."""
+        if 0 <= self._cursor < len(self._rows):
+            row = self._rows[self._cursor]
+            return WorktreeInfo(repo_name=row.repo_name, branch=row.branch, path=row.path)
+        return None
 
     def sync_to(self, repo_name: str, branch: str) -> bool:
         """Move cursor to matching (repo_name, branch) row without posting WorktreeHighlighted.

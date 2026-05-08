@@ -368,6 +368,16 @@ class ProjectList(Widget, can_focus=True):
     ]
 
     DEFAULT_CSS = """
+    ProjectList {
+        height: 1fr;
+        border: solid $surface-lighten-2;
+    }
+    ProjectList:focus {
+        border: solid $accent;
+    }
+    ProjectList:focus-within {
+        border: solid $accent;
+    }
     ProjectList:focus-within ProjectRow.--highlight {
         background: $accent;
     }
@@ -404,6 +414,17 @@ class ProjectList(Widget, can_focus=True):
         self._rows: list[ProjectRow] = []
         self._render_generation: int = 0
         self.border_title = "Projects"
+
+    # ---------------------------------------------------------------------------
+    # Public facade (Phase 18, CNTR-03)
+    # ---------------------------------------------------------------------------
+
+    @property
+    def current_project(self) -> Project | None:
+        """The currently highlighted project."""
+        if 0 <= self._cursor < len(self._rows):
+            return self._rows[self._cursor].project
+        return None
 
     def compose(self) -> ComposeResult:
         yield _ProjectScroll(id="project-scroll")
@@ -497,7 +518,7 @@ class ProjectList(Widget, can_focus=True):
         # freshly created rows. Without this, any rebuild (e.g. status toggle)
         # loses badge data until the next periodic refresh cycle.
         try:
-            self.app._update_badges()
+            self.app.update_badges()
         except Exception:
             pass  # app not fully mounted yet — badges will come on next refresh
 
@@ -541,12 +562,12 @@ class ProjectList(Widget, can_focus=True):
             if name == project.name:
                 return  # no change
             # Check for duplicate name
-            if any(p.name == name and p is not project for p in self.app._projects):
+            if any(p.name == name and p is not project for p in self.app.projects):
                 self.app.notify(f"Project '{name}' already exists", severity="error", markup=False)
                 return
             project.name = name
-            self.app._save_projects_bg()
-            self.set_projects(list(self.app._projects), self._repos)
+            self.app.save_projects()
+            self.set_projects(list(self.app.projects), self._repos)
 
             def _restore_cursor() -> None:
                 for i, row in enumerate(self._rows):
@@ -583,13 +604,13 @@ class ProjectList(Widget, can_focus=True):
                 return
             # Close iTerm2 tab if linked (D-09, D-12: skip silently if None)
             if project.iterm_tab_id:
-                self.app._close_tab_bg(project.iterm_tab_id)
-            projects = self.app._projects
+                self.app.close_tab(project.iterm_tab_id)
+            projects = self.app.projects
             try:
                 projects.remove(project)
             except ValueError:
                 return  # already removed
-            self.app._save_projects_bg()
+            self.app.save_projects()
             self.set_projects(projects, self._repos)
             if projects:
                 # Select adjacent: next if available, else previous (D-13).
@@ -605,11 +626,7 @@ class ProjectList(Widget, can_focus=True):
                 from joy.widgets.project_detail import ProjectDetail  # noqa: PLC0415
 
                 detail = self.app.query_one("#project-detail", ProjectDetail)
-                detail._project = None
-                detail._rows = []
-                detail._cursor = -1
-                scroll = detail.query_one("#detail-scroll")
-                scroll.remove_children()
+                detail.clear()
             self.app.notify(f"Deleted project: '{project.name}'", markup=False)
 
         self.app.push_screen(
@@ -636,11 +653,11 @@ class ProjectList(Widget, can_focus=True):
                 return  # Escape — no change
             # result is str (repo name) or None (unassign)
             project.repo = result  # type: ignore[assignment]
-            self.app._save_projects_bg()
+            self.app.save_projects()
             label = result if result else "(none)"
             self.app.notify(f"Assigned repo: {label} → '{project.name}'", markup=False)
             # Re-render to reflect new grouping
-            self.set_projects(list(self.app._projects), self._repos)
+            self.set_projects(list(self.app.projects), self._repos)
 
         self.app.push_screen(
             RepoPickerModal(self._repos, current_repo=project.repo),
@@ -666,7 +683,7 @@ class ProjectList(Widget, can_focus=True):
 
             # Always close iTerm2 tab if linked (D-10, D-12: skip silently if None)
             if project.iterm_tab_id:
-                self.app._close_tab_bg(project.iterm_tab_id)
+                self.app.close_tab(project.iterm_tab_id)
 
             # 1. Strip WORKTREE + TERMINALS objects; preserve all others
             stripped_objects = [
@@ -683,19 +700,19 @@ class ProjectList(Widget, can_focus=True):
             )
 
             # 2. Remove from live projects list
-            projects = self.app._projects
+            projects = self.app.projects
             try:
                 projects.remove(project)
             except ValueError:
                 return  # already removed
-            self.app._save_projects_bg()
+            self.app.save_projects()
 
             # 3. Append to archive
             archived = ArchivedProject(
                 project=archived_project_data,
                 archived_at=datetime.now(timezone.utc),
             )
-            self.app._append_to_archive_bg(archived)
+            self.app.append_to_archive(archived)
 
             # 4. Refresh list and restore cursor
             self.set_projects(projects, self._repos)
@@ -731,7 +748,7 @@ class ProjectList(Widget, can_focus=True):
 
         # Build active branch set from last worktree refresh snapshot
         active_branches: set[str] = {
-            wt.branch for wt in self.app._current_worktrees
+            wt.branch for wt in self.app.current_worktrees
             if wt.branch != "HEAD"
         }
 
@@ -739,10 +756,10 @@ class ProjectList(Widget, can_focus=True):
             if result is None:
                 return
             # Restore project (already stripped of WORKTREE/TERMINALS on archive)
-            self.app._projects.append(result.project)
-            self.app._save_projects_bg()
-            self.app._remove_from_archive_bg(result)
-            self.set_projects(list(self.app._projects), self._repos)
+            self.app.projects.append(result.project)
+            self.app.save_projects()
+            self.app.remove_from_archive(result)
+            self.set_projects(list(self.app.projects), self._repos)
             self.app.notify(f"Unarchived: '{result.project.name}'", markup=False)
 
         self.app.push_screen(
@@ -812,5 +829,5 @@ class ProjectList(Widget, can_focus=True):
         cycle = {"idle": "prio", "prio": "hold", "hold": "idle"}
         # Unknown status (e.g. hand-edited TOML) resets to "idle" on first g press
         project.status = cycle.get(project.status, "idle")
-        self.app._save_projects_bg()
-        self.set_projects(list(self.app._projects), self._repos)
+        self.app.save_projects()
+        self.set_projects(list(self.app.projects), self._repos)

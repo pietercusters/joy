@@ -1,293 +1,252 @@
-# Stack Research: joy
+# Technology Stack: v1.4 Additions
 
-**Project:** joy -- keyboard-driven Python TUI for managing coding project artifacts
-**Researched:** 2026-04-10
-**Overall confidence:** HIGH
+**Project:** joy v1.4 Frontend Refactor & UI Polish
+**Researched:** 2026-05-07
+**Scope:** Only NEW stack additions/changes for Ports & Adapters refactoring and three-layer test strategy. Existing stack (Textual 8.x, tomllib/tomli_w, subprocess, hatchling) is validated and unchanged.
 
----
+## Recommended Stack Additions
 
-## Recommended Stack
-
-### TUI Library: Textual 8.x
+### Testing: pytest-textual-snapshot (for snapshot layer)
 
 | Technology | Version | Purpose | Why |
 |------------|---------|---------|-----|
-| textual | ^8.2 | TUI framework | Only serious option for Python TUI in 2025-2026. CSS-based layout, built-in widgets (ListView, DataTable), first-class keyboard binding system, async-native, active development (monthly releases through 2025-2026). MIT licensed. |
-| rich | >=14.2 | Terminal rendering | Textual dependency -- also useful standalone for any non-TUI rich text output |
+| pytest-textual-snapshot | 1.1.0 | Visual regression testing for Textual apps | Official Textualize plugin. Provides `snap_compare` fixture that takes SVG screenshots of running apps and diffs them across runs. Built on syrupy for snapshot storage. Catches visual regressions that unit and widget tests miss entirely. |
+| syrupy | 4.8.0 (transitive) | Snapshot storage/comparison engine | Pulled in by pytest-textual-snapshot (hard-pinned to ==4.8.0). Zero external dependencies. Provides the assertion framework for SVG comparison. |
+| jinja2 | >=3.0.0 (transitive) | HTML snapshot report rendering | Pulled in by pytest-textual-snapshot for generating visual diff reports. |
 
-**Confidence:** HIGH -- Textual is the unchallenged standard for Python TUI applications. Version 8.2.3 released April 5, 2026. Active development with frequent releases. No credible alternative exists that matches its feature set.
+**Installation note:** Adding pytest-textual-snapshot will downgrade pytest from 9.0.3 to 8.4.2 due to syrupy 4.8.0's upper bound. Verified via `uv pip install --dry-run` that this resolves cleanly on Python 3.14.2 with no conflicts against pytest-asyncio 1.3.0 or other existing deps.
 
-**Key Textual features for joy:**
+**Confidence:** HIGH -- verified resolution on exact Python 3.14.2 / Textual 8.2.3 / pytest-asyncio 1.3.0 environment.
 
-- **Keyboard bindings:** First-class `BINDINGS` class variable on any widget. Searches focus chain upward through DOM. Supports priority bindings, multiple keys per action, custom keymaps (vim-style hjkl trivial to add). Exactly what joy needs.
-- **Two-pane layout:** Dock sidebar left with `dock: left` in CSS. ListView widget for project list, scrollable content pane for project detail. Built-in, no hacking required.
-- **CSS styling:** Textual CSS (subset of web CSS) allows clean separation of layout/style from logic. External `.tcss` files supported. Enables the "minimalistic but pretty" goal.
-- **ListView + ListItem:** Purpose-built widgets for the project list pane with keyboard navigation (up/down/enter) built in.
-- **Lazy widget mounting:** Widgets can be lazily mounted after first refresh, reducing perceived startup time.
-- **Startup time:** Textual itself renders fast (~12ms render cycles reported). The bottleneck is Python import time. With `uv tool install`, the virtual environment is pre-built, so import resolution is fast. Expect sub-500ms to first render for a lean app -- acceptable for a developer tool.
+**Snapshot test example (from official docs):**
+```python
+def test_joy_initial_layout(snap_compare):
+    app = JoyApp()
+    assert snap_compare(app, terminal_size=(120, 40))
 
-**Python version:** Require >=3.11. This gets us `tomllib` in stdlib (see Data Storage below) and all modern Python features. Textual supports 3.9+ but there is no reason to support older versions for a personal macOS-only tool.
+def test_joy_after_navigation(snap_compare):
+    async def run_before(pilot):
+        await pilot.press("j", "j", "enter")
+    assert snap_compare(JoyApp(), run_before=run_before)
+```
 
-**Textual dependencies pulled in automatically:** markdown-it-py, mdit-py-plugins, rich, typing-extensions, platformdirs, pygments. All lightweight.
-
-### Data Storage: TOML (tomllib + tomli_w)
+### Architecture: typing.Protocol (stdlib -- no new dependency)
 
 | Technology | Version | Purpose | Why |
 |------------|---------|---------|-----|
-| tomllib | stdlib (3.11+) | Read TOML | Zero-dependency TOML parsing, in Python stdlib since 3.11 |
-| tomli_w | ^1.0 | Write TOML | Lightweight TOML writer, counterpart to tomllib |
+| typing.Protocol | stdlib (3.8+) | Port contracts for Ports & Adapters | Structural subtyping ("duck typing for type checkers"). Classes satisfy a Protocol by having matching methods -- no inheritance required. Perfect for defining service boundaries where the TUI layer depends on abstract ports, not concrete implementations. |
 
-**Confidence:** HIGH
+**No new dependency.** Protocol is part of the `typing` stdlib module. Already available on the project's Python >=3.11 target (and running on 3.14.2).
 
-**Rationale -- TOML over JSON, YAML, or SQLite:**
+**Why Protocol over ABC:**
 
-| Format | Human-editable | Comments | Python stdlib | Schema simplicity | Verdict |
-|--------|---------------|----------|--------------|-------------------|---------|
-| TOML | Excellent | Yes | Read: 3.11+ | Great for flat/nested config | **Winner** |
-| JSON | Decent | No | Yes (json) | Verbose for nested data | Runner-up |
-| YAML | Good | Yes | No (PyYAML dep) | Indentation footguns | No |
-| SQLite | No | N/A | Yes (sqlite3) | Overkill for this data | No |
+| Criterion | Protocol | ABC |
+|-----------|----------|-----|
+| Coupling | Zero -- no inheritance needed | Tight -- must inherit from ABC |
+| Third-party compat | Any class with matching methods works | Must explicitly subclass |
+| Test doubles | Plain classes/dataclasses just work | Must subclass the ABC |
+| Runtime enforcement | Optional via @runtime_checkable (avoid) | Yes, via abstractmethod |
+| Type checker support | mypy, pyright, basedpyright | mypy, pyright |
+| Pythonic for this use case | Yes -- structural contracts at system edges | Better for shared implementation hierarchies |
 
-joy's data model is small: a list of projects, each with a list of typed objects plus metadata. This maps perfectly to TOML's table-of-tables syntax. Users can hand-edit `~/.joy/projects.toml` in emergencies. Comments survive round-trips if we use `tomlkit` instead of `tomli_w` (but `tomli_w` is simpler and we don't need comment preservation since joy owns the file).
+**Recommendation: Use Protocol exclusively.** Joy's ports are system-edge contracts (storage, terminal sessions, worktree discovery, MR fetching). No shared implementation to inherit. Protocol keeps test doubles trivial -- a plain class or dataclass that has the right methods satisfies the contract without any import or inheritance.
 
-**File structure in ~/.joy/:**
+**Do NOT use @runtime_checkable.** isinstance() checks against Protocols are slow (especially pre-3.12), check only method presence (not signatures), and can trigger side effects on properties. Joy doesn't need runtime Protocol checks -- static type checking (mypy/pyright) catches mismatches at development time. The extra overhead buys nothing for a single-user TUI.
 
+**Confidence:** HIGH -- Protocol is stdlib, well-documented in PEP 544, mypy docs, and typing spec. Patterns verified against multiple authoritative sources.
+
+**Protocol pattern for joy's ports:**
+```python
+from typing import Protocol
+
+class ProjectStore(Protocol):
+    """Port: project persistence operations."""
+    def load_projects(self) -> list[Project]: ...
+    def save_projects(self, projects: list[Project]) -> None: ...
+    def load_config(self) -> Config: ...
+    def save_config(self, config: Config) -> None: ...
+    def load_repos(self) -> list[Repo]: ...
+
+class WorktreeDiscovery(Protocol):
+    """Port: worktree scanning."""
+    def discover_worktrees(self, repos: list[Repo], branch_filter: list[str]) -> list[WorktreeInfo]: ...
+
+class TerminalProvider(Protocol):
+    """Port: terminal session enumeration."""
+    async def list_sessions(self) -> list[TerminalSession]: ...
+
+class MRProvider(Protocol):
+    """Port: MR/CI data fetching."""
+    def fetch_mr_data(self, repos: list[Repo], worktrees: list[WorktreeInfo]) -> BatchMRResult: ...
 ```
-~/.joy/
-  config.toml        # Global settings (IDE, vault path, editor, etc.)
-  projects.toml      # All project data
+
+### Dependency Injection: Manual Constructor Injection (no framework)
+
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| Manual constructor injection | N/A (pattern) | Wire Protocol implementations into services | Joy has ~4-5 ports and ~3 service objects. A DI framework (dependency-injector, injector) adds import-time overhead, learning curve, and magic for a problem that doesn't exist at this scale. Constructor parameters with Protocol type hints are sufficient and transparent. |
+
+**Why NOT use a DI framework:**
+- Joy has 4-5 ports total (store, worktree, terminal, MR, maybe opener). This is trivially wired by hand.
+- DI frameworks (dependency-injector at 4.49.0, injector at 0.22) add 200-500ms import time -- directly impacting the "snappy startup" constraint.
+- Constructor injection is explicit, debuggable, and grep-able. No container magic.
+- Every major Python architecture guide recommends manual DI for small-medium apps, graduating to frameworks only when the dependency graph becomes complex.
+
+**Wiring pattern for joy:**
+```python
+# In app.py (composition root)
+class JoyApp(App):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Wire real implementations
+        store = TomlProjectStore()         # implements ProjectStore protocol
+        wt_discovery = GitWorktreeDiscovery()  # implements WorktreeDiscovery protocol
+        self._coordinator = PaneCoordinator(store=store, worktrees=wt_discovery, ...)
+        self._data_orchestrator = DataOrchestrator(store=store, ...)
+
+# In tests (fake implementations)
+class FakeProjectStore:
+    """Test double -- satisfies ProjectStore protocol without any inheritance."""
+    def __init__(self, projects=None, config=None):
+        self.projects = projects or []
+        self.config = config or Config()
+    def load_projects(self) -> list[Project]:
+        return self.projects
+    def save_projects(self, projects):
+        self.projects = projects
+    # ... etc
 ```
 
-Two files, not a directory-per-project. The data volume is tiny (dozens of projects, each with ~10 objects). Single-file is simpler to back up, simpler to implement, and TOML handles it cleanly.
+**Confidence:** HIGH -- standard Python DI pattern. No framework needed at this scale.
 
-**Example projects.toml:**
+### Refactoring Tools: None Required (IDE-assisted manual refactoring)
+
+| Technology | Status | Why Not |
+|------------|--------|---------|
+| rope 1.14.0 | NOT RECOMMENDED | Only classifiers through Python 3.12 (resolves on 3.14 but untested). Extract/move operations are useful but PyCharm/VS Code refactoring tools provide the same functionality interactively with undo support. Adding a dev dependency for one-time refactoring work is unnecessary overhead. |
+| libcst | NOT RECOMMENDED | Powerful CST-based code transformation, but designed for automated codemods across large codebases. Joy's refactoring is a one-time manual decomposition of ~1,058 LOC. Interactive IDE refactoring is faster and safer for this scope. |
+| bowler (Facebook) | NOT RECOMMENDED | Built on deprecated lib2to3. Inactive development. Not suitable for Python 3.14. |
+
+**Recommendation: Use IDE refactoring tools (Extract Method, Move to Module, Rename) for the manual decomposition.** The v1.4 refactoring is a one-time architectural change, not an ongoing automated codemod pipeline. IDE tools provide immediate feedback, undo, and preview -- all more valuable than scriptable but opaque code transformations.
+
+**Confidence:** HIGH -- rope's Python 3.14 support is unverified; IDE refactoring is the standard approach for this scope of work.
+
+## What NOT to Add
+
+| Library | Why Skip |
+|---------|----------|
+| dependency-injector / injector | Overkill for 4-5 ports. Adds import overhead. Manual constructor injection is sufficient. |
+| attrs | dataclasses (stdlib) already handle all model needs. attrs adds dependency for zero benefit. |
+| pydantic | Runtime validation overkill for trusted TOML data. Would add 500ms+ import time. |
+| pytest-mock | unittest.mock (stdlib) already works. pytest-mock's mocker fixture is a convenience wrapper with no functional advantage for joy's test patterns. |
+| rope / libcst / bowler | One-time refactoring; IDE tools are better for this. |
+| mypy / pyright (as deps) | Type checkers run in dev environment, not as package dependencies. Install separately via `uv tool install mypy` or use IDE integration. |
+| abc (ABC/abstractmethod) | Protocol is strictly better for joy's use case (no inheritance needed, test doubles are simpler). |
+
+## Updated Dev Dependencies
 
 ```toml
-[[project]]
-name = "joy"
-created = 2026-04-10
-
-[[project.object]]
-type = "mr"
-value = "https://gitlab.com/..."
-label = "Main MR"
-open_by_default = true
-
-[[project.object]]
-type = "branch"
-value = "feature/tui-layout"
-open_by_default = true
-```
-
-### macOS Integration
-
-| Technology | Purpose | Approach |
-|------------|---------|----------|
-| subprocess + `open` | URL schemes | `subprocess.run(["open", "notion://..."])` -- macOS `open` command handles all registered URI schemes |
-| subprocess + `pbcopy` | Clipboard | `subprocess.run(["pbcopy"], input=text.encode(), check=True)` -- zero dependencies, macOS built-in |
-| subprocess + `osascript` | iTerm2/AppleScript | `subprocess.run(["osascript", "-e", script])` -- direct AppleScript execution |
-| webbrowser (stdlib) | HTTP URLs | `webbrowser.open(url)` -- for regular web URLs, simpler than subprocess |
-
-**Confidence:** HIGH -- these are stable macOS system interfaces, not library-dependent.
-
-#### URL Scheme Opening (notion://, slack://, obsidian://)
-
-Use `subprocess.run(["open", url])` for all URL types. The macOS `open` command dispatches to the registered handler for any URI scheme:
-
-```python
-import subprocess
-
-def open_url(url: str) -> None:
-    """Open any URL/URI scheme using macOS open command."""
-    subprocess.run(["open", url], check=True)
-
-# Works for all of these:
-open_url("https://gitlab.com/...")           # Browser
-open_url("notion://www.notion.so/...")       # Notion desktop
-open_url("slack://channel?team=T0&id=C0")   # Slack desktop
-open_url("obsidian://open?vault=wiki&file=Home")  # Obsidian
-```
-
-For Obsidian specifically, the URI format is: `obsidian://open?vault={vault_name}&file={file_path}` where file_path is URL-encoded and relative to the vault root. The vault name comes from joy's global config.
-
-#### Clipboard (for `string` type objects like branch names)
-
-No library needed. macOS provides `pbcopy`:
-
-```python
-import subprocess
-
-def copy_to_clipboard(text: str) -> None:
-    """Copy text to macOS clipboard."""
-    subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=True)
-```
-
-Do NOT add `pyperclip` as a dependency. It's a cross-platform abstraction layer that adds nothing on macOS-only.
-
-#### AppleScript / iTerm2 Integration
-
-Use `subprocess.run(["osascript", "-e", script])` to execute AppleScript. No Python wrapper library needed.
-
-**Creating/activating a named iTerm2 window:**
-
-```python
-import subprocess
-
-def open_iterm_window(name: str) -> None:
-    """Create or activate a named iTerm2 window."""
-    script = f'''
-    tell application "iTerm2"
-        activate
-        set targetWindow to missing value
-        repeat with w in windows
-            if name of w is "{name}" then
-                set targetWindow to w
-                exit repeat
-            end if
-        end repeat
-        if targetWindow is missing value then
-            set targetWindow to (create window with default profile)
-            tell current session of targetWindow
-                set name to "{name}"
-            end tell
-        end if
-        select targetWindow
-    end tell
-    '''
-    subprocess.run(["osascript", "-e", script], check=True)
-```
-
-**Important note:** iTerm2's AppleScript support is officially deprecated in favor of their Python API, but it will continue receiving bug fixes. For joy's use case (create/activate named windows), AppleScript is simpler, has zero dependencies, and the needed functionality is stable. The iTerm2 Python API requires installing `iterm2` package and running an async connection -- overkill for what is essentially "find or create a named window."
-
-#### Opening files in editors/IDEs
-
-```python
-subprocess.run(["open", "-a", "Sublime Text", filepath])  # Sublime
-subprocess.run(["open", "-a", "PyCharm", dirpath])          # PyCharm
-```
-
-The `-a` flag to `open` specifies the application. The app name comes from joy's global config.
-
-### Packaging: uv with hatchling backend
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| uv | latest | Package manager, tool installer | Project requirement. Rust-based, fast, handles everything. |
-| hatchling | ^1.25 | Build backend | Mature, well-documented, supports entry points cleanly. uv_build is newer but hatchling is battle-tested and uv works perfectly with it. |
-
-**Confidence:** HIGH
-
-**pyproject.toml structure for `uv tool install git+...`:**
-
-```toml
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[project]
-name = "joy"
-version = "0.1.0"
-description = "Keyboard-driven TUI for managing coding project artifacts"
-requires-python = ">=3.11"
-license = "MIT"
-dependencies = [
-    "textual>=8.2,<9",
-    "tomli_w>=1.0,<2",
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.25",
+    "pytest-textual-snapshot>=1.1.0",
 ]
-
-[project.scripts]
-joy = "joy.app:main"
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/joy"]
 ```
 
-**Why hatchling over uv_build:** uv_build is newer (default since July 2025) and works well for simple cases. However, hatchling has years of ecosystem validation, better documentation, and more configuration options. For a project that will be installed via `uv tool install git+...`, hatchling is the safer choice. Both work identically from the user's perspective.
+**Changes from current:**
+- `pytest>=9.0.3` relaxed to `pytest>=8.0` to accommodate syrupy 4.8.0's upper bound (pytest-textual-snapshot hard-pins syrupy==4.8.0 which caps pytest at <9.1). In practice, uv resolves to pytest 8.4.2.
+- Added `pytest-textual-snapshot>=1.1.0` for the snapshot testing layer.
+- pytest-asyncio>=0.25 unchanged.
 
-**Project structure:**
-
-```
-joy/
-  pyproject.toml
-  src/
-    joy/
-      __init__.py
-      app.py          # Entry point, main() function
-      ...
-```
-
-**Installation command:**
-
-```bash
-uv tool install git+https://github.com/user/joy
+**Runtime dependencies unchanged:**
+```toml
+dependencies = [
+    "tomli-w>=1.0",
+    "textual>=8.2",
+    "iterm2>=2.15",
+]
 ```
 
-This creates an isolated virtual environment, installs joy + dependencies, and symlinks `joy` onto PATH.
+## Three-Layer Test Strategy: Stack Requirements
 
-### Supporting Libraries
+| Layer | What It Tests | Stack Needed | Speed |
+|-------|--------------|-------------|-------|
+| **Backend service tests** | PaneCoordinator, DataOrchestrator, ProjectService as pure Python (no TUI) | pytest + fake Protocol implementations (plain classes) | Fast (<1ms each) |
+| **Widget tests** | Individual widgets with Textual pilot, fake backend injected | pytest + pytest-asyncio + `app.run_test()` pilot | Medium (100-500ms each) |
+| **Snapshot tests** | Full app visual regression | pytest + pytest-textual-snapshot + `snap_compare` fixture | Slow (1-3s each, sparingly) |
 
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| tomli_w | ^1.0 | TOML writing | Always -- only non-stdlib dependency besides Textual |
+**Backend tests (bulk of new tests):** Test extracted services with fake implementations of Protocol ports. No Textual import needed. These should be synchronous (not async) where possible since the services themselves are pure Python. Example: test that PaneCoordinator computes correct sync targets given fake worktree and session lists.
 
-That's it. Two dependencies total: `textual` and `tomli_w`. Everything else is stdlib or macOS system tools.
+**Widget tests (existing pattern):** Already using `app.run_test()` pilot pattern in test_tui.py. The change is injecting fake backends into the app before calling run_test, rather than patching store functions.
 
-## Alternatives Considered
+**Snapshot tests (new, use sparingly):** Guard against unintended visual regressions during the refactoring. Establish baseline snapshots before refactoring, verify they don't change after. Use `pytest.mark.slow` marker (already configured in pyproject.toml) so they don't run by default.
 
-| Category | Recommended | Alternative | Why Not |
-|----------|-------------|-------------|---------|
-| TUI framework | Textual | urwid | Ancient API, no CSS, no built-in widgets, poor keyboard binding system. Still works but feels like 2010. |
-| TUI framework | Textual | prompt_toolkit | Designed for prompts/REPLs, not full-screen TUIs. Powers ipython but not suitable for a two-pane app. |
-| TUI framework | Textual | curses (stdlib) | Extremely low-level. Would require building everything from scratch. No one should do this in 2026. |
-| TUI framework | Textual | pytermgui | Small community, fewer widgets, less documentation. Textual is strictly better for this use case. |
-| Data format | TOML | JSON | No comments, verbose syntax, not human-friendly for config-like data. Would work but TOML is better for this shape of data. |
-| Data format | TOML | YAML | Adds PyYAML dependency, indentation-sensitive (footgun), security concerns with unsafe loading. No benefit over TOML here. |
-| Data format | TOML | SQLite | Overkill for <100 records. Not human-editable. Adds complexity without benefit. Would make sense at 10K+ records. |
-| Clipboard | pbcopy (subprocess) | pyperclip | Unnecessary dependency for macOS-only app. pyperclip just wraps pbcopy on macOS anyway. |
-| AppleScript | subprocess + osascript | py-applescript | Extra dependency for what amounts to `subprocess.run(["osascript", ...])`. Not worth it. |
-| AppleScript | subprocess + osascript | iTerm2 Python API | Requires `iterm2` package, async connection, more complex setup. Overkill for "create/activate named window." |
-| Build backend | hatchling | uv_build | uv_build is newer and slightly faster to resolve, but hatchling has more documentation and community knowledge. Low-stakes decision -- either works fine. |
-| Build backend | hatchling | setuptools | Legacy. Works but hatchling is the modern standard and simpler to configure. |
-| Build backend | hatchling | poetry-core | Tied to Poetry ecosystem. Since we use uv, no reason to pull in poetry-core. |
-| TOML writer | tomli_w | tomlkit | tomlkit preserves comments and style on round-trip, which is valuable if humans edit the file and joy modifies it. But tomli_w is simpler and joy owns its data files (no user comments to preserve). If comment preservation becomes needed later, swap to tomlkit -- the API is similar. |
+**pytest marker configuration (already in place, extend):**
+```toml
+[tool.pytest.ini_options]
+markers = [
+    "macos_integration: tests requiring live macOS apps (iTerm2, Notion, etc.)",
+    "slow: tests using Textual pilot or snapshot tests -- run with -m slow",
+    "snapshot: visual regression snapshot tests -- run with --snapshot-update to regenerate",
+]
+```
 
-## Confidence Levels
+## Protocol Best Practices for Python 3.11+ (joy's minimum)
+
+### Pattern 1: Keep Protocols Narrow
+One Protocol per port responsibility. Don't create a god-Protocol with 20 methods. Joy's natural boundaries: store, worktree discovery, terminal provider, MR provider, opener.
+
+### Pattern 2: Protocols in a Dedicated Module
+Create `src/joy/ports.py` (or `src/joy/ports/` package if it grows). All Protocol definitions live here. Both production adapters and test fakes import from this single location.
+
+### Pattern 3: No @runtime_checkable
+Skip `@runtime_checkable` entirely. It adds no value when type checking catches violations. Performance overhead on isinstance() is measurable and unnecessary.
+
+### Pattern 4: Use Simple Return Types
+Protocol methods should return plain dataclasses/dicts, not framework-specific types. This ensures backend tests don't import Textual.
+
+### Pattern 5: Async Protocols Where Needed
+Terminal session fetching is inherently async (iTerm2 Python API). Define the Protocol method as async:
+```python
+class TerminalProvider(Protocol):
+    async def list_sessions(self) -> list[TerminalSession]: ...
+```
+The fake in tests can still be a simple class with an async method returning a fixed list.
+
+### Pattern 6: Optional Protocol Members via Default Arguments
+If a port method has optional behavior, use default arguments in the Protocol definition:
+```python
+class ProjectStore(Protocol):
+    def load_projects(self, *, path: Path | None = None) -> list[Project]: ...
+```
+
+## Confidence Assessment
 
 | Decision | Confidence | Reasoning |
 |----------|------------|-----------|
-| Textual as TUI framework | HIGH | Unchallenged standard. v8.2.3 released April 2026. Active monthly releases. No credible alternative. Verified via PyPI and official docs. |
-| TOML for data storage | HIGH | Python stdlib support (tomllib), human-editable, perfect data shape fit. Well-established in Python ecosystem (pyproject.toml itself is TOML). |
-| tomli_w for TOML writing | HIGH | Official counterpart to stdlib tomllib. Lightweight, maintained, simple API. Verified on PyPI. |
-| subprocess for macOS integration | HIGH | Using OS-provided tools (open, pbcopy, osascript). Zero dependencies, maximally stable. Standard practice. |
-| AppleScript for iTerm2 | MEDIUM | AppleScript is officially deprecated by iTerm2 (bug fixes only, no new features). But the needed features (create/select window, set name) are stable and simple. Risk: if iTerm2 drops AppleScript entirely in a future version. Mitigation: the Python API exists as a fallback. For a personal tool, this risk is acceptable. |
-| hatchling as build backend | HIGH | Battle-tested, well-documented, works perfectly with uv. Verified via official uv and hatchling docs. |
-| Python >=3.11 requirement | HIGH | Gets us tomllib in stdlib. macOS ships Python 3.12+ via Xcode CLT. uv manages Python versions anyway. No reason to support older versions for personal macOS-only tooling. |
-
-## Key Findings
-
-- **Textual 8.x is the clear winner for Python TUI.** No other library comes close for building a two-pane, keyboard-driven, visually polished terminal app. It has built-in ListView, CSS-based styling, first-class key bindings, and lazy widget mounting. Active development with monthly releases.
-
-- **The entire dependency footprint is two packages: textual and tomli_w.** Everything else is either Python stdlib (tomllib, subprocess, webbrowser) or macOS system tools (open, pbcopy, osascript). This minimalism supports the "snappy startup" goal.
-
-- **macOS integration requires zero Python libraries.** All URL scheme handling (notion://, slack://, obsidian://), clipboard operations, and iTerm2 automation work through subprocess calls to OS-provided commands. This is the correct approach for a macOS-only tool.
-
-- **TOML is the right data format for joy.** Human-editable, comments supported, Python stdlib reading (3.11+), lightweight writer available. The data shape (list of projects with nested typed objects) maps naturally to TOML tables.
-
-- **uv tool install with hatchling backend is straightforward.** A `[project.scripts]` entry point in pyproject.toml is all that's needed. Users run `uv tool install git+<repo>` and get `joy` on their PATH in an isolated environment.
+| pytest-textual-snapshot 1.1.0 | HIGH | Official Textualize plugin, verified resolution on Python 3.14.2, verified compatible with Textual 8.2.3 and pytest-asyncio 1.3.0 |
+| Protocol (stdlib) for ports | HIGH | PEP 544, mypy docs, typing spec all confirm. Standard practice for Python hexagonal architecture. |
+| Manual constructor injection | HIGH | Universal recommendation for small apps. No credible source recommends DI frameworks at this scale. |
+| No refactoring tools as deps | HIGH | One-time refactoring, IDE tools superior for interactive work |
+| Skip @runtime_checkable | HIGH | CPython docs, typing spec, and python/cpython#102936 all document performance and correctness issues |
+| Pytest downgrade to 8.4.2 | MEDIUM | Functional but means pinning below pytest 9.x. Risk: if a future pytest-asyncio version requires pytest >=9. Mitigation: monitor pytest-textual-snapshot for syrupy pin relaxation. |
 
 ## Sources
 
-- Textual official site: https://textual.textualize.io/
-- Textual PyPI: https://pypi.org/project/textual/
-- Textual GitHub: https://github.com/Textualize/textual
-- Textual keyboard bindings: https://textual.textualize.io/guide/input/
-- Textual layout guide: https://textual.textualize.io/guide/layout/
-- Textual lazy loading: https://textual.textualize.io/api/lazy/
-- uv tool docs: https://docs.astral.sh/uv/guides/tools/
-- uv build backend: https://docs.astral.sh/uv/concepts/build-backend/
-- uv project config: https://docs.astral.sh/uv/concepts/projects/config/
-- Python tomllib docs: https://docs.python.org/3/library/tomllib.html
-- tomli_w PyPI: https://pypi.org/project/tomli-w/
-- Obsidian URI scheme: https://help.obsidian.md/Extending+Obsidian/Obsidian+URI
-- iTerm2 scripting docs: https://iterm2.com/3.4/documentation-scripting.html
-- Python packaging guide: https://packaging.python.org/en/latest/guides/writing-pyproject-toml/
+- pytest-textual-snapshot PyPI: https://pypi.org/project/pytest-textual-snapshot/
+- pytest-textual-snapshot GitHub: https://github.com/Textualize/pytest-textual-snapshot
+- pytest-textual-snapshot README (Context7): snap_compare fixture API, terminal_size, run_before, press parameters
+- syrupy PyPI: https://pypi.org/project/syrupy/ (5.1.0 latest, but pytest-textual-snapshot pins 4.8.0)
+- Textual testing guide: https://textual.textualize.io/guide/testing/
+- Textual testing guide (Context7): run_test() API, Pilot.press(), Pilot.click()
+- PEP 544 -- Protocols: https://peps.python.org/pep-0544/
+- typing.Protocol spec: https://typing.python.org/en/latest/spec/protocol.html
+- mypy Protocol docs: https://mypy.readthedocs.io/en/stable/protocols.html
+- runtime_checkable discussion: https://discuss.python.org/t/is-there-a-downside-to-typing-runtime-checkable/20731
+- CPython runtime_checkable issue: https://github.com/python/cpython/issues/102936
+- Python DI patterns: https://www.glukhov.org/post/2025/12/dependency-injection-in-python/
+- Hexagonal Architecture in Python: https://blog.szymonmiks.pl/p/hexagonal-architecture-in-python/
+- rope PyPI: https://pypi.org/project/rope/ (1.14.0, classifiers through Python 3.12 only)
+- libcst docs: https://libcst.readthedocs.io/en/latest/index.html
+- ABC vs Protocol comparison: https://jellis18.github.io/post/2022-01-11-abc-vs-protocol/

@@ -6,6 +6,7 @@
 - ✅ **v1.1 Workspace Intelligence** — Phases 6-13 (shipped 2026-04-14)
 - ✅ **v1.2 Cross-Pane Intelligence** — Phases 14-16 (shipped 2026-04-15)
 - ✅ **v1.3 Unified Object View** — Phase 17 (shipped 2026-04-22)
+- ✅ **v1.4 Frontend Refactor & UI Polish** — Phases 18-21 (shipped 2026-05-08)
 
 ## Phases
 
@@ -60,6 +61,18 @@ Full details: `.planning/milestones/v1.3-ROADMAP.md`
 
 </details>
 
+<details>
+<summary>✅ v1.4 Frontend Refactor & UI Polish (Phases 18-21) — SHIPPED 2026-05-08</summary>
+
+- [x] Phase 18: Contracts & Facades (3/3 plans) — completed 2026-05-08
+- [x] Phase 19: Service Extraction & Backend Tests (4/4 plans) — completed 2026-05-08
+- [x] Phase 20: Widget Tests & Snapshots (3/3 plans) — completed 2026-05-08
+- [x] Phase 21: UI Polish (2/2 plans) — completed 2026-05-08
+
+Full details: `.planning/milestones/v1.4-ROADMAP.md`
+
+</details>
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -81,3 +94,7 @@ Full details: `.planning/milestones/v1.3-ROADMAP.md`
 | 15. Cross-Pane Selection Sync | v1.2 | 3/3 | ✓ Complete | 2026-04-15 |
 | 16. Live Data Propagation | v1.2 | 2/2 | ✓ Complete | 2026-04-15 |
 | 17. Fix iTerm2 Integration Bugs | v1.3 | 3/3 | ✓ Complete | 2026-04-16 |
+| 18. Contracts & Facades | v1.4 | 3/3 | ✓ Complete | 2026-05-08 |
+| 19. Service Extraction & Backend Tests | v1.4 | 4/4 | ✓ Complete | 2026-05-08 |
+| 20. Widget Tests & Snapshots | v1.4 | 3/3 | ✓ Complete | 2026-05-08 |
+| 21. UI Polish | v1.4 | 2/2 | ✓ Complete | 2026-05-08 |

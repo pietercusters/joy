@@ -1,5 +1,18 @@
 # Milestones
 
+## v1.4 Frontend Refactor & UI Polish (Shipped: 2026-05-08)
+
+**Phases completed:** 4 phases, 12 plans, 9 tasks
+
+**Key accomplishments:**
+
+- Downgraded pytest to 8.4.x, installed pytest-textual-snapshot, created 4 FakeBackend adapters with Protocol conformance fixtures
+- 3 SVG snapshot baselines (initial render, project selected, sync active) via pytest-textual-snapshot with deterministic store mocking
+- Self-contained border/focus/highlight CSS in all 5 focusable panes, eliminating split CSS ownership between app.py and widget DEFAULT_CSS
+- Snapshot baselines updated for corrected CSS state -- app.py confirmed grid-only, 2 SVGs regenerated, all 490 tests green
+
+---
+
 ## v1.3 Unified Object View (Shipped: 2026-04-22)
 
 **Phases completed:** 1 phase (17), 3 plans + 21 quick tasks

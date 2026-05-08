@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.3
-milestone_name: Unified Object View
-status: milestone_complete
-stopped_at: "v1.3 milestone archived 2026-04-22"
-last_updated: "2026-04-22T00:00:00.000Z"
-last_activity: 2026-04-22
+milestone: v1.4
+milestone_name: Frontend Refactor & UI Polish
+status: executing
+stopped_at: Roadmap created for v1.4 (4 phases, 21 requirements)
+last_updated: "2026-05-08T17:09:55.484Z"
+last_activity: 2026-05-08
 progress:
-  total_phases: 1
-  completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_phases: 4
+  completed_phases: 4
+  total_plans: 12
+  completed_plans: 12
   percent: 100
 ---
 
@@ -18,30 +18,28 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-22)
+See: .planning/PROJECT.md (updated 2026-05-07)
 
 **Core value:** Every artifact for the active project, openable instantly from one keyboard-driven interface.
-**Current focus:** Planning next milestone
+**Current focus:** Phase 21 — UI Polish
 
 ## Current Position
 
-Phase: —
-Plan: —
-Status: v1.3 milestone complete — ready for /gsd-new-milestone
+Phase: 21
+Plan: Not started
+Status: Executing Phase 21
+Last activity: 2026-05-08
 
-Progress: ████████████████████ 100% (17/17 phases)
+Progress: ░░░░░░░░░░░░░░░░░░░░ 0% (0/4 phases)
 
 ## Milestone Summary
 
-v1.3 Unified Object View shipped 2026-04-22:
+v1.4 Frontend Refactor & UI Polish (4 phases, 21 requirements):
 
-- 1 formal phase (17), 3 plans + 21 quick tasks
-- Unified detail view: REPO/TERMINALS/resolver worktrees as virtual rows
-- Per-kind DISPATCH table replaces scattered if/else in app.py
-- Test isolation: autouse session fixture for all ~/.joy/ paths
-- iTerm2 tab hardening: explicit h-key creation, close on delete/archive
-- clear_selection() on sync no-match; project archive/unarchive; icon ribbon
-- 6,180 src LOC + 7,923 test LOC
+- Phase 18: Contracts & Facades (6 reqs) — Protocol ports + widget facade methods
+- Phase 19: Service Extraction & Backend Tests (11 reqs) — core refactoring + backend tests + tech debt
+- Phase 20: Widget Tests & Snapshots (2 reqs) — fake backend injection + snapshot baselines
+- Phase 21: UI Polish (2 reqs) — visual audit + bug fixes
 
 ## Accumulated Context
 
@@ -56,12 +54,6 @@ Key decisions from v1.3:
 - DISPATCH table per kind in dispatch.py (declarative keystroke routing)
 - Virtual rows in ProjectDetail (REPO, TERMINALS, resolver worktrees) — no persistence mutation
 - Session-scoped fixture for test isolation (autouse, patches 5 path constants)
-- ArchivedProject wraps Project + archived_at; archive.toml uses keyed schema
-
-### Roadmap Evolution
-
-- v1.3 complete — Phase 17 + 21 quick tasks
-- Next milestone to be defined via /gsd-new-milestone
 
 ### Pending Todos
 
@@ -69,28 +61,13 @@ None.
 
 ### Blockers/Concerns
 
-Known tech debt for next milestone:
+Known tech debt (targeted in Phase 19, TEST-06):
+
 - test_propagation.py::TestTerminalAutoRemove (6 tests) — references non-existent JoyApp._propagate_terminal_auto_remove
 - test_sync.py (4 tests) — terminal sync / resolver returns empty list for terminals
 
-### Quick Tasks Completed
-
-| # | Description | Date | Commit | Directory |
-|---|-------------|------|--------|-----------|
-| 260423-k0b | bug: upon refresh, some panes shift focus to the first item, while they should keep focus on the item that was selected before the refresh (if any) | 2026-04-23 | ddcbcab | [260423-k0b-bug-upon-refresh-some-panes-shift-focus-](./quick/260423-k0b-bug-upon-refresh-some-panes-shift-focus-/) |
-| 260423-kd7 | fix: preserve no-selection state and all cursor positions across refresh in all panes | 2026-04-23 | 32824e5 | [260423-kd7-fix-preserve-no-selection-state-and-all-](./quick/260423-kd7-fix-preserve-no-selection-state-and-all-/) |
-| 260428-gka | remove the tech debt | 2026-04-28 | 5cc7ef9 | [260428-gka-remove-the-tech-debt](./quick/260428-gka-remove-the-tech-debt/) |
-| 260428-gxw | refactor project list: status grouping, inline repo, remove repo headers | 2026-04-28 | 534eb55 | [260428-gxw-refactor-project-list-status-grouping-in](./quick/260428-gxw-refactor-project-list-status-grouping-in/) |
-| 260428-kxu | add purple merged/closed MR icon and update legend | 2026-04-28 | 845ea9c | [260428-kxu-add-purple-merged-closed-mr-icon-and-upd](./quick/260428-kxu-add-purple-merged-closed-mr-icon-and-upd/) |
-| 260428-qtn | auto-set open_by_default on new/linked objects based on default_open_kinds | 2026-04-28 | 91a1eb1 | Verified | [260428-qtn-auto-set-open-by-default-on-new-linked-o](./quick/260428-qtn-auto-set-open-by-default-on-new-linked-o/) |
-| 260429-amk | Implement Claude agent status detection via hooks with TTY-keyed state files | 2026-04-29 | bd1b9c5 | Verified | [260429-amk-implement-claude-agent-status-detection-](./quick/260429-amk-implement-claude-agent-status-detection-/) |
-| 260429-ciy | Show Claude status indicators in ProjectList and ProjectDetail views | 2026-04-29 | d823ecb | [260429-ciy-show-claude-status-indicators-in-project](./quick/260429-ciy-show-claude-status-indicators-in-project/) |
-| 260429-j2z | Unify Claude icons: single colored robot icon replaces separate icon+indicator | 2026-04-29 | cc12cee | [260429-j2z-unify-claude-icons-single-colored-robot-](./quick/260429-j2z-unify-claude-icons-single-colored-robot-/) |
-| 260506-rc1 | Add MR pane + placeholder pane with batch fetching | 2026-05-06 | 255bf59 | [260506-rc1-add-two-new-panes-placeholder-pane-and-m](./quick/260506-rc1-add-two-new-panes-placeholder-pane-and-m/) |
-
 ## Session Continuity
 
-Last session: 2026-04-29
-Stopped at: Completed quick task 260429-j2z
-Last activity: 2026-05-06 - Completed quick task 260506-rc1: Add MR pane + placeholder pane
-Resume: /gsd-new-milestone to start v1.4 planning
+Last session: 2026-05-07
+Stopped at: Roadmap created for v1.4 (4 phases, 21 requirements)
+Resume: `/gsd-plan-phase 18` to plan Contracts & Facades
