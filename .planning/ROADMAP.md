@@ -82,7 +82,11 @@ Full details: `.planning/milestones/v1.3-ROADMAP.md`
   3. app.py no longer accesses any widget private attributes (no _project, _rows, _cursor, _worktrees, _sessions references on widget instances)
   4. ProjectDetail, WorktreePane, and TerminalPane each expose documented public properties/methods for all data that app.py needs
   5. No widget imports any Protocol adapter directly — all dependency wiring flows through app.py as composition root
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [x] 18-01-PLAN.md — Protocol contracts and widget facades
+- [x] 18-02-PLAN.md — App and resolver facades
+- [x] 18-03-PLAN.md — Replace private access and contract tests
 
 ### Phase 19: Service Extraction & Backend Tests
 **Goal**: All cross-pane sync, background data loading, and project persistence logic lives in testable pure-Python services outside app.py — with backend tests proving correctness without any TUI dependency
@@ -96,7 +100,12 @@ Full details: `.planning/milestones/v1.3-ROADMAP.md`
   5. All @work(thread=True) decorators remain on app.py methods; extracted services contain zero Textual imports
   6. The 10 previously-failing tests in test_propagation.py and test_sync.py pass (tech debt resolved)
   7. All existing tests pass after every individual service extraction (no big-bang migration)
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 19-01-PLAN.md — Extract PaneCoordinator (sync logic) + backend tests
+- [ ] 19-02-PLAN.md — Extract DataOrchestrator (data coordination) + backend tests
+- [ ] 19-03-PLAN.md — Extract ProjectService (CRUD/archive) + backend tests
+- [ ] 19-04-PLAN.md — Slim app.py to composition root + verify all constraints
 
 ### Phase 20: Widget Tests & Snapshots
 **Goal**: Widget behavior is verified through Textual pilot tests using injected fake backends, and key screens have snapshot baselines for visual regression detection
@@ -144,6 +153,6 @@ Phases execute in numeric order: 18 → 19 → 20 → 21
 | 16. Live Data Propagation | v1.2 | 2/2 | ✓ Complete | 2026-04-15 |
 | 17. Fix iTerm2 Integration Bugs | v1.3 | 3/3 | ✓ Complete | 2026-04-16 |
 | 18. Contracts & Facades | v1.4 | 3/3 | Complete    | 2026-05-08 |
-| 19. Service Extraction & Backend Tests | v1.4 | 0/? | Not started | - |
+| 19. Service Extraction & Backend Tests | v1.4 | 0/4 | Not started | - |
 | 20. Widget Tests & Snapshots | v1.4 | 0/? | Not started | - |
 | 21. UI Polish | v1.4 | 0/? | Not started | - |
