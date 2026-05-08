@@ -65,7 +65,7 @@ Full details: `.planning/milestones/v1.3-ROADMAP.md`
 
 **Milestone Goal:** Separate frontend from backend using Ports & Adapters architecture, establish a three-layer test strategy, and fix UI bugs/inconsistencies — making the codebase safe for future UI work.
 
-- [ ] **Phase 18: Contracts & Facades** - Define Protocol-based port interfaces and add public facade methods to all widgets
+- [x] **Phase 18: Contracts & Facades** - Define Protocol-based port interfaces and add public facade methods to all widgets (completed 2026-05-08)
 - [ ] **Phase 19: Service Extraction & Backend Tests** - Extract PaneCoordinator, DataOrchestrator, ProjectService from app.py with co-evolved backend tests
 - [ ] **Phase 20: Widget Tests & Snapshots** - Widget-level tests with fake backend injection and snapshot baselines for key screens
 - [ ] **Phase 21: UI Polish** - Systematic audit and fix of visual inconsistencies across all panes
@@ -143,7 +143,7 @@ Phases execute in numeric order: 18 → 19 → 20 → 21
 | 15. Cross-Pane Selection Sync | v1.2 | 3/3 | ✓ Complete | 2026-04-15 |
 | 16. Live Data Propagation | v1.2 | 2/2 | ✓ Complete | 2026-04-15 |
 | 17. Fix iTerm2 Integration Bugs | v1.3 | 3/3 | ✓ Complete | 2026-04-16 |
-| 18. Contracts & Facades | v1.4 | 0/? | Not started | - |
+| 18. Contracts & Facades | v1.4 | 3/3 | Complete    | 2026-05-08 |
 | 19. Service Extraction & Backend Tests | v1.4 | 0/? | Not started | - |
 | 20. Widget Tests & Snapshots | v1.4 | 0/? | Not started | - |
 | 21. UI Polish | v1.4 | 0/? | Not started | - |
