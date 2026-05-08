@@ -68,7 +68,7 @@ Full details: `.planning/milestones/v1.3-ROADMAP.md`
 - [x] **Phase 18: Contracts & Facades** - Define Protocol-based port interfaces and add public facade methods to all widgets (completed 2026-05-08)
 - [x] **Phase 19: Service Extraction & Backend Tests** - Extract PaneCoordinator, DataOrchestrator, ProjectService from app.py with co-evolved backend tests (completed 2026-05-08)
 - [x] **Phase 20: Widget Tests & Snapshots** - Widget-level tests with fake backend injection and snapshot baselines for key screens (completed 2026-05-08)
-- [ ] **Phase 21: UI Polish** - Systematic audit and fix of visual inconsistencies across all panes
+- [x] **Phase 21: UI Polish** - Systematic audit and fix of visual inconsistencies across all panes (completed 2026-05-08)
 
 ## Phase Details
 
@@ -132,7 +132,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 21-01-PLAN.md — Fix CSS inconsistencies across all 5 widget panes
-- [ ] 21-02-PLAN.md — Remove app.py duplicate CSS, update snapshots, visual verification
+- [x] 21-02-PLAN.md — Remove app.py duplicate CSS, update snapshots, visual verification
 **UI hint**: yes
 
 ## Progress
@@ -162,4 +162,4 @@ Phases execute in numeric order: 18 → 19 → 20 → 21
 | 18. Contracts & Facades | v1.4 | 3/3 | Complete    | 2026-05-08 |
 | 19. Service Extraction & Backend Tests | v1.4 | 4/4 | Complete    | 2026-05-08 |
 | 20. Widget Tests & Snapshots | v1.4 | 3/3 | Complete    | 2026-05-08 |
-| 21. UI Polish | v1.4 | 1/2 | In Progress|  |
+| 21. UI Polish | v1.4 | 2/2 | Complete   | 2026-05-08 |
