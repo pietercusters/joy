@@ -115,7 +115,11 @@ Plans:
   1. At least one widget test per pane (ProjectList, ProjectDetail, WorktreePane, TerminalPane) runs with FakeBackend adapters injected via constructor — no @patch mocking of internals
   2. Snapshot baselines exist for at least 3 key screens (initial render, project selected, sync active) captured via pytest-textual-snapshot
   3. Running `pytest --snapshot-update` regenerates baselines; `pytest` without the flag detects visual regressions
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 20-01-PLAN.md — Test infrastructure: pytest downgrade, pytest-textual-snapshot, FakeBackend adapters
+- [ ] 20-02-PLAN.md — Widget pilot tests for all four panes (TEST-04)
+- [ ] 20-03-PLAN.md — Snapshot baseline tests for key screens (TEST-05)
 
 ### Phase 21: UI Polish
 **Goal**: All four panes render with consistent spacing, alignment, truncation, and focus indicators — visual bugs identified and fixed after architecture stabilization
@@ -154,5 +158,5 @@ Phases execute in numeric order: 18 → 19 → 20 → 21
 | 17. Fix iTerm2 Integration Bugs | v1.3 | 3/3 | ✓ Complete | 2026-04-16 |
 | 18. Contracts & Facades | v1.4 | 3/3 | Complete    | 2026-05-08 |
 | 19. Service Extraction & Backend Tests | v1.4 | 4/4 | Complete    | 2026-05-08 |
-| 20. Widget Tests & Snapshots | v1.4 | 0/? | Not started | - |
+| 20. Widget Tests & Snapshots | v1.4 | 0/3 | Not started | - |
 | 21. UI Polish | v1.4 | 0/? | Not started | - |
