@@ -66,7 +66,7 @@ Full details: `.planning/milestones/v1.3-ROADMAP.md`
 **Milestone Goal:** Separate frontend from backend using Ports & Adapters architecture, establish a three-layer test strategy, and fix UI bugs/inconsistencies — making the codebase safe for future UI work.
 
 - [x] **Phase 18: Contracts & Facades** - Define Protocol-based port interfaces and add public facade methods to all widgets (completed 2026-05-08)
-- [ ] **Phase 19: Service Extraction & Backend Tests** - Extract PaneCoordinator, DataOrchestrator, ProjectService from app.py with co-evolved backend tests
+- [x] **Phase 19: Service Extraction & Backend Tests** - Extract PaneCoordinator, DataOrchestrator, ProjectService from app.py with co-evolved backend tests (completed 2026-05-08)
 - [ ] **Phase 20: Widget Tests & Snapshots** - Widget-level tests with fake backend injection and snapshot baselines for key screens
 - [ ] **Phase 21: UI Polish** - Systematic audit and fix of visual inconsistencies across all panes
 
@@ -105,7 +105,7 @@ Plans:
 - [x] 19-01-PLAN.md — Extract PaneCoordinator (sync logic) + backend tests
 - [x] 19-02-PLAN.md — Extract DataOrchestrator (data coordination) + backend tests
 - [x] 19-03-PLAN.md — Extract ProjectService (CRUD/archive) + backend tests
-- [ ] 19-04-PLAN.md — Slim app.py to composition root + verify all constraints
+- [x] 19-04-PLAN.md — Slim app.py to composition root + verify all constraints
 
 ### Phase 20: Widget Tests & Snapshots
 **Goal**: Widget behavior is verified through Textual pilot tests using injected fake backends, and key screens have snapshot baselines for visual regression detection
@@ -153,6 +153,6 @@ Phases execute in numeric order: 18 → 19 → 20 → 21
 | 16. Live Data Propagation | v1.2 | 2/2 | ✓ Complete | 2026-04-15 |
 | 17. Fix iTerm2 Integration Bugs | v1.3 | 3/3 | ✓ Complete | 2026-04-16 |
 | 18. Contracts & Facades | v1.4 | 3/3 | Complete    | 2026-05-08 |
-| 19. Service Extraction & Backend Tests | v1.4 | 3/4 | In Progress|  |
+| 19. Service Extraction & Backend Tests | v1.4 | 4/4 | Complete    | 2026-05-08 |
 | 20. Widget Tests & Snapshots | v1.4 | 0/? | Not started | - |
 | 21. UI Polish | v1.4 | 0/? | Not started | - |
