@@ -204,6 +204,9 @@ class TerminalPane(Widget, can_focus=True):
     TerminalPane:focus-within SessionRow.--highlight {
         background: $accent;
     }
+    TerminalPane:focus SessionRow.--highlight {
+        background: $accent;
+    }
     SessionRow.--highlight {
         background: $accent 30%;
     }

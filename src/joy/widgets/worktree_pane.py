@@ -265,6 +265,9 @@ class WorktreePane(Widget, can_focus=True):
     WorktreePane:focus-within WorktreeRow.--highlight {
         background: $accent;
     }
+    WorktreePane:focus WorktreeRow.--highlight {
+        background: $accent;
+    }
     WorktreeRow.--highlight {
         background: $accent 30%;
     }

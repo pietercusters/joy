@@ -194,10 +194,13 @@ class MRPane(Widget, can_focus=True):
     MRPane:focus-within MRRow.--highlight {
         background: $accent;
     }
+    MRPane:focus MRRow.--highlight {
+        background: $accent;
+    }
     MRRow.--highlight {
         background: $accent 30%;
     }
-    .section-spacer {
+    MRPane .section-spacer {
         height: 1;
     }
     """
