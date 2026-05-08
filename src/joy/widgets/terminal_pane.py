@@ -385,6 +385,17 @@ class TerminalPane(Widget, can_focus=True):
                     self.SessionHighlighted(self._rows[self._cursor].session_name)
                 )
 
+    # ---------------------------------------------------------------------------
+    # Public facade (Phase 18, CNTR-05)
+    # ---------------------------------------------------------------------------
+
+    @property
+    def highlighted_session(self) -> str | None:
+        """The session_name of the currently highlighted session, or None."""
+        if 0 <= self._cursor < len(self._rows):
+            return self._rows[self._cursor].session_name
+        return None
+
     def sync_to(self, session_name: str) -> bool:
         """Move cursor to matching session_name row without posting SessionHighlighted.
 

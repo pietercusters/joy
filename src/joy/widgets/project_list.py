@@ -405,6 +405,17 @@ class ProjectList(Widget, can_focus=True):
         self._render_generation: int = 0
         self.border_title = "Projects"
 
+    # ---------------------------------------------------------------------------
+    # Public facade (Phase 18, CNTR-03)
+    # ---------------------------------------------------------------------------
+
+    @property
+    def current_project(self) -> Project | None:
+        """The currently highlighted project."""
+        if 0 <= self._cursor < len(self._rows):
+            return self._rows[self._cursor].project
+        return None
+
     def compose(self) -> ComposeResult:
         yield _ProjectScroll(id="project-scroll")
 

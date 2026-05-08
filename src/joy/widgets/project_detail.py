@@ -419,3 +419,25 @@ class ProjectDetail(Widget, can_focus=True):
         if self._project and 0 <= self._cursor < len(self._rows):
             return self._rows[self._cursor].item
         return None
+
+    # ---------------------------------------------------------------------------
+    # Public facade (Phase 18, CNTR-04)
+    # ---------------------------------------------------------------------------
+
+    @property
+    def current_project(self) -> Project | None:
+        """The currently displayed project."""
+        return self._project
+
+    @property
+    def default_items(self) -> list[ObjectItem]:
+        """All items with open_by_default=True from current rows."""
+        return [row.item for row in self._rows if row.item.open_by_default]
+
+    def clear(self) -> None:
+        """Clear the detail pane (no project selected)."""
+        self._project = None
+        self._rows = []
+        self._cursor = -1
+        scroll = self.query_one("#detail-scroll")
+        scroll.remove_children()

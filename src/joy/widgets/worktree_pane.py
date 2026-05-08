@@ -425,6 +425,18 @@ class WorktreePane(Widget, can_focus=True):
                 )
                 self.post_message(self.WorktreeHighlighted(wt))
 
+    # ---------------------------------------------------------------------------
+    # Public facade (Phase 18, CNTR-05)
+    # ---------------------------------------------------------------------------
+
+    @property
+    def highlighted_worktree(self) -> WorktreeInfo | None:
+        """The currently highlighted worktree, or None."""
+        if 0 <= self._cursor < len(self._rows):
+            row = self._rows[self._cursor]
+            return WorktreeInfo(repo_name=row.repo_name, branch=row.branch, path=row.path)
+        return None
+
     def sync_to(self, repo_name: str, branch: str) -> bool:
         """Move cursor to matching (repo_name, branch) row without posting WorktreeHighlighted.
 
