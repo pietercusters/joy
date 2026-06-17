@@ -11,6 +11,27 @@ from joy.models import TerminalSession
 _SHELL_PROCESSES = frozenset({"zsh", "bash", "fish", "sh", "dash"})
 
 
+def _run_connection(coro, *, retry: bool = False):
+    """Run *coro* on a fresh iTerm2 connection, always closing its event loop.
+
+    iterm2's ``Connection.run()`` creates a new event loop per call but only
+    closes the *previous* loop (``if self.loop is not None: self.loop.close()``).
+    Because we use a throwaway ``Connection()`` per call, that previous loop is
+    always ``None`` and the loop each call creates is never closed. Each leaked
+    loop holds ~3 fds (kqueue selector + self-pipe pair), which exhausts the
+    macOS file-descriptor limit during periodic polling and silently breaks the
+    worktree/agent refreshers (and any other fd-needing operation).
+    """
+    from iterm2.connection import Connection  # noqa: PLC0415
+
+    conn = Connection()
+    try:
+        return conn.run_until_complete(coro, retry=retry)
+    finally:
+        if conn.loop is not None:
+            conn.loop.close()
+
+
 def _read_claude_states() -> dict[str, dict]:
     """Read all claude state files. Returns {tty_short: {"state": ..., "ts": ...}}.
 
@@ -92,7 +113,6 @@ def fetch_sessions() -> tuple[list[TerminalSession], set[str]] | None:
     is called from a background worker thread.
     """
     import iterm2
-    from iterm2.connection import Connection
 
     # Collect raw data inside async context, then compute is_claude synchronously
     # after run_until_complete returns (subprocess calls must not block the event loop).
@@ -111,7 +131,7 @@ def fetch_sessions() -> tuple[list[TerminalSession], set[str]] | None:
                     raw.append((session.session_id, tab.tab_id, session.name or "", job, cwd, tty))
 
     try:
-        Connection().run_until_complete(_enumerate, retry=False)
+        _run_connection(_enumerate)
     except Exception:
         return None
 
@@ -144,7 +164,6 @@ def create_session(name: str) -> str | None:
     All iterm2 imports are lazy to avoid startup overhead.
     """
     import iterm2
-    from iterm2.connection import Connection
 
     result: str | None = None
 
@@ -162,7 +181,7 @@ def create_session(name: str) -> str | None:
         result = session.session_id
 
     try:
-        Connection().run_until_complete(_create, retry=False)
+        _run_connection(_create)
     except Exception:
         pass
     return result
@@ -175,7 +194,6 @@ def create_tab(name: str) -> str | None:
     All iterm2 imports are lazy to avoid startup overhead.
     """
     import iterm2
-    from iterm2.connection import Connection
 
     result: str | None = None
 
@@ -195,7 +213,7 @@ def create_tab(name: str) -> str | None:
         await app.async_activate()
 
     try:
-        Connection().run_until_complete(_create, retry=False)
+        _run_connection(_create)
     except Exception:
         pass
     return result
@@ -207,7 +225,6 @@ def rename_session(session_id: str, new_name: str) -> bool:
     All iterm2 imports are lazy to avoid startup overhead.
     """
     import iterm2
-    from iterm2.connection import Connection
 
     success = False
 
@@ -220,7 +237,7 @@ def rename_session(session_id: str, new_name: str) -> bool:
             success = True
 
     try:
-        Connection().run_until_complete(_rename, retry=False)
+        _run_connection(_rename)
     except Exception:
         pass
     return success
@@ -234,7 +251,6 @@ def close_session(session_id: str, force: bool = False) -> bool:
     All iterm2 imports are lazy to avoid startup overhead.
     """
     import iterm2
-    from iterm2.connection import Connection
 
     success = False
 
@@ -249,7 +265,7 @@ def close_session(session_id: str, force: bool = False) -> bool:
         success = True
 
     try:
-        Connection().run_until_complete(_close, retry=False)
+        _run_connection(_close)
     except Exception:
         pass
     return success
@@ -263,7 +279,6 @@ def close_tab(tab_id: str, force: bool = False) -> bool:
     All iterm2 imports are lazy to avoid startup overhead.
     """
     import iterm2
-    from iterm2.connection import Connection
 
     success = False
 
@@ -280,7 +295,7 @@ def close_tab(tab_id: str, force: bool = False) -> bool:
         success = True
 
     try:
-        Connection().run_until_complete(_close, retry=False)
+        _run_connection(_close)
     except Exception:
         pass
     return success
@@ -295,7 +310,6 @@ def activate_session(session_id: str) -> bool:
     All iterm2 imports are lazy to avoid startup overhead.
     """
     import iterm2
-    from iterm2.connection import Connection
 
     success = False
 
@@ -309,7 +323,7 @@ def activate_session(session_id: str) -> bool:
             success = True
 
     try:
-        Connection().run_until_complete(_focus, retry=False)
+        _run_connection(_focus)
     except Exception:
         pass
     return success
